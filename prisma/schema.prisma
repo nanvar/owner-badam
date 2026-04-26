@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  OWNER
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String
+  role      Role     @default(OWNER)
+  locale    String   @default("en")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  properties Property[] @relation("OwnerProperties")
+}
+
+model Property {
+  id            String    @id @default(cuid())
+  name          String
+  address       String?
+  airbnbIcalUrl String?
+  basePrice     Float     @default(0)
+  cleaningFee   Float     @default(0)
+  color         String    @default("#3b82f6")
+  notes         String?
+  ownerId       String
+  owner         User      @relation("OwnerProperties", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastSyncedAt  DateTime?
+
+  reservations Reservation[]
+
+  @@index([ownerId])
+}
+
+model Reservation {
+  id             String            @id @default(cuid())
+  propertyId     String
+  property       Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  externalId     String
+  source         String            @default("airbnb")
+  status         ReservationStatus @default(CONFIRMED)
+  guestName      String?
+  guestPhone     String?
+  guestEmail     String?
+  numGuests      Int?
+  checkIn        DateTime
+  checkOut       DateTime
+  nights         Int
+  pricePerNight  Float             @default(0)
+  totalPrice     Float             @default(0)
+  cleaningFee    Float             @default(0)
+  serviceFee     Float             @default(0)
+  taxes          Float             @default(0)
+  payout         Float             @default(0)
+  currency       String            @default("AED")
+  notes          String?
+  rawSummary     String?
+  rawDescription String?
+  detailsFilled  Boolean           @default(false)
+  syncedAt       DateTime          @default(now())
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([propertyId, externalId])
+  @@index([propertyId])
+  @@index([checkIn])
+  @@index([checkOut])
+}
+
+model AppSettings {
+  id          Int      @id @default(1)
+  brandName   String   @default("Badam Owners")
+  legalName   String   @default("Badam Holiday Homes")
+  tagline     String   @default("Curated short-term rentals across Dubai.")
+  logoUrl     String?
+  faviconUrl  String?
+  email       String?
+  phone       String?
+  whatsapp    String?
+  website     String?
+  address     String?
+  city        String?
+  country     String?
+  instagram   String?
+  facebook    String?
+  linkedin    String?
+  tiktok      String?
+  youtube     String?
+  bookingUrl  String?
+  ownerPortal String?
+  about       String?
+  currency    String   @default("AED")
+  timezone    String   @default("Asia/Dubai")
+  updatedAt   DateTime @updatedAt
+}
