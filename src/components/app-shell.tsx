@@ -194,8 +194,3 @@ export function PageHeader({
   );
 }
 
-export function _UseTranslationsPlaceholder() {
-  // ensure dev tooling sees that next-intl is used elsewhere
-  useTranslations("common");
-  return null;
-}

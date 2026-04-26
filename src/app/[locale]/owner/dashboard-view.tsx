@@ -223,7 +223,7 @@ export function OwnerDashboardView({
                   width={48}
                 />
                 <Tooltip
-                  formatter={(v: number) => formatCurrency(v, "AED", locale)}
+                  formatter={(v) => formatCurrency(Number(v) || 0, "AED", locale)}
                   labelStyle={{ color: "#0c0d10", fontWeight: 600 }}
                   contentStyle={{
                     borderRadius: 12,
