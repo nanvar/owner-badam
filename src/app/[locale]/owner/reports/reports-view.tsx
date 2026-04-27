@@ -1,21 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import {
   FileSpreadsheet,
   FileText,
   Loader2,
-  Coins,
-  Bed,
-  Percent,
-  TrendingUp,
-  CalendarCheck,
-  Briefcase,
-  Hourglass,
-  ArrowUpRight,
   Download,
   Building2,
   CalendarRange,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -99,7 +93,15 @@ export function ReportsView({
   brand: Brand;
   labels: Record<string, string>;
 }) {
-  const [range, setRange] = useState("this-month");
+  const router = useRouter();
+  const routeParams = useParams();
+  const searchParams = useSearchParams();
+  const localeForLink = (routeParams?.locale as string) ?? locale;
+
+  const [range, setRange] = useState(searchParams.get("range") ?? "this-month");
+  const [propertyId, setPropertyId] = useState<string>(
+    searchParams.get("propertyId") ?? "",
+  );
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<Tab>("overview");
@@ -108,8 +110,9 @@ export function ReportsView({
   const queryString = useMemo(() => {
     const sp = new URLSearchParams();
     sp.set("range", range);
+    if (propertyId) sp.set("propertyId", propertyId);
     return sp.toString();
-  }, [range]);
+  }, [range, propertyId]);
 
   useEffect(() => {
     let cancel = false;
@@ -146,96 +149,65 @@ export function ReportsView({
         }
       />
 
-      {/* PERIOD CHIPS — quick switch */}
-      <div className="-mx-4 overflow-x-auto px-4 no-scrollbar">
-        <div className="flex gap-2 pb-1">
-          {RANGE_OPTIONS.map((r) => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={cn(
-                "shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors",
-                range === r
-                  ? "border-[var(--color-brand)] bg-[var(--color-brand)] text-white shadow-sm shadow-indigo-500/30"
-                  : "border-[var(--color-border)] bg-white text-[var(--color-muted)] hover:border-[var(--color-brand)] hover:text-[var(--color-brand)]",
-              )}
-            >
-              {rangeLabels[r]}
-            </button>
-          ))}
+      {/* FILTER ROW */}
+      <div className="space-y-3">
+        <div className="-mx-4 overflow-x-auto px-4 no-scrollbar">
+          <div className="flex gap-2 pb-1">
+            {RANGE_OPTIONS.map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={cn(
+                  "shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors",
+                  range === r
+                    ? "border-[var(--color-brand)] bg-[var(--color-brand)] text-white shadow-sm shadow-indigo-500/30"
+                    : "border-[var(--color-border)] bg-white text-[var(--color-muted)] hover:border-[var(--color-brand)] hover:text-[var(--color-brand)]",
+                )}
+              >
+                {rangeLabels[r]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="relative">
+          <Building2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
+          <select
+            value={propertyId}
+            onChange={(e) => setPropertyId(e.target.value)}
+            className="h-10 w-full appearance-none rounded-xl border border-[var(--color-border)] bg-white pl-10 pr-9 text-sm font-medium focus:border-[var(--color-brand)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/30"
+          >
+            <option value="">
+              {labels.all} ({properties.length})
+            </option>
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <svg
+            className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
         </div>
       </div>
 
       {loading && !data && (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-[var(--color-muted)]">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Loading report…
+          Loading…
         </div>
       )}
 
       {data && (
         <>
-          {/* HERO summary card */}
-          <div className="rounded-3xl border border-[var(--color-border)] bg-gradient-to-br from-indigo-500 via-indigo-500 to-violet-600 p-5 text-white shadow-lg shadow-indigo-500/20 sm:p-7">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wider text-white/80">
-                  {rangeLabels[range] ?? range}
-                </div>
-                <div className="mt-1 text-3xl font-bold sm:text-4xl">
-                  {formatCurrency(data.kpis.revenue, "AED", locale)}
-                </div>
-                <div className="mt-1 text-sm text-white/80">
-                  {formatDate(data.period.from, locale)} → {formatDate(data.period.to, locale)}
-                </div>
-              </div>
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/15 backdrop-blur-sm">
-                <Coins className="h-6 w-6" />
-              </div>
-            </div>
-            <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <HeroKpi
-                label={labels.kpiOccupancy}
-                value={`${(data.kpis.occupancy * 100).toFixed(0)}%`}
-                icon={<Percent className="h-3.5 w-3.5" />}
-              />
-              <HeroKpi
-                label={labels.kpiAdr}
-                value={formatCurrency(data.kpis.adr, "AED", locale)}
-                icon={<TrendingUp className="h-3.5 w-3.5" />}
-              />
-              <HeroKpi
-                label={labels.kpiRevpar}
-                value={formatCurrency(data.kpis.revpar, "AED", locale)}
-                icon={<ArrowUpRight className="h-3.5 w-3.5" />}
-              />
-              <HeroKpi
-                label={labels.kpiBookings}
-                value={data.kpis.bookings}
-                icon={<CalendarCheck className="h-3.5 w-3.5" />}
-              />
-            </div>
-          </div>
-
-          {/* secondary KPIs */}
-          <div className="grid grid-cols-3 gap-3">
-            <SmallKpi
-              label={labels.kpiNights}
-              value={`${data.kpis.nights} / ${data.kpis.availableNights}`}
-              icon={<Bed className="h-4 w-4" />}
-            />
-            <SmallKpi
-              label={labels.kpiAvgStay}
-              value={data.kpis.avgStay.toFixed(1)}
-              icon={<Hourglass className="h-4 w-4" />}
-            />
-            <SmallKpi
-              label={labels.payout}
-              value={formatCurrency(data.kpis.payout, "AED", locale)}
-              icon={<Briefcase className="h-4 w-4" />}
-            />
-          </div>
-
           {/* TAB BAR */}
           <div className="flex rounded-xl border border-[var(--color-border)] bg-white p-1 text-sm">
             <TabButton active={tab === "overview"} onClick={() => setTab("overview")}>
@@ -253,10 +225,17 @@ export function ReportsView({
           {tab === "overview" && (
             <Card>
               <CardHeader>
-                <CardTitle>{labels.tabOverview ?? "Overview"}</CardTitle>
+                <CardTitle>
+                  <CalendarRange className="-mt-0.5 mr-1.5 inline h-4 w-4" />
+                  {formatDate(data.period.from, locale)} → {formatDate(data.period.to, locale)}
+                </CardTitle>
               </CardHeader>
               <CardBody className="space-y-3 text-sm">
-                <Row label={labels.kpiRevenue} value={formatCurrency(data.kpis.revenue, "AED", locale)} emphasis />
+                <Row
+                  label={labels.kpiRevenue}
+                  value={formatCurrency(data.kpis.revenue, "AED", locale)}
+                  emphasis
+                />
                 <Row label={labels.payout} value={formatCurrency(data.kpis.payout, "AED", locale)} />
                 <Row label={labels.kpiBookings} value={data.kpis.bookings} />
                 <Row label={labels.kpiNights} value={`${data.kpis.nights} / ${data.kpis.availableNights}`} />
@@ -284,7 +263,13 @@ export function ReportsView({
                       const max = data.byProperty[0]?.revenue || 1;
                       const pct = (p.revenue / max) * 100;
                       return (
-                        <div key={p.propertyId} className="px-5 py-4">
+                        <button
+                          key={p.propertyId}
+                          onClick={() =>
+                            router.push(`/${localeForLink}/owner/apartments/${p.propertyId}`)
+                          }
+                          className="group block w-full px-5 py-4 text-left transition-colors hover:bg-[var(--color-surface-2)]/60"
+                        >
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex min-w-0 items-center gap-2">
                               <span
@@ -293,9 +278,12 @@ export function ReportsView({
                               />
                               <span className="truncate font-semibold">{p.propertyName}</span>
                             </div>
-                            <span className="font-bold">
-                              {formatCurrency(p.revenue, "AED", locale)}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold">
+                                {formatCurrency(p.revenue, "AED", locale)}
+                              </span>
+                              <ChevronRight className="h-4 w-4 text-[var(--color-muted)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--color-brand)]" />
+                            </div>
                           </div>
                           <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--color-surface-2)]">
                             <div
@@ -304,11 +292,15 @@ export function ReportsView({
                             />
                           </div>
                           <div className="mt-2 flex items-center gap-3 text-xs text-[var(--color-muted)]">
-                            <span>{p.bookings} {labels.kpiBookings.toLowerCase()}</span>
+                            <span>
+                              {p.bookings} {labels.kpiBookings.toLowerCase()}
+                            </span>
                             <span>·</span>
-                            <span>{p.nights} {labels.kpiNights.toLowerCase()}</span>
+                            <span>
+                              {p.nights} {labels.kpiNights.toLowerCase()}
+                            </span>
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -344,7 +336,13 @@ export function ReportsView({
                       </thead>
                       <tbody>
                         {data.reservations.map((r) => (
-                          <tr key={r.id} className="border-t border-[var(--color-border)]">
+                          <tr
+                            key={r.id}
+                            onClick={() =>
+                              router.push(`/${localeForLink}/owner/apartments/${r.propertyId}`)
+                            }
+                            className="cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
+                          >
                             <td className="px-5 py-3">
                               <div className="flex items-center gap-2">
                                 <span
@@ -381,6 +379,7 @@ export function ReportsView({
         open={exportOpen}
         onClose={() => setExportOpen(false)}
         defaultRange={range}
+        defaultPropertyId={propertyId}
         properties={properties}
         ownerName={ownerName}
         brand={brand}
@@ -395,6 +394,7 @@ function ExportDrawer({
   open,
   onClose,
   defaultRange,
+  defaultPropertyId,
   properties,
   ownerName,
   brand,
@@ -404,6 +404,7 @@ function ExportDrawer({
   open: boolean;
   onClose: () => void;
   defaultRange: string;
+  defaultPropertyId: string;
   properties: Property[];
   ownerName: string;
   brand: Brand;
@@ -411,7 +412,7 @@ function ExportDrawer({
   labels: Record<string, string>;
 }) {
   const [range, setRange] = useState(defaultRange);
-  const [propertyId, setPropertyId] = useState<string>("");
+  const [propertyId, setPropertyId] = useState<string>(defaultPropertyId);
   const today = new Date();
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const [from, setFrom] = useState<string>(firstOfMonth.toISOString().slice(0, 10));
@@ -419,8 +420,11 @@ function ExportDrawer({
   const [busy, setBusy] = useState<"excel" | "pdf" | null>(null);
 
   useEffect(() => {
-    if (open) setRange(defaultRange);
-  }, [open, defaultRange]);
+    if (open) {
+      setRange(defaultRange);
+      setPropertyId(defaultPropertyId);
+    }
+  }, [open, defaultRange, defaultPropertyId]);
 
   const propertyName = propertyId
     ? properties.find((p) => p.id === propertyId)?.name ?? ""
@@ -759,46 +763,6 @@ function ExportDrawer({
   );
 }
 
-
-function HeroKpi({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: React.ReactNode;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl bg-white/15 p-3 backdrop-blur-sm">
-      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-white/80">
-        {icon}
-        {label}
-      </div>
-      <div className="mt-1 text-base font-bold sm:text-lg">{value}</div>
-    </div>
-  );
-}
-
-function SmallKpi({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: React.ReactNode;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl border border-[var(--color-border)] bg-white p-3">
-      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-[var(--color-muted)]">
-        {icon}
-        <span className="truncate">{label}</span>
-      </div>
-      <div className="mt-1 text-sm font-bold sm:text-base">{value}</div>
-    </div>
-  );
-}
 
 function TabButton({
   active,

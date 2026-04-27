@@ -8,8 +8,8 @@ import {
   CalendarCheck,
   MapPin,
   Bed,
-  Percent,
   TrendingUp,
+  FileText,
 } from "lucide-react";
 import { isLocale, type Locale } from "@/i18n/config";
 import { prisma } from "@/lib/prisma";
@@ -87,11 +87,20 @@ export default async function ApartmentDetailPage({
           )
         }
         right={
-          property.airbnbIcalUrl ? (
-            <Badge tone="success">iCal connected</Badge>
-          ) : (
-            <Badge tone="warning">No iCal</Badge>
-          )
+          <div className="flex items-center gap-2">
+            {property.airbnbIcalUrl ? (
+              <Badge tone="success">iCal</Badge>
+            ) : (
+              <Badge tone="warning">No iCal</Badge>
+            )}
+            <Link
+              href={`/${locale}/owner/reports?propertyId=${property.id}`}
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[var(--color-brand)] px-3 text-sm font-medium text-white shadow-sm shadow-indigo-500/25 hover:bg-[var(--color-brand-hover)]"
+            >
+              <FileText className="h-4 w-4" />
+              {tCommon("reports")}
+            </Link>
+          </div>
         }
       />
 
