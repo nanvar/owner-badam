@@ -140,9 +140,9 @@ export function AppShell({
         {children}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] pt-2 md:hidden">
-        <div className="mx-auto max-w-md rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)]/95 p-1.5 shadow-xl shadow-black/[0.06] backdrop-blur-xl">
-          <div className="relative flex items-center justify-around gap-1">
+      <nav className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(env(safe-area-inset-bottom,0px),1rem)] pt-3 md:hidden">
+        <div className="mx-auto max-w-md rounded-[26px] border border-[var(--color-border)] bg-white/95 p-2 shadow-[0_18px_40px_-12px_rgba(15,23,42,0.18),0_8px_18px_-8px_rgba(99,102,241,0.18)] backdrop-blur-xl">
+          <div className="relative grid grid-flow-col auto-cols-fr items-stretch">
             {nav.map((item) => {
               const active =
                 pathname === item.href || pathname.startsWith(item.href + "/");
@@ -151,7 +151,7 @@ export function AppShell({
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "relative flex flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-semibold transition-colors",
+                    "relative flex h-[60px] flex-col items-center justify-center gap-1 rounded-2xl px-1 text-center transition-colors",
                     active
                       ? "text-white"
                       : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]",
@@ -160,7 +160,7 @@ export function AppShell({
                   {active && (
                     <motion.span
                       layoutId="bottom-nav-pill"
-                      className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/35"
+                      className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-b from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/40 ring-1 ring-white/10"
                       transition={{
                         type: "spring",
                         stiffness: 380,
@@ -171,24 +171,16 @@ export function AppShell({
                   )}
                   <motion.span
                     initial={false}
-                    animate={
-                      active
-                        ? { scale: 1.1, y: -1 }
-                        : { scale: 1, y: 0 }
-                    }
-                    transition={{
-                      type: "spring",
-                      stiffness: 420,
-                      damping: 30,
-                    }}
-                    className="grid h-6 w-6 place-items-center"
+                    animate={active ? { scale: 1.08, y: -1 } : { scale: 1, y: 0 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                    className="grid h-6 w-6 shrink-0 place-items-center [&>svg]:h-5 [&>svg]:w-5"
                   >
                     {item.icon}
                   </motion.span>
                   <span
                     className={cn(
-                      "leading-none transition-opacity",
-                      active ? "opacity-100" : "opacity-90",
+                      "block max-w-full truncate text-[10.5px] font-semibold leading-none tracking-tight",
+                      active ? "opacity-100" : "opacity-95",
                     )}
                   >
                     {item.label}
