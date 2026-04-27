@@ -136,59 +136,77 @@ export function AppShell({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-28 pt-4 md:pb-10">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-32 pt-4 md:pb-10">
         {children}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(env(safe-area-inset-bottom,0px),1rem)] pt-3 md:hidden">
-        <div className="mx-auto max-w-md rounded-[26px] border border-[var(--color-border)] bg-white/95 p-2 shadow-[0_18px_40px_-12px_rgba(15,23,42,0.18),0_8px_18px_-8px_rgba(99,102,241,0.18)] backdrop-blur-xl">
-          <div className="relative grid grid-flow-col auto-cols-fr items-stretch">
-            {nav.map((item) => {
-              const active =
-                pathname === item.href || pathname.startsWith(item.href + "/");
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "relative flex h-[60px] flex-col items-center justify-center gap-1 rounded-2xl px-1 text-center transition-colors",
-                    active
-                      ? "text-white"
-                      : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]",
-                  )}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId="bottom-nav-pill"
-                      className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-b from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/40 ring-1 ring-white/10"
-                      transition={{
-                        type: "spring",
-                        stiffness: 380,
-                        damping: 32,
-                        mass: 0.8,
-                      }}
-                    />
-                  )}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 px-4 pt-3 md:hidden"
+        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 1rem)" }}
+      >
+        <div
+          className="mx-auto flex max-w-md items-stretch gap-1 rounded-[28px] border border-black/[0.06] bg-white p-2 backdrop-blur-xl"
+          style={{
+            boxShadow:
+              "0 24px 48px -12px rgba(15,23,42,0.24), 0 8px 24px -8px rgba(99,102,241,0.28), 0 1px 0 rgba(255,255,255,0.7) inset",
+          }}
+        >
+          {nav.map((item) => {
+            const active =
+              pathname === item.href || pathname.startsWith(item.href + "/");
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "relative flex flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 text-center transition-colors",
+                  active ? "text-white" : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]",
+                )}
+                style={{ minHeight: 64 }}
+              >
+                {active && (
                   <motion.span
-                    initial={false}
-                    animate={active ? { scale: 1.08, y: -1 } : { scale: 1, y: 0 }}
-                    transition={{ type: "spring", stiffness: 420, damping: 30 }}
-                    className="grid h-6 w-6 shrink-0 place-items-center [&>svg]:h-5 [&>svg]:w-5"
-                  >
-                    {item.icon}
-                  </motion.span>
+                    layoutId="bottom-nav-pill"
+                    className="absolute inset-0 -z-10 rounded-2xl"
+                    style={{
+                      background:
+                        "linear-gradient(180deg, #6366f1 0%, #7c3aed 100%)",
+                      boxShadow:
+                        "0 10px 24px -8px rgba(99,102,241,0.55), 0 4px 10px -2px rgba(124,58,237,0.4), inset 0 1px 0 rgba(255,255,255,0.18)",
+                    }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 380,
+                      damping: 32,
+                      mass: 0.8,
+                    }}
+                  />
+                )}
+                <motion.span
+                  initial={false}
+                  animate={
+                    active ? { scale: 1.1, y: -2 } : { scale: 1, y: 0 }
+                  }
+                  transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                  className="grid h-7 w-7 shrink-0 place-items-center"
+                >
                   <span
                     className={cn(
-                      "block max-w-full truncate text-[10.5px] font-semibold leading-none tracking-tight",
-                      active ? "opacity-100" : "opacity-95",
+                      "[&>svg]:h-5 [&>svg]:w-5",
+                      active && "drop-shadow-sm",
                     )}
                   >
-                    {item.label}
+                    {item.icon}
                   </span>
-                </Link>
-              );
-            })}
-          </div>
+                </motion.span>
+                <span
+                  className="block w-full truncate text-[11px] font-semibold leading-none tracking-tight"
+                >
+                  {item.label}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       </nav>
     </div>
