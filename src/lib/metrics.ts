@@ -198,6 +198,164 @@ export function buildPropertySeries(
   return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue);
 }
 
+export type Trend = {
+  delta: number;
+  pct: number;
+  direction: "up" | "down" | "flat";
+};
+
+export function computeTrend(monthly: MonthlyBucket[]): Trend {
+  if (monthly.length < 2) return { delta: 0, pct: 0, direction: "flat" };
+  const cur = monthly[monthly.length - 1].revenue;
+  const prev = monthly[monthly.length - 2].revenue;
+  const delta = cur - prev;
+  const pct = prev > 0 ? delta / prev : cur > 0 ? 1 : 0;
+  const direction: Trend["direction"] =
+    Math.abs(pct) < 0.005 ? "flat" : pct > 0 ? "up" : "down";
+  return { delta, pct, direction };
+}
+
+export function computeStreak(monthly: MonthlyBucket[]): number {
+  let streak = 0;
+  for (let i = monthly.length - 1; i >= 0; i--) {
+    if (monthly[i].revenue > 0) streak++;
+    else break;
+  }
+  return streak;
+}
+
+export type Score = {
+  value: number; // 0..100
+  grade: "A+" | "A" | "B+" | "B" | "C" | "—";
+  label: string;
+};
+
+export function computeScore(kpis: Kpis, propertyCount: number): Score {
+  if (propertyCount === 0 || kpis.availableNights === 0) {
+    return { value: 0, grade: "—", label: "No data" };
+  }
+  // Score = 60% occupancy + 40% normalized ADR (capped at 1500 AED)
+  const occScore = Math.min(1, kpis.occupancy);
+  const adrScore = Math.min(1, kpis.adr / 1500);
+  const value = Math.round((occScore * 0.6 + adrScore * 0.4) * 100);
+  const grade: Score["grade"] =
+    value >= 85 ? "A+" : value >= 75 ? "A" : value >= 65 ? "B+" : value >= 55 ? "B" : "C";
+  const label =
+    value >= 85
+      ? "Crushing it"
+      : value >= 75
+        ? "On fire"
+        : value >= 65
+          ? "On track"
+          : value >= 55
+            ? "Building up"
+            : "Needs attention";
+  return { value, grade, label };
+}
+
+export type Achievement = {
+  id: string;
+  title: string;
+  description: string;
+  icon: "trophy" | "flame" | "star" | "crown" | "rocket" | "sparkles" | "medal";
+  tone: "amber" | "emerald" | "indigo" | "rose" | "sky";
+  unlocked: boolean;
+  progress?: number; // 0..1
+};
+
+export function computeAchievements(opts: {
+  totalNights: number;
+  totalReservations: number;
+  totalRevenue: number;
+  streakMonths: number;
+  topProperty?: { name: string; revenue: number };
+}): Achievement[] {
+  const a: Achievement[] = [];
+  const milestone = (
+    id: string,
+    icon: Achievement["icon"],
+    tone: Achievement["tone"],
+    title: string,
+    description: string,
+    actual: number,
+    target: number,
+  ) => {
+    a.push({
+      id,
+      icon,
+      tone,
+      title,
+      description,
+      unlocked: actual >= target,
+      progress: Math.min(1, actual / target),
+    });
+  };
+  milestone(
+    "first-booking",
+    "sparkles",
+    "indigo",
+    "First booking",
+    "Welcome aboard",
+    opts.totalReservations,
+    1,
+  );
+  milestone(
+    "ten-bookings",
+    "star",
+    "amber",
+    "10 bookings",
+    "Hospitality habit",
+    opts.totalReservations,
+    10,
+  );
+  milestone(
+    "fifty-bookings",
+    "trophy",
+    "emerald",
+    "50 bookings",
+    "Pro host",
+    opts.totalReservations,
+    50,
+  );
+  milestone(
+    "100-nights",
+    "flame",
+    "rose",
+    "100 nights",
+    "Always-on host",
+    opts.totalNights,
+    100,
+  );
+  milestone(
+    "10k-aed",
+    "rocket",
+    "indigo",
+    "10K AED earned",
+    "Five-figure host",
+    opts.totalRevenue,
+    10_000,
+  );
+  milestone(
+    "100k-aed",
+    "crown",
+    "amber",
+    "100K AED earned",
+    "Six-figure host",
+    opts.totalRevenue,
+    100_000,
+  );
+  milestone(
+    "3-month-streak",
+    "medal",
+    "sky",
+    "3 month streak",
+    "Consistent revenue",
+    opts.streakMonths,
+    3,
+  );
+  return a;
+}
+
 export function periodFromRange(range: string): Period {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());

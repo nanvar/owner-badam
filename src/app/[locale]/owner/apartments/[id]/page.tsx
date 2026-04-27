@@ -4,20 +4,18 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Building2,
-  Coins,
   CalendarCheck,
   MapPin,
-  Bed,
-  TrendingUp,
   FileText,
 } from "lucide-react";
 import { isLocale, type Locale } from "@/i18n/config";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { Card, CardBody, CardHeader, CardTitle, StatCard } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/app-shell";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { StatStrip } from "./stat-strip";
 
 export default async function ApartmentDetailPage({
   params,
@@ -104,32 +102,19 @@ export default async function ApartmentDetailPage({
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard
-          label={tOwner("kpiRevenue")}
-          value={formatCurrency(totalRevenue, "AED", loc)}
-          icon={<Coins className="h-4 w-4" />}
-          accent="indigo"
-        />
-        <StatCard
-          label={tOwner("kpiBookings")}
-          value={totalBookings}
-          icon={<CalendarCheck className="h-4 w-4" />}
-          accent="sky"
-        />
-        <StatCard
-          label={tOwner("kpiNights")}
-          value={totalNights}
-          icon={<Bed className="h-4 w-4" />}
-          accent="emerald"
-        />
-        <StatCard
-          label={tOwner("kpiAdr")}
-          value={formatCurrency(adr, "AED", loc)}
-          icon={<TrendingUp className="h-4 w-4" />}
-          accent="amber"
-        />
-      </div>
+      <StatStrip
+        locale={loc}
+        revenue={totalRevenue}
+        bookings={totalBookings}
+        nights={totalNights}
+        adr={adr}
+        labels={{
+          revenue: tOwner("kpiRevenue"),
+          bookings: tOwner("kpiBookings"),
+          nights: tOwner("kpiNights"),
+          adr: tOwner("kpiAdr"),
+        }}
+      />
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
         <Card>

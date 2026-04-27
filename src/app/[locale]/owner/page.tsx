@@ -7,6 +7,10 @@ import {
   buildMonthlySeries,
   buildPropertySeries,
   computeKpis,
+  computeTrend,
+  computeStreak,
+  computeScore,
+  computeAchievements,
   periodFromRange,
 } from "@/lib/metrics";
 import { OwnerDashboardView } from "./dashboard-view";
@@ -65,6 +69,26 @@ export default async function OwnerDashboardPage({
   const kpis = computeKpis(items, propertyCount, period);
   const monthly = buildMonthlySeries(items, propertyCount, 12);
   const byProperty = buildPropertySeries(items, period);
+  const trend = computeTrend(monthly);
+  const streak = computeStreak(monthly);
+  const score = computeScore(kpis, propertyCount);
+  const lifetime = items.reduce(
+    (acc, r) => {
+      acc.nights += r.nights;
+      acc.revenue += r.totalPrice;
+      return acc;
+    },
+    { nights: 0, revenue: 0 },
+  );
+  const achievements = computeAchievements({
+    totalNights: lifetime.nights,
+    totalReservations: items.length,
+    totalRevenue: lifetime.revenue,
+    streakMonths: streak,
+    topProperty: byProperty[0]
+      ? { name: byProperty[0].propertyName, revenue: byProperty[0].revenue }
+      : undefined,
+  });
 
   const upcoming = items
     .filter((r) => r.checkIn >= new Date())
@@ -103,6 +127,11 @@ export default async function OwnerDashboardPage({
       monthly={monthly}
       byProperty={byProperty}
       upcoming={upcoming}
+      trend={trend}
+      streak={streak}
+      score={score}
+      achievements={achievements}
+      lifetime={lifetime}
       properties={properties.map((p) => ({
         id: p.id,
         name: p.name,
