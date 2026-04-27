@@ -81,19 +81,36 @@ export default async function OwnerApartmentsPage({
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <Stat
                         label={tOwner("basePrice")}
-                        value={formatCurrency(p.basePrice, "AED", loc)}
+                        value={
+                          p.basePrice > 0
+                            ? formatCurrency(p.basePrice, "AED", loc)
+                            : "—"
+                        }
                       />
                       <Stat
                         label={tOwner("kpiNights")}
-                        value={totalNights}
+                        value={totalNights || "—"}
                       />
                       <Stat
                         label={tCommon("reservations")}
-                        value={`${p._count.reservations} (${upcoming} upcoming)`}
+                        value={
+                          <span>
+                            {p._count.reservations}
+                            {upcoming > 0 && (
+                              <span className="ml-1 text-[10px] font-medium text-[var(--color-brand)]">
+                                · {upcoming} {tOwner("upcoming").toLowerCase()}
+                              </span>
+                            )}
+                          </span>
+                        }
                       />
                       <Stat
                         label={tOwner("kpiRevenue")}
-                        value={formatCurrency(totalRevenue, "AED", loc)}
+                        value={
+                          totalRevenue > 0
+                            ? formatCurrency(totalRevenue, "AED", loc)
+                            : "—"
+                        }
                       />
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 pt-1">

@@ -159,10 +159,10 @@ export function AppShell({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "relative flex flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 text-center transition-colors",
+                  "relative flex flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-center transition-colors",
                   active ? "text-white" : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]",
                 )}
-                style={{ minHeight: 64 }}
+                style={{ minHeight: 62 }}
               >
                 {active && (
                   <motion.span
