@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTransition } from "react";
+import { motion } from "motion/react";
 import { LogOut, Globe, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logoutAction } from "@/app/actions/auth";
@@ -139,33 +140,63 @@ export function AppShell({
         {children}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-2 pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] pt-1.5 backdrop-blur-md md:hidden">
-        <div className="mx-auto flex max-w-md items-center justify-around">
-          {nav.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 text-[10px] font-medium",
-                  active
-                    ? "text-[var(--color-brand)]"
-                    : "text-[var(--color-muted)]",
-                )}
-              >
-                <span
+      <nav className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] pt-2 md:hidden">
+        <div className="mx-auto max-w-md rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)]/95 p-1.5 shadow-xl shadow-black/[0.06] backdrop-blur-xl">
+          <div className="relative flex items-center justify-around gap-1">
+            {nav.map((item) => {
+              const active =
+                pathname === item.href || pathname.startsWith(item.href + "/");
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
                   className={cn(
-                    "grid h-7 w-12 place-items-center rounded-full transition-colors",
-                    active && "bg-[var(--color-brand-soft)]",
+                    "relative flex flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-semibold transition-colors",
+                    active
+                      ? "text-white"
+                      : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]",
                   )}
                 >
-                  {item.icon}
-                </span>
-                {item.label}
-              </Link>
-            );
-          })}
+                  {active && (
+                    <motion.span
+                      layoutId="bottom-nav-pill"
+                      className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/35"
+                      transition={{
+                        type: "spring",
+                        stiffness: 380,
+                        damping: 32,
+                        mass: 0.8,
+                      }}
+                    />
+                  )}
+                  <motion.span
+                    initial={false}
+                    animate={
+                      active
+                        ? { scale: 1.1, y: -1 }
+                        : { scale: 1, y: 0 }
+                    }
+                    transition={{
+                      type: "spring",
+                      stiffness: 420,
+                      damping: 30,
+                    }}
+                    className="grid h-6 w-6 place-items-center"
+                  >
+                    {item.icon}
+                  </motion.span>
+                  <span
+                    className={cn(
+                      "leading-none transition-opacity",
+                      active ? "opacity-100" : "opacity-90",
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
         </div>
       </nav>
     </div>

@@ -7,15 +7,6 @@ import {
   CalendarCheck,
   ChevronRight,
   ArrowUpRight,
-  ArrowDownRight,
-  Flame,
-  Trophy,
-  Star,
-  Crown,
-  Rocket,
-  Sparkles,
-  Medal,
-  Lock,
 } from "lucide-react";
 import {
   Area,
@@ -29,7 +20,6 @@ import {
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
 import { AnimatedNumber } from "@/components/ui/animated-number";
-import { ProgressRing } from "@/components/ui/progress-ring";
 import { FadeIn, StaggerList, StaggerItem, HoverLift } from "@/components/ui/motion";
 import { formatCurrency, formatShortDate, cn } from "@/lib/utils";
 import type { Locale } from "@/i18n/config";
@@ -94,46 +84,6 @@ type PropertyRow = {
   reservationCount: number;
 };
 
-type Trend = {
-  delta: number;
-  pct: number;
-  direction: "up" | "down" | "flat";
-};
-
-type Score = {
-  value: number;
-  grade: "A+" | "A" | "B+" | "B" | "C" | "—";
-  label: string;
-};
-
-type Achievement = {
-  id: string;
-  title: string;
-  description: string;
-  icon: "trophy" | "flame" | "star" | "crown" | "rocket" | "sparkles" | "medal";
-  tone: "amber" | "emerald" | "indigo" | "rose" | "sky";
-  unlocked: boolean;
-  progress?: number;
-};
-
-const achievementIcon = {
-  trophy: Trophy,
-  flame: Flame,
-  star: Star,
-  crown: Crown,
-  rocket: Rocket,
-  sparkles: Sparkles,
-  medal: Medal,
-} as const;
-
-const toneClasses = {
-  amber: "from-amber-400 to-orange-500 text-white shadow-amber-500/30",
-  emerald: "from-emerald-400 to-teal-500 text-white shadow-emerald-500/30",
-  indigo: "from-indigo-400 to-violet-500 text-white shadow-indigo-500/30",
-  rose: "from-rose-400 to-pink-500 text-white shadow-rose-500/30",
-  sky: "from-sky-400 to-cyan-500 text-white shadow-sky-500/30",
-} as const;
-
 export function OwnerDashboardView({
   locale,
   welcome,
@@ -143,11 +93,6 @@ export function OwnerDashboardView({
   byProperty,
   upcoming,
   properties,
-  trend,
-  streak,
-  score,
-  achievements,
-  lifetime,
   labels,
 }: {
   locale: Locale;
@@ -158,11 +103,6 @@ export function OwnerDashboardView({
   byProperty: PropertyBucket[];
   upcoming: Upcoming[];
   properties: PropertyRow[];
-  trend: Trend;
-  streak: number;
-  score: Score;
-  achievements: Achievement[];
-  lifetime: { nights: number; revenue: number };
   labels: Record<string, string>;
 }) {
   const router = useRouter();
@@ -187,12 +127,6 @@ export function OwnerDashboardView({
 
   const goToApartment = (id: string) =>
     router.push(`/${localeForLink}/owner/apartments/${id}`);
-
-  const unlocked = achievements.filter((a) => a.unlocked);
-  const nextLocked = achievements.find((a) => !a.unlocked);
-  const featuredAchievements = [...unlocked.slice(-3), nextLocked].filter(
-    Boolean,
-  ) as Achievement[];
 
   return (
     <div className="space-y-5">
@@ -220,50 +154,30 @@ export function OwnerDashboardView({
         </div>
       </FadeIn>
 
-      {/* HERO REVENUE CARD with score ring */}
+      {/* HERO REVENUE CARD */}
       <FadeIn delay={0.1}>
         <div className="relative overflow-hidden rounded-3xl border border-[var(--color-border)] bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-600 p-5 text-white shadow-xl shadow-indigo-500/25 sm:p-7">
-          {/* decorative blob */}
           <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
           <div className="pointer-events-none absolute -bottom-20 -left-12 h-40 w-40 rounded-full bg-violet-300/15 blur-2xl" />
 
-          <div className="relative flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-white/80">
-                {labels.kpiRevenue} · {rangeLabels[range] ?? range}
-                <TrendChip trend={trend} />
-              </div>
-              <div className="mt-1.5 text-3xl font-bold tracking-tight sm:text-[2.5rem]">
-                <AnimatedNumber
-                  value={kpis.revenue}
-                  format={(v) => formatCurrency(v, "AED", locale)}
-                />
-              </div>
-              <div className="mt-1 text-sm text-white/80">
-                <AnimatedNumber value={kpis.bookings} />{" "}
-                {labels.kpiBookings.toLowerCase()} ·{" "}
-                <AnimatedNumber value={kpis.nights} />{" "}
-                {labels.kpiNights.toLowerCase()}
-              </div>
+          <div className="relative">
+            <div className="text-xs font-medium uppercase tracking-wider text-white/80">
+              {labels.kpiRevenue} · {rangeLabels[range] ?? range}
             </div>
-
-            <ProgressRing
-              value={score.value / 100}
-              size={88}
-              stroke={8}
-              color="#ffffff"
-              trackColor="rgba(255,255,255,0.18)"
-            >
-              <div className="text-center">
-                <div className="text-[10px] uppercase tracking-wider text-white/70">
-                  Score
-                </div>
-                <div className="text-xl font-bold leading-none">{score.grade}</div>
-              </div>
-            </ProgressRing>
+            <div className="mt-1.5 text-3xl font-bold tracking-tight sm:text-[2.5rem]">
+              <AnimatedNumber
+                value={kpis.revenue}
+                format={(v) => formatCurrency(v, "AED", locale)}
+              />
+            </div>
+            <div className="mt-1 text-sm text-white/80">
+              <AnimatedNumber value={kpis.bookings} />{" "}
+              {labels.kpiBookings.toLowerCase()} ·{" "}
+              <AnimatedNumber value={kpis.nights} />{" "}
+              {labels.kpiNights.toLowerCase()}
+            </div>
           </div>
 
-          {/* mini KPIs */}
           <div className="relative mt-5 grid grid-cols-3 gap-2">
             <HeroKpi
               label={labels.kpiOccupancy}
@@ -281,97 +195,11 @@ export function OwnerDashboardView({
               icon={<ArrowUpRight className="h-3.5 w-3.5" />}
             />
           </div>
-
-          {/* Score label */}
-          <div className="relative mt-4 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur-sm">
-            <Sparkles className="h-3 w-3" />
-            {score.label}
-          </div>
         </div>
       </FadeIn>
-
-      {/* GAMIFICATION ROW */}
-      <FadeIn delay={0.15}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {/* Streak */}
-          <Card className="overflow-hidden">
-            <CardBody className="flex items-center gap-4">
-              <div
-                className={cn(
-                  "grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br shadow-lg",
-                  streak > 0
-                    ? "from-orange-400 to-rose-500 text-white shadow-rose-500/30 animate-float"
-                    : "from-[var(--color-surface-2)] to-[var(--color-surface-2)] text-[var(--color-muted)]",
-                )}
-              >
-                <Flame className="h-6 w-6" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-bold tracking-tight">
-                    <AnimatedNumber value={streak} />
-                  </span>
-                  <span className="text-sm text-[var(--color-muted)]">
-                    {streak === 1 ? "month" : "months"}
-                  </span>
-                </div>
-                <div className="text-xs font-medium uppercase tracking-wider text-[var(--color-muted)]">
-                  Active streak
-                </div>
-              </div>
-            </CardBody>
-          </Card>
-
-          {/* Lifetime stats */}
-          <Card className="overflow-hidden">
-            <CardBody className="flex items-center gap-4">
-              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-indigo-400 to-violet-500 text-white shadow-lg shadow-indigo-500/30">
-                <Trophy className="h-6 w-6" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-bold tracking-tight">
-                    <AnimatedNumber
-                      value={lifetime.revenue}
-                      format={(v) => formatCurrency(v, "AED", locale)}
-                    />
-                  </span>
-                </div>
-                <div className="text-xs font-medium uppercase tracking-wider text-[var(--color-muted)]">
-                  Lifetime · <AnimatedNumber value={lifetime.nights} /> nights
-                </div>
-              </div>
-            </CardBody>
-          </Card>
-        </div>
-      </FadeIn>
-
-      {/* ACHIEVEMENTS */}
-      {featuredAchievements.length > 0 && (
-        <FadeIn delay={0.2}>
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <Star className="-mt-0.5 mr-1.5 inline h-4 w-4 text-amber-500" />
-                Achievements
-                <span className="ml-2 text-xs font-normal text-[var(--color-muted)]">
-                  {unlocked.length} / {achievements.length}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardBody>
-              <StaggerList className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {featuredAchievements.map((a) => (
-                  <AchievementBadge key={a.id} a={a} />
-                ))}
-              </StaggerList>
-            </CardBody>
-          </Card>
-        </FadeIn>
-      )}
 
       {/* Revenue trend chart */}
-      <FadeIn delay={0.25}>
+      <FadeIn delay={0.15}>
         <Card>
           <CardHeader>
             <CardTitle>{labels.monthlyRevenue}</CardTitle>
@@ -430,7 +258,7 @@ export function OwnerDashboardView({
       </FadeIn>
 
       {/* My properties */}
-      <FadeIn delay={0.3}>
+      <FadeIn delay={0.2}>
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-base font-bold tracking-tight">{labels.properties}</h2>
@@ -518,7 +346,7 @@ export function OwnerDashboardView({
 
       {/* Upcoming */}
       {upcoming.length > 0 && (
-        <FadeIn delay={0.35}>
+        <FadeIn delay={0.25}>
           <Card>
             <CardHeader>
               <CardTitle>
@@ -604,62 +432,6 @@ function HeroKpi({
       </div>
       <div className="mt-1 text-base font-bold sm:text-lg">{value}</div>
     </div>
-  );
-}
-
-function TrendChip({ trend }: { trend: Trend }) {
-  if (trend.direction === "flat") return null;
-  const Icon = trend.direction === "up" ? ArrowUpRight : ArrowDownRight;
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-        trend.direction === "up"
-          ? "bg-emerald-400/30 text-emerald-50"
-          : "bg-rose-400/30 text-rose-50",
-      )}
-    >
-      <Icon className="h-3 w-3" />
-      {Math.abs(trend.pct * 100).toFixed(0)}%
-    </span>
-  );
-}
-
-function AchievementBadge({ a }: { a: Achievement }) {
-  const Icon = achievementIcon[a.icon];
-  if (a.unlocked) {
-    return (
-      <StaggerItem>
-        <div
-          className={cn(
-            "flex flex-col items-center gap-1.5 rounded-2xl bg-gradient-to-br p-3 text-center shadow-md",
-            toneClasses[a.tone],
-          )}
-        >
-          <Icon className="h-5 w-5" />
-          <div className="text-[11px] font-bold leading-tight">{a.title}</div>
-          <div className="text-[9px] uppercase tracking-wider opacity-80">
-            unlocked
-          </div>
-        </div>
-      </StaggerItem>
-    );
-  }
-  return (
-    <StaggerItem>
-      <div className="flex flex-col items-center gap-1.5 rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)] p-3 text-center text-[var(--color-muted)]">
-        <Lock className="h-5 w-5" />
-        <div className="text-[11px] font-bold leading-tight">{a.title}</div>
-        {a.progress !== undefined && (
-          <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-[var(--color-border)]">
-            <div
-              className="h-full rounded-full bg-[var(--color-brand)] transition-all duration-700"
-              style={{ width: `${Math.round(a.progress * 100)}%` }}
-            />
-          </div>
-        )}
-      </div>
-    </StaggerItem>
   );
 }
 

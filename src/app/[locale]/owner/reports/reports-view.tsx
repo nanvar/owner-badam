@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Field } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/app-shell";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -199,12 +200,7 @@ export function ReportsView({
         </div>
       </div>
 
-      {loading && !data && (
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-[var(--color-muted)]">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading…
-        </div>
-      )}
+      {loading && !data && <ReportSkeleton />}
 
       {data && (
         <>
@@ -386,6 +382,34 @@ export function ReportsView({
         locale={locale}
         labels={labels}
       />
+    </div>
+  );
+}
+
+function ReportSkeleton() {
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2 rounded-xl border border-[var(--color-border)] bg-white p-1">
+        <Skeleton className="h-9 flex-1 rounded-lg" />
+        <Skeleton className="h-9 flex-1 rounded-lg" />
+        <Skeleton className="h-9 flex-1 rounded-lg" />
+      </div>
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-5 w-48" />
+        </CardHeader>
+        <CardBody className="space-y-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between border-b border-[var(--color-border)] pb-3 last:border-0 last:pb-0"
+            >
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-5 w-20" />
+            </div>
+          ))}
+        </CardBody>
+      </Card>
     </div>
   );
 }
