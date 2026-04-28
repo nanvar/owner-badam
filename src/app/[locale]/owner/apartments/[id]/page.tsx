@@ -1,7 +1,7 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Building2, MapPin, FileText } from "lucide-react";
+import { ArrowLeft, Building2, MapPin, Download } from "lucide-react";
 import { isLocale, type Locale } from "@/i18n/config";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
@@ -116,10 +116,7 @@ export default async function ApartmentDetailPage({
 
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <span
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-white"
-            style={{ background: property.color }}
-          >
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[var(--color-brand)] text-white">
             <Building2 className="h-5 w-5" />
           </span>
           <div className="min-w-0">
@@ -138,8 +135,8 @@ export default async function ApartmentDetailPage({
           href={`/${locale}/owner/reports?propertyId=${property.id}`}
           className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-[var(--color-brand)] px-3 text-sm font-medium text-white shadow-sm shadow-emerald-700/25 hover:bg-[var(--color-brand-hover)]"
         >
-          <FileText className="h-4 w-4" />
-          <span className="hidden sm:inline">{tCommon("reports")}</span>
+          <Download className="h-4 w-4" />
+          {tCommon("export")}
         </Link>
       </div>
 
