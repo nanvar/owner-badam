@@ -155,14 +155,14 @@ export function AppShell({
               <Link
                 key={item.href}
                 href={item.href}
-                className="group relative flex flex-1 flex-col items-center justify-start gap-1 px-1 pt-2 pb-1.5"
+                className="group relative flex flex-1 flex-col items-center justify-center gap-1.5 px-1 pt-2.5 pb-2"
               >
-                <span className="relative grid h-8 w-16 place-items-center">
+                <span className="relative grid h-9 w-[60px] place-items-center">
                   {active && (
                     <motion.span
                       layoutId="bottom-nav-pill"
                       className="absolute inset-0 rounded-full"
-                      style={{ background: "rgba(99,102,241,0.16)" }}
+                      style={{ background: "rgba(99,102,241,0.14)" }}
                       transition={{
                         type: "spring",
                         stiffness: 420,
@@ -177,9 +177,7 @@ export function AppShell({
                     transition={{ type: "spring", stiffness: 420, damping: 28 }}
                     className={cn(
                       "relative grid h-6 w-6 place-items-center transition-colors duration-200 [&>svg]:h-[22px] [&>svg]:w-[22px]",
-                      active
-                        ? "text-[var(--color-brand)]"
-                        : "text-[#9ca3af]",
+                      active ? "text-[var(--color-brand)]" : "text-[#9ca3af]",
                     )}
                   >
                     {item.icon}
@@ -187,7 +185,7 @@ export function AppShell({
                 </span>
                 <span
                   className={cn(
-                    "block w-full truncate text-[11px] leading-none tracking-tight transition-colors duration-200",
+                    "block w-full truncate text-center text-[11px] leading-none tracking-tight transition-colors duration-200",
                     active
                       ? "font-semibold text-[var(--color-brand)]"
                       : "font-medium text-[#9ca3af]",
