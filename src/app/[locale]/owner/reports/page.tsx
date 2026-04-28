@@ -53,7 +53,7 @@ export default async function OwnerReportsPage({
       }}
       labels={{
         title: tCommon("reports"),
-        allProperties: t("byProperty"),
+        allProperties: t("allProperties"),
         noProperties: t("noProperties"),
         reservations: tCommon("reservations"),
         thisMonth: t("thisMonth"),

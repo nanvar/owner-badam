@@ -179,21 +179,6 @@ export function PropertyReport({
         "Summary",
       );
 
-      if (data.byProperty.length > 0) {
-        xlsx.utils.book_append_sheet(
-          wb,
-          xlsx.utils.json_to_sheet(
-            data.byProperty.map((p) => ({
-              Property: p.propertyName,
-              Revenue: p.revenue,
-              Nights: p.nights,
-              Bookings: p.bookings,
-            })),
-          ),
-          "By property",
-        );
-      }
-
       xlsx.utils.book_append_sheet(
         wb,
         xlsx.utils.json_to_sheet(
