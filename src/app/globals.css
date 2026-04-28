@@ -64,38 +64,106 @@ textarea {
   --fc-event-bg-color: var(--color-brand);
   --fc-event-border-color: var(--color-brand);
   --fc-event-text-color: #fff;
+  --fc-list-event-hover-bg-color: var(--color-surface-2);
   font-family: var(--font-sans);
   color: var(--color-foreground);
+  font-size: 0.85rem;
 }
-.fc .fc-toolbar-title {
-  font-size: 1.05rem;
+
+/* dayGrid view */
+.fc .fc-daygrid-day-frame {
+  padding: 2px;
+}
+.fc .fc-col-header-cell {
+  padding: 8px 0;
   font-weight: 600;
-}
-.fc .fc-button {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
   background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  color: var(--color-foreground);
-  text-transform: capitalize;
-  box-shadow: none;
-  font-weight: 500;
 }
-.fc .fc-button:hover {
-  background: var(--color-brand-soft);
-  border-color: var(--color-brand);
+.fc .fc-daygrid-day-number {
+  padding: 6px 8px;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+.fc-day-today .fc-daygrid-day-number {
   color: var(--color-brand);
-}
-.fc .fc-button-primary:not(:disabled).fc-button-active,
-.fc .fc-button-primary:not(:disabled):active {
-  background: var(--color-brand);
-  border-color: var(--color-brand);
-  color: #fff;
+  font-weight: 700;
 }
 .fc-event {
   border-radius: 8px;
   padding: 2px 6px;
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   border: none;
   font-weight: 500;
+  margin: 1px 2px !important;
+}
+
+/* List view — much more readable on phones */
+.fc .fc-list {
+  border: none;
+}
+.fc .fc-list-day-cushion {
+  background: var(--color-surface-2) !important;
+  padding: 10px 14px !important;
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-foreground);
+}
+.fc .fc-list-event {
+  cursor: pointer;
+}
+.fc .fc-list-event td {
+  padding: 12px 14px;
+  border-color: var(--color-border);
+}
+.fc .fc-list-event-time {
+  width: auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+}
+.fc .fc-list-event-graphic {
+  padding-right: 6px;
+}
+.fc .fc-list-event-dot {
+  border-width: 5px;
+}
+.fc .fc-list-event-title {
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+.fc .fc-list-empty {
+  padding: 48px 16px;
+  background: white;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+/* compact day cells on small screens */
+@media (max-width: 640px) {
+  .fc {
+    font-size: 0.78rem;
+  }
+  .fc .fc-daygrid-day-number {
+    padding: 4px 6px;
+    font-size: 0.72rem;
+  }
+  .fc-event {
+    font-size: 0.62rem;
+    padding: 1px 4px;
+  }
+  .fc .fc-list-event td {
+    padding: 10px 10px;
+  }
+  .fc .fc-list-day-cushion {
+    padding: 8px 10px !important;
+  }
 }
 
 /* Hide scrollbar but allow scrolling for tabs */
