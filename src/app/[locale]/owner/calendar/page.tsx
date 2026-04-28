@@ -2,8 +2,8 @@ import { setRequestLocale, getTranslations } from "next-intl/server";
 import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
-import { CalendarView } from "./calendar-view";
+import { requireRole } from "@/lib/auth";
+import { PropertyCalendarPicker } from "./property-calendar-picker";
 
 export default async function OwnerCalendarPage({
   params,
@@ -13,41 +13,72 @@ export default async function OwnerCalendarPage({
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
-  const session = await requireSession();
+  const session = await requireRole("OWNER");
 
-  const where =
-    session.role === "OWNER" ? { property: { ownerId: session.userId } } : undefined;
-
-  const reservations = await prisma.reservation.findMany({
-    where,
-    include: { property: { select: { id: true, name: true, color: true } } },
-    orderBy: { checkIn: "asc" },
+  const properties = await prisma.property.findMany({
+    where: { ownerId: session.userId },
+    include: {
+      reservations: {
+        select: {
+          id: true,
+          guestName: true,
+          checkIn: true,
+          checkOut: true,
+          nights: true,
+          pricePerNight: true,
+          totalPrice: true,
+          currency: true,
+        },
+        orderBy: { checkIn: "asc" },
+      },
+      _count: { select: { reservations: true } },
+    },
+    orderBy: { createdAt: "asc" },
   });
 
-  const events = reservations.map((r) => ({
-    id: r.id,
-    title: `${r.guestName ?? "Guest"} · ${r.property.name}`,
-    start: r.checkIn.toISOString(),
-    end: r.checkOut.toISOString(),
-    color: r.property.color,
-    extendedProps: {
-      propertyName: r.property.name,
-      propertyColor: r.property.color,
-      guestName: r.guestName ?? "Guest",
-      nights: r.nights,
-      totalPrice: r.totalPrice,
-      currency: r.currency,
-      pricePerNight: r.pricePerNight,
-    },
-  }));
+  const tCommon = await getTranslations({ locale, namespace: "common" });
+  const tOwner = await getTranslations({ locale, namespace: "owner" });
 
-  const t = await getTranslations({ locale, namespace: "common" });
+  const items = properties.map((p) => {
+    const upcomingCount = p.reservations.filter(
+      (r) => new Date(r.checkOut) >= new Date(),
+    ).length;
+    return {
+      id: p.id,
+      name: p.name,
+      address: p.address,
+      color: p.color,
+      reservationCount: p._count.reservations,
+      upcomingCount,
+      events: p.reservations.map((r) => ({
+        id: r.id,
+        title: r.guestName ?? "Guest",
+        start: r.checkIn.toISOString(),
+        end: r.checkOut.toISOString(),
+        color: p.color,
+        extendedProps: {
+          propertyName: p.name,
+          propertyColor: p.color,
+          guestName: r.guestName ?? "Guest",
+          nights: r.nights,
+          totalPrice: r.totalPrice,
+          currency: r.currency,
+          pricePerNight: r.pricePerNight,
+        },
+      })),
+    };
+  });
 
   return (
-    <CalendarView
+    <PropertyCalendarPicker
       locale={locale as Locale}
-      events={events}
-      title={t("calendar")}
+      properties={items}
+      labels={{
+        title: tCommon("calendar"),
+        noProperties: tOwner("noProperties"),
+        upcoming: tOwner("upcoming"),
+        reservations: tCommon("reservations"),
+      }}
     />
   );
 }

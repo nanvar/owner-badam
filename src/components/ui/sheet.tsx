@@ -47,7 +47,7 @@ export function Sheet({
           "relative z-10 flex w-full flex-col bg-[var(--color-surface)] shadow-2xl animate-fade-in",
           side === "bottom"
             ? "mt-auto max-h-[92dvh] rounded-t-3xl sm:mx-auto sm:my-auto sm:max-w-lg sm:rounded-3xl"
-            : "ml-auto h-full max-w-md rounded-l-3xl",
+            : "ml-auto h-full w-full max-w-md rounded-l-3xl md:max-w-3xl",
         )}
       >
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3">

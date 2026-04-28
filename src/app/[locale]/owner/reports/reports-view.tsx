@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useParams, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   FileSpreadsheet,
   FileText,
@@ -94,10 +94,7 @@ export function ReportsView({
   brand: Brand;
   labels: Record<string, string>;
 }) {
-  const router = useRouter();
-  const routeParams = useParams();
   const searchParams = useSearchParams();
-  const localeForLink = (routeParams?.locale as string) ?? locale;
 
   const [range, setRange] = useState(searchParams.get("range") ?? "this-month");
   const [propertyId, setPropertyId] = useState<string>(
@@ -261,9 +258,7 @@ export function ReportsView({
                       return (
                         <button
                           key={p.propertyId}
-                          onClick={() =>
-                            router.push(`/${localeForLink}/owner/apartments/${p.propertyId}`)
-                          }
+                          onClick={() => setPropertyId(p.propertyId)}
                           className="group block w-full px-5 py-4 text-left transition-colors hover:bg-[var(--color-surface-2)]/60"
                         >
                           <div className="flex items-center justify-between gap-3">
@@ -334,9 +329,7 @@ export function ReportsView({
                         {data.reservations.map((r) => (
                           <tr
                             key={r.id}
-                            onClick={() =>
-                              router.push(`/${localeForLink}/owner/apartments/${r.propertyId}`)
-                            }
+                            onClick={() => setPropertyId(r.propertyId)}
                             className="cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
                           >
                             <td className="px-5 py-3">

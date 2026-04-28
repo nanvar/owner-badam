@@ -83,7 +83,12 @@ export function AppShell({
           </span>
           <nav className="ml-2 hidden flex-1 items-center gap-1 md:flex">
             {nav.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(item.href + "/");
+              const isRoot =
+                item.href === `/${locale}/${variant}`;
+              const active = isRoot
+                ? pathname === item.href
+                : pathname === item.href ||
+                  pathname.startsWith(item.href + "/");
               return (
                 <Link
                   key={item.href}
@@ -156,8 +161,11 @@ export function AppShell({
       >
         <div className="mx-auto flex max-w-md items-stretch">
           {nav.map((item) => {
-            const active =
-              pathname === item.href || pathname.startsWith(item.href + "/");
+            const isRoot = item.href === `/${locale}/${variant}`;
+            const active = isRoot
+              ? pathname === item.href
+              : pathname === item.href ||
+                pathname.startsWith(item.href + "/");
             return (
               <Link
                 key={item.href}
