@@ -18,6 +18,9 @@ type OwnerRow = {
   id: string;
   name: string | null;
   email: string;
+  phone: string | null;
+  taxId: string | null;
+  address: string | null;
   createdAt: string;
   propertyCount: number;
 };
@@ -147,6 +150,17 @@ export function OwnersView({
           <Field label={labels.ownerPassword} htmlFor="c-password">
             <Input id="c-password" name="password" type="password" required minLength={4} />
           </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={labels.ownerPhone} htmlFor="c-phone">
+              <Input id="c-phone" name="phone" placeholder="+971 …" />
+            </Field>
+            <Field label={labels.ownerTaxId} htmlFor="c-taxId">
+              <Input id="c-taxId" name="taxId" placeholder="TC…" />
+            </Field>
+          </div>
+          <Field label={labels.ownerAddress} htmlFor="c-address">
+            <Input id="c-address" name="address" placeholder="Dubai, UAE" />
+          </Field>
           {createState?.status === "error" && (
             <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
               {createState.message}
@@ -183,6 +197,17 @@ export function OwnersView({
               hint={labels.passwordHint ?? "Leave empty to keep current password"}
             >
               <Input id="e-password" name="password" type="password" minLength={4} placeholder="••••••••" />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label={labels.ownerPhone} htmlFor="e-phone">
+                <Input id="e-phone" name="phone" defaultValue={editing.phone ?? ""} placeholder="+971 …" />
+              </Field>
+              <Field label={labels.ownerTaxId} htmlFor="e-taxId">
+                <Input id="e-taxId" name="taxId" defaultValue={editing.taxId ?? ""} placeholder="TC…" />
+              </Field>
+            </div>
+            <Field label={labels.ownerAddress} htmlFor="e-address">
+              <Input id="e-address" name="address" defaultValue={editing.address ?? ""} placeholder="Dubai, UAE" />
             </Field>
             {updateState?.status === "error" && (
               <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">

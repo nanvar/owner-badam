@@ -37,6 +37,8 @@ type Item = {
   nights: number;
   pricePerNight: number;
   cleaningFee: number;
+  agencyCommission: number;
+  portalCommission: number;
   serviceFee: number;
   taxes: number;
   totalPrice: number;
@@ -213,10 +215,13 @@ function ReservationEditor({
     updateReservationAction,
     undefined,
   );
-  const [pricePerNight, setPricePerNight] = useState<number>(0);
-  const [cleaningFee, setCleaningFee] = useState<number>(0);
-  const [serviceFee, setServiceFee] = useState<number>(0);
-  const [taxes, setTaxes] = useState<number>(0);
+  const [totalPrice, setTotalPrice] = useState<number>(reservation?.totalPrice ?? 0);
+  const [agencyCommission, setAgencyCommission] = useState<number>(
+    reservation?.agencyCommission ?? 0,
+  );
+  const [portalCommission, setPortalCommission] = useState<number>(
+    reservation?.portalCommission ?? 0,
+  );
 
   if (state?.status === "ok" && reservation) {
     queueMicrotask(onClose);
@@ -226,7 +231,9 @@ function ReservationEditor({
     return null;
   }
 
-  const total = pricePerNight * reservation.nights + cleaningFee + serviceFee + taxes;
+  const ownerPayout = Math.max(0, totalPrice - agencyCommission - portalCommission);
+  const pricePerNightCalc =
+    reservation.nights > 0 ? totalPrice / reservation.nights : 0;
 
   return (
     <Sheet
@@ -237,7 +244,12 @@ function ReservationEditor({
     >
       <form action={action} className="space-y-4">
         <input type="hidden" name="id" value={reservation.id} />
-        <input type="hidden" name="totalPrice" value={total} />
+        <input
+          type="hidden"
+          name="pricePerNight"
+          value={pricePerNightCalc.toFixed(2)}
+        />
+        <input type="hidden" name="payout" value={ownerPayout.toFixed(2)} />
         <input type="hidden" name="currency" value={reservation.currency || "AED"} />
 
         <div className="grid grid-cols-2 gap-3">
@@ -287,69 +299,108 @@ function ReservationEditor({
           </Field>
         </div>
 
-        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={`${labels.pricePerNight} (${labels.currency})`} htmlFor="pricePerNight">
-              <Input
-                id="pricePerNight"
-                name="pricePerNight"
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={reservation.pricePerNight || 0}
-                onChange={(e) => setPricePerNight(parseFloat(e.target.value) || 0)}
-              />
-            </Field>
-            <Field label={`${labels.cleaningFee} (${labels.currency})`} htmlFor="cleaningFee">
-              <Input
-                id="cleaningFee"
-                name="cleaningFee"
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={reservation.cleaningFee || 0}
-                onChange={(e) => setCleaningFee(parseFloat(e.target.value) || 0)}
-              />
-            </Field>
-            <Field label={`${labels.serviceFee} (${labels.currency})`} htmlFor="serviceFee">
-              <Input
-                id="serviceFee"
-                name="serviceFee"
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={reservation.serviceFee || 0}
-                onChange={(e) => setServiceFee(parseFloat(e.target.value) || 0)}
-              />
-            </Field>
-            <Field label={`${labels.taxes} (${labels.currency})`} htmlFor="taxes">
-              <Input
-                id="taxes"
-                name="taxes"
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={reservation.taxes || 0}
-                onChange={(e) => setTaxes(parseFloat(e.target.value) || 0)}
-              />
-            </Field>
-          </div>
-          <div className="mt-3 flex items-center justify-between border-t border-[var(--color-border)] pt-3 text-sm">
-            <span className="text-[var(--color-muted)]">{labels.totalPrice}</span>
-            <span className="text-base font-bold">
-              {formatCurrency(total, reservation.currency || "AED", locale)}
-            </span>
-          </div>
-          <Field label={`${labels.payout} (${labels.currency})`} htmlFor="payout">
+        <div className="space-y-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4">
+          <Field
+            label={`${labels.totalPrice ?? "Amount"} (${labels.currency})`}
+            htmlFor="totalPrice"
+            hint={labels.amountHint ?? "Gross amount paid by guest"}
+          >
             <Input
-              id="payout"
-              name="payout"
+              id="totalPrice"
+              name="totalPrice"
               type="number"
               step="0.01"
               min="0"
-              defaultValue={reservation.payout || 0}
+              value={totalPrice}
+              onChange={(e) => setTotalPrice(parseFloat(e.target.value) || 0)}
             />
           </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              label={`${labels.agencyCommission ?? "Agency commission"} (${labels.currency})`}
+              htmlFor="agencyCommission"
+            >
+              <Input
+                id="agencyCommission"
+                name="agencyCommission"
+                type="number"
+                step="0.01"
+                min="0"
+                value={agencyCommission}
+                onChange={(e) =>
+                  setAgencyCommission(parseFloat(e.target.value) || 0)
+                }
+              />
+            </Field>
+            <Field
+              label={`${labels.portalCommission ?? "Portal commission"} (${labels.currency})`}
+              htmlFor="portalCommission"
+            >
+              <Input
+                id="portalCommission"
+                name="portalCommission"
+                type="number"
+                step="0.01"
+                min="0"
+                value={portalCommission}
+                onChange={(e) =>
+                  setPortalCommission(parseFloat(e.target.value) || 0)
+                }
+              />
+            </Field>
+          </div>
+          <div className="rounded-xl bg-[var(--color-brand-soft)] px-3 py-2.5">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-[var(--color-brand)]">
+                {labels.payout ?? "Owner payout"}
+              </span>
+              <span className="text-lg font-bold text-[var(--color-brand)]">
+                {formatCurrency(ownerPayout, reservation.currency || "AED", locale)}
+              </span>
+            </div>
+            <div className="mt-0.5 text-[10px] text-[var(--color-brand)]/70">
+              = {formatCurrency(totalPrice, reservation.currency || "AED", locale)} −{" "}
+              {formatCurrency(agencyCommission, reservation.currency || "AED", locale)} −{" "}
+              {formatCurrency(portalCommission, reservation.currency || "AED", locale)}
+            </div>
+          </div>
+          <details className="text-xs">
+            <summary className="cursor-pointer select-none font-medium text-[var(--color-muted)]">
+              {labels.advancedFees ?? "Advanced fees (cleaning, taxes…)"}
+            </summary>
+            <div className="mt-2 grid grid-cols-2 gap-3">
+              <Field label={`${labels.cleaningFee} (${labels.currency})`} htmlFor="cleaningFee">
+                <Input
+                  id="cleaningFee"
+                  name="cleaningFee"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={reservation.cleaningFee || 0}
+                />
+              </Field>
+              <Field label={`${labels.serviceFee} (${labels.currency})`} htmlFor="serviceFee">
+                <Input
+                  id="serviceFee"
+                  name="serviceFee"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={reservation.serviceFee || 0}
+                />
+              </Field>
+              <Field label={`${labels.taxes} (${labels.currency})`} htmlFor="taxes">
+                <Input
+                  id="taxes"
+                  name="taxes"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={reservation.taxes || 0}
+                />
+              </Field>
+            </div>
+          </details>
         </div>
 
         <Field label={labels.notes} htmlFor="notes">

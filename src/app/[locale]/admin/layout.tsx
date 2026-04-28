@@ -1,5 +1,5 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { Building2, ListTree, Users, Settings as SettingsIcon } from "lucide-react";
+import { Building2, ListTree, Users, Settings as SettingsIcon, Receipt } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { requireRole } from "@/lib/auth";
 import { isLocale } from "@/i18n/config";
@@ -36,6 +36,11 @@ export default async function AdminLayout({
       href: `/${locale}/admin/owners`,
       label: t("navOwners"),
       icon: <Users className="h-4 w-4" />,
+    },
+    {
+      href: `/${locale}/admin/ledger`,
+      label: t("navLedger"),
+      icon: <Receipt className="h-4 w-4" />,
     },
     {
       href: `/${locale}/admin/settings`,

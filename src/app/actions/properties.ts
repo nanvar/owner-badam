@@ -82,6 +82,9 @@ const OwnerSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(120),
   password: z.string().min(4),
+  phone: z.string().max(50).optional().or(z.literal("")),
+  taxId: z.string().max(80).optional().or(z.literal("")),
+  address: z.string().max(255).optional().or(z.literal("")),
 });
 
 export async function createOwnerAction(
@@ -93,6 +96,9 @@ export async function createOwnerAction(
     email: formData.get("email"),
     name: formData.get("name"),
     password: formData.get("password"),
+    phone: formData.get("phone") || "",
+    taxId: formData.get("taxId") || "",
+    address: formData.get("address") || "",
   });
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -105,6 +111,9 @@ export async function createOwnerAction(
       name: parsed.data.name,
       password: await hashPassword(parsed.data.password),
       role: "OWNER",
+      phone: parsed.data.phone || null,
+      taxId: parsed.data.taxId || null,
+      address: parsed.data.address || null,
     },
   });
   revalidatePath("/", "layout");
@@ -116,6 +125,9 @@ const UpdateOwnerSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(120),
   password: z.string().min(4).optional().or(z.literal("")),
+  phone: z.string().max(50).optional().or(z.literal("")),
+  taxId: z.string().max(80).optional().or(z.literal("")),
+  address: z.string().max(255).optional().or(z.literal("")),
 });
 
 export async function updateOwnerAction(
@@ -128,6 +140,9 @@ export async function updateOwnerAction(
     email: formData.get("email"),
     name: formData.get("name"),
     password: formData.get("password") || "",
+    phone: formData.get("phone") || "",
+    taxId: formData.get("taxId") || "",
+    address: formData.get("address") || "",
   });
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -138,9 +153,19 @@ export async function updateOwnerAction(
   if (existingByEmail && existingByEmail.id !== parsed.data.id) {
     return { status: "error", message: "Email already in use" };
   }
-  const data: { email: string; name: string; password?: string } = {
+  const data: {
+    email: string;
+    name: string;
+    password?: string;
+    phone: string | null;
+    taxId: string | null;
+    address: string | null;
+  } = {
     email: parsed.data.email.toLowerCase(),
     name: parsed.data.name,
+    phone: parsed.data.phone || null,
+    taxId: parsed.data.taxId || null,
+    address: parsed.data.address || null,
   };
   if (parsed.data.password) {
     data.password = await hashPassword(parsed.data.password);

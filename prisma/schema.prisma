@@ -25,6 +25,10 @@ model User {
   password  String
   role      Role     @default(OWNER)
   locale    String   @default("en")
+  // Owner profile (used as Recipient in settlements)
+  phone     String?
+  taxId     String?  // e.g. TC765777558
+  address   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -47,43 +51,87 @@ model Property {
   lastSyncedAt  DateTime?
 
   reservations Reservation[]
+  expenses     Expense[]
+  advances     Advance[]
 
   @@index([ownerId])
 }
 
 model Reservation {
-  id             String            @id @default(cuid())
-  propertyId     String
-  property       Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  externalId     String
-  source         String            @default("airbnb")
-  status         ReservationStatus @default(CONFIRMED)
-  guestName      String?
-  guestPhone     String?
-  guestEmail     String?
-  numGuests      Int?
-  checkIn        DateTime
-  checkOut       DateTime
-  nights         Int
-  pricePerNight  Float             @default(0)
-  totalPrice     Float             @default(0)
-  cleaningFee    Float             @default(0)
-  serviceFee     Float             @default(0)
-  taxes          Float             @default(0)
-  payout         Float             @default(0)
-  currency       String            @default("AED")
-  notes          String?
-  rawSummary     String?
-  rawDescription String?
-  detailsFilled  Boolean           @default(false)
-  syncedAt       DateTime          @default(now())
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  id                String            @id @default(cuid())
+  propertyId        String
+  property          Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  externalId        String
+  source            String            @default("airbnb")
+  status            ReservationStatus @default(CONFIRMED)
+  guestName         String?
+  guestPhone        String?
+  guestEmail        String?
+  numGuests         Int?
+  checkIn           DateTime
+  checkOut          DateTime
+  nights            Int
+  pricePerNight     Float             @default(0)
+  totalPrice        Float             @default(0) // gross amount paid by guest
+  agencyCommission  Float             @default(0) // PMS fee
+  portalCommission  Float             @default(0) // Airbnb / Booking commission
+  cleaningFee       Float             @default(0)
+  serviceFee        Float             @default(0) // legacy / misc service fee
+  taxes             Float             @default(0)
+  payout            Float             @default(0) // amount paid to owner
+  currency          String            @default("AED")
+  notes             String?
+  rawSummary        String?
+  rawDescription    String?
+  detailsFilled     Boolean           @default(false)
+  syncedAt          DateTime          @default(now())
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@unique([propertyId, externalId])
   @@index([propertyId])
   @@index([checkIn])
   @@index([checkOut])
+}
+
+enum ExpenseType {
+  DEWA
+  CHILLER
+  DU
+  GAS
+  CLEANING
+  DTCM
+  SERVICE_CHARGE
+  OTHERS
+}
+
+model Expense {
+  id          String      @id @default(cuid())
+  propertyId  String
+  property    Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  date        DateTime
+  type        ExpenseType
+  description String
+  amount      Float       // positive — represented as a deduction in reports
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([propertyId])
+  @@index([date])
+}
+
+model Advance {
+  id          String   @id @default(cuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  date        DateTime
+  concept     String   // e.g. "Payment for Rental"
+  amount      Float    // positive — represented as a deduction in reports
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([propertyId])
+  @@index([date])
 }
 
 model AppSettings {
