@@ -105,8 +105,10 @@ function Tab({
     <button
       onClick={onClick}
       className={cn(
-        "relative flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors",
-        active ? "text-white" : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]",
+        "relative isolate flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors",
+        active
+          ? "text-white"
+          : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]",
       )}
     >
       {active && (
@@ -114,18 +116,19 @@ function Tab({
           layoutId="apt-res-tab-pill"
           className="absolute inset-0 -z-10 rounded-xl"
           style={{
-            background:
-              "linear-gradient(135deg, #4f8a6f 0%, #3d6f57 100%)",
+            background: "linear-gradient(135deg, #4f8a6f 0%, #3d6f57 100%)",
             boxShadow: "0 6px 16px -8px rgba(47,90,71,0.5)",
           }}
           transition={{ type: "spring", stiffness: 380, damping: 32 }}
         />
       )}
-      <span>{label}</span>
+      <span className="relative">{label}</span>
       <span
         className={cn(
-          "rounded-full px-1.5 text-[10px] font-bold tabular-nums",
-          active ? "bg-white/25 text-white" : "bg-[var(--color-surface-2)] text-[var(--color-muted)]",
+          "relative rounded-full px-1.5 text-[10px] font-bold tabular-nums transition-colors",
+          active
+            ? "bg-white/25 text-white"
+            : "bg-[var(--color-surface-2)] text-[var(--color-muted)]",
         )}
       >
         {count}
