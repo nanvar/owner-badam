@@ -87,7 +87,6 @@ export default async function OwnerDashboardPage({
   return (
     <OwnerDashboardView
       locale={locale as Locale}
-      welcome={t("welcome", { name: session.name ?? session.email })}
       range={range}
       kpis={{
         revenue: kpis.revenue,

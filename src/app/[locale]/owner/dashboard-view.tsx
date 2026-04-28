@@ -18,7 +18,6 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageHeader } from "@/components/app-shell";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { FadeIn, StaggerList, StaggerItem, HoverLift } from "@/components/ui/motion";
 import {
@@ -92,7 +91,6 @@ type PropertyRow = {
 
 export function OwnerDashboardView({
   locale,
-  welcome,
   range,
   kpis,
   monthly,
@@ -102,7 +100,6 @@ export function OwnerDashboardView({
   labels,
 }: {
   locale: Locale;
-  welcome: string;
   range: string;
   kpis: Kpis;
   monthly: Monthly[];
@@ -136,8 +133,6 @@ export function OwnerDashboardView({
 
   return (
     <div className="space-y-5">
-      <PageHeader title={welcome} />
-
       {/* PERIOD CHIPS */}
       <FadeIn delay={0.05}>
         <div className="-mx-4 overflow-x-auto px-4 no-scrollbar">
