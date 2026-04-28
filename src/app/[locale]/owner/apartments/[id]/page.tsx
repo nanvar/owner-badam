@@ -8,6 +8,8 @@ import { requireRole } from "@/lib/auth";
 import { computeKpis, periodFromRange } from "@/lib/metrics";
 import { PeriodHero } from "./period-hero";
 import { ReservationsTabs } from "./reservations-tabs";
+import { CalendarView } from "@/app/[locale]/owner/calendar/calendar-view";
+import { Calendar as CalendarIcon } from "lucide-react";
 
 export default async function ApartmentDetailPage({
   params,
@@ -85,6 +87,23 @@ export default async function ApartmentDetailPage({
       currency: r.currency,
     }));
 
+  const calendarEvents = property.reservations.map((r) => ({
+    id: r.id,
+    title: `${r.guestName ?? tOwner("guest")}`,
+    start: r.checkIn.toISOString(),
+    end: r.checkOut.toISOString(),
+    color: property.color,
+    extendedProps: {
+      propertyName: property.name,
+      propertyColor: property.color,
+      guestName: r.guestName ?? tOwner("guest"),
+      nights: r.nights,
+      totalPrice: r.totalPrice,
+      currency: r.currency,
+      pricePerNight: r.pricePerNight,
+    },
+  }));
+
   return (
     <div className="space-y-5">
       <Link
@@ -150,6 +169,16 @@ export default async function ApartmentDetailPage({
           ytd: tOwner("ytd"),
         }}
       />
+
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <CalendarIcon className="h-4 w-4 text-[var(--color-brand)]" />
+          <h2 className="text-base font-bold tracking-tight">
+            {tCommon("calendar")}
+          </h2>
+        </div>
+        <CalendarView locale={loc} events={calendarEvents} embedded />
+      </section>
 
       <ReservationsTabs
         upcoming={upcoming}

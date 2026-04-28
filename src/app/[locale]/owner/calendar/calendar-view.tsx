@@ -38,10 +38,12 @@ export function CalendarView({
   locale,
   events,
   title,
+  embedded = false,
 }: {
   locale: Locale;
   events: Event[];
-  title: string;
+  title?: string;
+  embedded?: boolean;
 }) {
   const [selected, setSelected] = useState<EventClickArg | null>(null);
   const [view, setView] = useState<View>("listMonth");
@@ -87,7 +89,7 @@ export function CalendarView({
 
   return (
     <div className="space-y-4">
-      <PageHeader title={title} />
+      {!embedded && title && <PageHeader title={title} />}
 
       {/* Custom toolbar — stacks cleanly on mobile */}
       <div className="flex flex-wrap items-center gap-2">
