@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import listPlugin from "@fullcalendar/list";
@@ -46,23 +46,9 @@ export function CalendarView({
   embedded?: boolean;
 }) {
   const [selected, setSelected] = useState<EventClickArg | null>(null);
-  const [view, setView] = useState<View>("listMonth");
+  const [view, setView] = useState<View>("dayGridMonth");
   const [calTitle, setCalTitle] = useState<string>("");
   const calRef = useRef<FullCalendar | null>(null);
-
-  // Default: list on phones, grid on tablet+. Updates on resize.
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px)");
-    const update = () => {
-      const newView: View = mq.matches ? "dayGridMonth" : "listMonth";
-      setView(newView);
-      const api = calRef.current?.getApi();
-      if (api && api.view.type !== newView) api.changeView(newView);
-    };
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
 
   const refreshTitle = () => {
     const api = calRef.current?.getApi();
