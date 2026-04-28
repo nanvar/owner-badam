@@ -5,16 +5,20 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(value: number, currency = "AED", locale = "en") {
-  try {
-    return new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-AE", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: 0,
-    }).format(value);
-  } catch {
-    return `${currency} ${Math.round(value).toLocaleString()}`;
-  }
+// Deterministic currency formatter that produces the exact same string in
+// Node and the browser, so SSR-hydrated values never trip React's mismatch
+// warning the way Intl.NumberFormat does (different ICU versions emit
+// different separator characters / spacing).
+export function formatCurrency(
+  value: number,
+  currency = "AED",
+  locale: string = "en",
+) {
+  const n = Math.round(value);
+  const abs = Math.abs(n);
+  const sep = locale === "ru" ? " " : ",";
+  const formatted = abs.toString().replace(/\B(?=(\d{3})+(?!\d))/g, sep);
+  return `${currency} ${n < 0 ? "-" : ""}${formatted}`;
 }
 
 export function formatDate(date: Date | string, locale = "en") {

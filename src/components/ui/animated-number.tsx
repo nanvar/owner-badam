@@ -1,7 +1,7 @@
 "use client";
 
-import { animate, useMotionValue, useTransform, motion } from "motion/react";
-import { useEffect, useRef } from "react";
+import { animate } from "motion/react";
+import { useEffect, useRef, useState } from "react";
 
 export function AnimatedNumber({
   value,
@@ -14,30 +14,30 @@ export function AnimatedNumber({
   duration?: number;
   className?: string;
 }) {
-  // Initialise the motion value to the final value so the SSR HTML matches
-  // the client's first render and React doesn't fire a hydration mismatch.
-  // After mount we restart from 0 → value to play the count-up animation.
-  const mv = useMotionValue(value);
-  const hasAnimated = useRef(false);
-  const display = useTransform(mv, (v) =>
-    format ? format(v) : Math.round(v).toLocaleString(),
-  );
+  const render = (v: number) =>
+    format ? format(v) : Math.round(v).toLocaleString();
+
+  // Server and first client paint render the same final value to keep
+  // the hydration HTML in sync. After the first commit we'll restart from
+  // 0 → value to play the count-up animation.
+  const [display, setDisplay] = useState(() => render(value));
+  const ranOnceRef = useRef(false);
 
   useEffect(() => {
-    if (!hasAnimated.current) {
-      hasAnimated.current = true;
-      mv.set(0);
-    }
-    const controls = animate(mv, value, {
+    const startFrom = ranOnceRef.current ? value : 0;
+    ranOnceRef.current = true;
+    const controls = animate(startFrom, value, {
       duration,
       ease: [0.16, 1, 0.3, 1],
+      onUpdate: (v) => setDisplay(render(v)),
     });
-    return controls.stop;
-  }, [value, duration, mv]);
+    return () => controls.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, duration]);
 
   return (
-    <motion.span suppressHydrationWarning className={className}>
+    <span suppressHydrationWarning className={className}>
       {display}
-    </motion.span>
+    </span>
   );
 }
