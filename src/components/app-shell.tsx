@@ -136,21 +136,18 @@ export function AppShell({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-32 pt-4 md:pb-10">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-4 md:pb-10">
         {children}
       </main>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 px-4 pt-3 md:hidden"
-        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 1rem)" }}
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-border)] bg-white md:hidden"
+        style={{
+          paddingBottom: "max(env(safe-area-inset-bottom), 0.5rem)",
+          boxShadow: "0 -8px 24px -12px rgba(15,23,42,0.12)",
+        }}
       >
-        <div
-          className="mx-auto flex max-w-md items-stretch gap-1 rounded-[28px] border border-black/[0.06] bg-white p-2 backdrop-blur-xl"
-          style={{
-            boxShadow:
-              "0 24px 48px -12px rgba(15,23,42,0.24), 0 8px 24px -8px rgba(99,102,241,0.28), 0 1px 0 rgba(255,255,255,0.7) inset",
-          }}
-        >
+        <div className="mx-auto flex max-w-md items-stretch">
           {nav.map((item) => {
             const active =
               pathname === item.href || pathname.startsWith(item.href + "/");
@@ -158,49 +155,43 @@ export function AppShell({
               <Link
                 key={item.href}
                 href={item.href}
-                className={cn(
-                  "relative flex flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-center transition-colors",
-                  active ? "text-white" : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]",
-                )}
-                style={{ minHeight: 62 }}
+                className="group relative flex flex-1 flex-col items-center justify-start gap-1 px-1 pt-2 pb-1.5"
               >
-                {active && (
+                <span className="relative grid h-8 w-16 place-items-center">
+                  {active && (
+                    <motion.span
+                      layoutId="bottom-nav-pill"
+                      className="absolute inset-0 rounded-full"
+                      style={{ background: "rgba(99,102,241,0.16)" }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 420,
+                        damping: 34,
+                        mass: 0.7,
+                      }}
+                    />
+                  )}
                   <motion.span
-                    layoutId="bottom-nav-pill"
-                    className="absolute inset-0 -z-10 rounded-2xl"
-                    style={{
-                      background:
-                        "linear-gradient(180deg, #6366f1 0%, #7c3aed 100%)",
-                      boxShadow:
-                        "0 10px 24px -8px rgba(99,102,241,0.55), 0 4px 10px -2px rgba(124,58,237,0.4), inset 0 1px 0 rgba(255,255,255,0.18)",
-                    }}
-                    transition={{
-                      type: "spring",
-                      stiffness: 380,
-                      damping: 32,
-                      mass: 0.8,
-                    }}
-                  />
-                )}
-                <motion.span
-                  initial={false}
-                  animate={
-                    active ? { scale: 1.1, y: -2 } : { scale: 1, y: 0 }
-                  }
-                  transition={{ type: "spring", stiffness: 420, damping: 30 }}
-                  className="grid h-7 w-7 shrink-0 place-items-center"
-                >
-                  <span
+                    initial={false}
+                    animate={{ scale: active ? 1.05 : 1 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 28 }}
                     className={cn(
-                      "[&>svg]:h-5 [&>svg]:w-5",
-                      active && "drop-shadow-sm",
+                      "relative grid h-6 w-6 place-items-center transition-colors duration-200 [&>svg]:h-[22px] [&>svg]:w-[22px]",
+                      active
+                        ? "text-[var(--color-brand)]"
+                        : "text-[#9ca3af]",
                     )}
                   >
                     {item.icon}
-                  </span>
-                </motion.span>
+                  </motion.span>
+                </span>
                 <span
-                  className="block w-full truncate text-[11px] font-semibold leading-none tracking-tight"
+                  className={cn(
+                    "block w-full truncate text-[11px] leading-none tracking-tight transition-colors duration-200",
+                    active
+                      ? "font-semibold text-[var(--color-brand)]"
+                      : "font-medium text-[#9ca3af]",
+                  )}
                 >
                   {item.label}
                 </span>
