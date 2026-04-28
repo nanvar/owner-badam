@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { User } from "lucide-react";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import {
+  cn,
+  formatCurrency,
+  formatDate,
+  dayInDubai,
+  monthInDubai,
+} from "@/lib/utils";
 import type { Locale } from "@/i18n/config";
 
 type Reservation = {
@@ -150,12 +156,8 @@ function Card({
   guestLabel: string;
   totalLabel: string;
 }) {
-  const checkIn = new Date(reservation.checkIn);
-  const checkOut = new Date(reservation.checkOut);
-  const day = checkIn.getDate();
-  const month = checkIn
-    .toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", { month: "short" })
-    .toUpperCase();
+  const day = dayInDubai(reservation.checkIn);
+  const month = monthInDubai(reservation.checkIn, locale);
   const cur = reservation.currency || "AED";
 
   return (
@@ -189,9 +191,9 @@ function Card({
             <span className="truncate">{reservation.guestName ?? guestLabel}</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-[var(--color-muted)]">
-            <span>{formatDate(checkIn, locale)}</span>
+            <span>{formatDate(reservation.checkIn, locale)}</span>
             <span>→</span>
-            <span>{formatDate(checkOut, locale)}</span>
+            <span>{formatDate(reservation.checkOut, locale)}</span>
             <span>·</span>
             <span>
               {reservation.nights}n

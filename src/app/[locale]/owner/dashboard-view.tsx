@@ -21,7 +21,13 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { FadeIn, StaggerList, StaggerItem, HoverLift } from "@/components/ui/motion";
-import { formatCurrency, formatShortDate, cn } from "@/lib/utils";
+import {
+  formatCurrency,
+  formatShortDate,
+  dayInDubai,
+  monthInDubai,
+  cn,
+} from "@/lib/utils";
 import type { Locale } from "@/i18n/config";
 
 const RANGE_OPTIONS = [
@@ -212,9 +218,9 @@ export function OwnerDashboardView({
           <CardHeader>
             <CardTitle>{labels.monthlyRevenue}</CardTitle>
           </CardHeader>
-          <CardBody className="h-64 sm:h-72">
+          <CardBody className="h-72">
             {monthly.some((m) => m.revenue > 0) ? (
-              <ResponsiveContainer width="100%" height="100%" minHeight={200} minWidth={200}>
+              <ResponsiveContainer width="100%" height={264}>
                 <AreaChart data={monthly} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
                   <defs>
                     <linearGradient id="revArea" x1="0" y1="0" x2="0" y2="1">
@@ -365,14 +371,8 @@ export function OwnerDashboardView({
             <CardBody>
               <StaggerList className="space-y-1">
                 {upcoming.map((u) => {
-                  const checkIn = new Date(u.checkIn);
-                  const day = checkIn.getDate();
-                  const month = checkIn
-                    .toLocaleDateString(
-                      locale === "ru" ? "ru-RU" : "en-US",
-                      { month: "short" },
-                    )
-                    .toUpperCase();
+                  const day = dayInDubai(u.checkIn);
+                  const month = monthInDubai(u.checkIn, locale);
                   return (
                     <StaggerItem
                       key={u.id}

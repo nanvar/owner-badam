@@ -23,6 +23,7 @@ export function formatDate(date: Date | string, locale = "en") {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    timeZone: "Asia/Dubai",
   }).format(d);
 }
 
@@ -31,7 +32,26 @@ export function formatShortDate(date: Date | string, locale = "en") {
   return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-GB", {
     day: "2-digit",
     month: "short",
+    timeZone: "Asia/Dubai",
   }).format(d);
+}
+
+export function dayInDubai(date: Date | string) {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    timeZone: "Asia/Dubai",
+  }).format(d);
+}
+
+export function monthInDubai(date: Date | string, locale = "en") {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
+    month: "short",
+    timeZone: "Asia/Dubai",
+  })
+    .format(d)
+    .toUpperCase();
 }
 
 export function nightsBetween(checkIn: Date, checkOut: Date) {
