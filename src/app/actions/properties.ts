@@ -12,7 +12,7 @@ const PropertySchema = z.object({
   airbnbIcalUrl: z.string().url().optional().or(z.literal("")),
   basePrice: z.coerce.number().nonnegative().default(0),
   cleaningFee: z.coerce.number().nonnegative().default(0),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#6366f1"),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#4f8a6f"),
   ownerId: z.string().min(1),
   notes: z.string().max(1000).optional().or(z.literal("")),
 });
@@ -34,7 +34,7 @@ export async function upsertPropertyAction(
     airbnbIcalUrl: formData.get("airbnbIcalUrl") || "",
     basePrice: formData.get("basePrice") || 0,
     cleaningFee: formData.get("cleaningFee") || 0,
-    color: formData.get("color") || "#6366f1",
+    color: formData.get("color") || "#4f8a6f",
     ownerId: formData.get("ownerId"),
     notes: formData.get("notes") || "",
   });

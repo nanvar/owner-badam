@@ -385,7 +385,7 @@ function PropertyEditor({
               id="color"
               name="color"
               type="color"
-              defaultValue={property?.color ?? "#6366f1"}
+              defaultValue={property?.color ?? "#4f8a6f"}
               className="h-11 w-full rounded-xl p-1"
             />
           </Field>

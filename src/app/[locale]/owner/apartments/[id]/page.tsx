@@ -93,7 +93,7 @@ export default async function ApartmentDetailPage({
             )}
             <Link
               href={`/${locale}/owner/reports?propertyId=${property.id}`}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[var(--color-brand)] px-3 text-sm font-medium text-white shadow-sm shadow-indigo-500/25 hover:bg-[var(--color-brand-hover)]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[var(--color-brand)] px-3 text-sm font-medium text-white shadow-sm shadow-emerald-700/25 hover:bg-[var(--color-brand-hover)]"
             >
               <FileText className="h-4 w-4" />
               {tCommon("reports")}

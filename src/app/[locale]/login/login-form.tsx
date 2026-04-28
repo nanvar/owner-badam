@@ -26,8 +26,22 @@ export function LoginForm({ locale, brand }: { locale: Locale; brand: Brand }) {
   );
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center px-5 py-10">
-      <div className="w-full max-w-sm animate-fade-in">
+    <div
+      className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden px-5 py-10"
+      style={{
+        background:
+          "linear-gradient(160deg, #4f8a6f 0%, #3d6f57 45%, #f3f7f4 75%, #ffffff 100%)",
+      }}
+    >
+      <div
+        className="pointer-events-none absolute -right-20 top-10 h-72 w-72 rounded-full opacity-40 blur-3xl"
+        style={{ background: "rgba(168,200,182,0.6)" }}
+      />
+      <div
+        className="pointer-events-none absolute -left-16 -top-16 h-64 w-64 rounded-full opacity-50 blur-3xl"
+        style={{ background: "rgba(255,255,255,0.5)" }}
+      />
+      <div className="relative w-full max-w-sm animate-fade-in">
         <div className="mb-6 flex flex-col items-center text-center">
           {brand.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -37,7 +51,7 @@ export function LoginForm({ locale, brand }: { locale: Locale; brand: Brand }) {
               className="h-12 w-auto object-contain"
             />
           ) : (
-            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--color-brand)] text-white shadow-lg shadow-indigo-500/25">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--color-brand)] text-white shadow-lg shadow-emerald-700/25">
               <Sparkles className="h-6 w-6" />
             </span>
           )}

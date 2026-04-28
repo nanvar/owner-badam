@@ -143,7 +143,7 @@ export function OwnerDashboardView({
                 className={cn(
                   "shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition-all duration-200 active:scale-95",
                   range === r
-                    ? "border-[var(--color-brand)] bg-[var(--color-brand)] text-white shadow-md shadow-indigo-500/30"
+                    ? "border-[var(--color-brand)] bg-[var(--color-brand)] text-white shadow-md shadow-emerald-700/25"
                     : "border-[var(--color-border)] bg-white text-[var(--color-muted)] hover:border-[var(--color-brand)] hover:text-[var(--color-brand)]",
                 )}
               >
@@ -156,9 +156,17 @@ export function OwnerDashboardView({
 
       {/* HERO REVENUE CARD */}
       <FadeIn delay={0.1}>
-        <div className="relative overflow-hidden rounded-3xl border border-[var(--color-border)] bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-600 p-5 text-white shadow-xl shadow-indigo-500/25 sm:p-7">
+        <div
+          className="relative overflow-hidden rounded-3xl border border-[var(--color-border)] p-5 text-white sm:p-7"
+          style={{
+            background:
+              "linear-gradient(135deg, #4f8a6f 0%, #3d6f57 55%, #2f5a47 100%)",
+            boxShadow:
+              "0 24px 48px -16px rgba(47,90,71,0.45), 0 8px 24px -12px rgba(79,138,111,0.4)",
+          }}
+        >
           <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
-          <div className="pointer-events-none absolute -bottom-20 -left-12 h-40 w-40 rounded-full bg-violet-300/15 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-20 -left-12 h-40 w-40 rounded-full bg-emerald-200/20 blur-2xl" />
 
           <div className="relative">
             <div className="text-xs font-medium uppercase tracking-wider text-white/80">
@@ -210,8 +218,8 @@ export function OwnerDashboardView({
                 <AreaChart data={monthly} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
                   <defs>
                     <linearGradient id="revArea" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#6366f1" stopOpacity={0.45} />
-                      <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+                      <stop offset="0%" stopColor="#4f8a6f" stopOpacity={0.45} />
+                      <stop offset="100%" stopColor="#4f8a6f" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,120,130,0.15)" />
@@ -241,7 +249,7 @@ export function OwnerDashboardView({
                   <Area
                     type="monotone"
                     dataKey="revenue"
-                    stroke="#6366f1"
+                    stroke="#4f8a6f"
                     strokeWidth={2.5}
                     fill="url(#revArea)"
                     isAnimationActive

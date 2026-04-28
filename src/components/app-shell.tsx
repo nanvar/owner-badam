@@ -162,7 +162,7 @@ export function AppShell({
                     <motion.span
                       layoutId="bottom-nav-pill"
                       className="absolute inset-0 rounded-full"
-                      style={{ background: "rgba(99,102,241,0.14)" }}
+                      style={{ background: "rgba(79,138,111,0.16)" }}
                       transition={{
                         type: "spring",
                         stiffness: 420,

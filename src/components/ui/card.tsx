@@ -71,7 +71,7 @@ export function StatCard({
   accent?: "indigo" | "emerald" | "amber" | "rose" | "sky";
 }) {
   const map: Record<string, string> = {
-    indigo: "from-indigo-500/15 to-indigo-500/0 text-indigo-500",
+    indigo: "from-emerald-600/15 to-emerald-600/0 text-emerald-700",
     emerald: "from-emerald-500/15 to-emerald-500/0 text-emerald-500",
     amber: "from-amber-500/15 to-amber-500/0 text-amber-500",
     rose: "from-rose-500/15 to-rose-500/0 text-rose-500",

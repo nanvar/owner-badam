@@ -16,7 +16,7 @@ type Stat = {
 };
 
 const accentClasses: Record<Stat["accent"], string> = {
-  indigo: "from-indigo-500/15 to-indigo-500/0 text-indigo-500",
+  indigo: "from-emerald-600/15 to-emerald-600/0 text-emerald-700",
   sky: "from-sky-500/15 to-sky-500/0 text-sky-500",
   emerald: "from-emerald-500/15 to-emerald-500/0 text-emerald-500",
   amber: "from-amber-500/15 to-amber-500/0 text-amber-500",

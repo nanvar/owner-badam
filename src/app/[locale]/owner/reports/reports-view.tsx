@@ -161,7 +161,7 @@ export function ReportsView({
                 className={cn(
                   "shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors",
                   range === r
-                    ? "border-[var(--color-brand)] bg-[var(--color-brand)] text-white shadow-sm shadow-indigo-500/30"
+                    ? "border-[var(--color-brand)] bg-[var(--color-brand)] text-white shadow-sm shadow-emerald-700/25"
                     : "border-[var(--color-border)] bg-white text-[var(--color-muted)] hover:border-[var(--color-brand)] hover:text-[var(--color-brand)]",
                 )}
               >
@@ -803,7 +803,7 @@ function TabButton({
       className={cn(
         "flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-colors sm:text-sm",
         active
-          ? "bg-[var(--color-brand)] text-white shadow-sm shadow-indigo-500/30"
+          ? "bg-[var(--color-brand)] text-white shadow-sm shadow-emerald-700/25"
           : "text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]",
       )}
     >
