@@ -14,13 +14,19 @@ export async function GET(req: Request) {
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
+  const month = url.searchParams.get("month");
   const range = url.searchParams.get("range") ?? "this-month";
   const fromParam = url.searchParams.get("from");
   const toParam = url.searchParams.get("to");
   const propertyId = url.searchParams.get("propertyId");
 
   let period: Period;
-  if (range === "custom" && fromParam && toParam) {
+  if (month && /^\d{4}-\d{2}$/.test(month)) {
+    const [y, m] = month.split("-").map(Number);
+    const from = new Date(Date.UTC(y, m - 1, 1));
+    const to = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+    period = { from, to };
+  } else if (range === "custom" && fromParam && toParam) {
     const from = new Date(fromParam);
     const to = new Date(toParam);
     to.setHours(23, 59, 59, 999);

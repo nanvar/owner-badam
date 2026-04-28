@@ -190,6 +190,9 @@
     "tabOverview": "Overview",
     "checkinShort": "In",
     "checkoutShort": "Out",
-    "guest": "Guest"
+    "guest": "Guest",
+    "selectMonth": "Select month",
+    "downloadPdf": "Download PDF",
+    "noMonthsAvailable": "Reports become available once the first full month after your property was added has ended."
   }
 }

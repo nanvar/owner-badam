@@ -19,6 +19,7 @@ type Property = {
   name: string;
   address: string | null;
   color: string;
+  createdAt: string;
   reservationCount: number;
 };
 
@@ -30,12 +31,14 @@ export function ReportPropertyPicker({
   locale,
   ownerName,
   properties,
+  earliestCreatedAt,
   brand,
   labels,
 }: {
   locale: Locale;
   ownerName: string;
   properties: Property[];
+  earliestCreatedAt: string | null;
   brand: Brand;
   labels: Labels;
 }) {
@@ -155,6 +158,11 @@ export function ReportPropertyPicker({
               selected.kind === "one"
                 ? selected.property.name
                 : labels.allProperties
+            }
+            scopeCreatedAt={
+              selected.kind === "one"
+                ? selected.property.createdAt
+                : earliestCreatedAt
             }
             ownerName={ownerName}
             locale={locale}

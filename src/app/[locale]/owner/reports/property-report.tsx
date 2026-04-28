@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  FileSpreadsheet,
   FileText,
   Loader2,
   Receipt,
   Wallet,
   CalendarCheck,
+  ChevronDown,
 } from "lucide-react";
 import { FadeIn } from "@/components/ui/motion";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -27,33 +27,14 @@ export type Labels = {
   allProperties: string;
   noProperties: string;
   reservations: string;
-  thisMonth: string;
-  lastMonth: string;
-  last30: string;
-  last90: string;
-  ytd: string;
-  kpiRevenue: string;
-  kpiNights: string;
-  kpiOccupancy: string;
-  kpiAdr: string;
-  kpiRevpar: string;
-  kpiBookings: string;
-  kpiAvgStay: string;
   guest: string;
   payout: string;
   loading: string;
   noData: string;
-  excel: string;
   pdf: string;
+  selectMonth: string;
+  noMonthsAvailable: string;
 };
-
-const RANGE_OPTIONS = [
-  "this-month",
-  "last-month",
-  "last-30",
-  "last-90",
-  "ytd",
-] as const;
 
 type Reservation = {
   id: string;
@@ -140,9 +121,61 @@ const EXPENSE_TYPE_LABELS: Record<string, string> = {
   OTHERS: "Others",
 };
 
+function pad2(n: number) {
+  return n < 10 ? `0${n}` : String(n);
+}
+
+function monthKey(d: Date) {
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
+}
+
+// List YYYY-MM keys from the createdAt month up through the last completed
+// month (i.e. the month before the current one, in UTC). Returns newest first.
+function buildAvailableMonths(createdAtIso: string | null): string[] {
+  if (!createdAtIso) return [];
+  const created = new Date(createdAtIso);
+  const startY = created.getUTCFullYear();
+  const startM = created.getUTCMonth(); // 0-based
+
+  const now = new Date();
+  // Last completed month = previous calendar month
+  let endY = now.getUTCFullYear();
+  let endM = now.getUTCMonth() - 1;
+  if (endM < 0) {
+    endM = 11;
+    endY -= 1;
+  }
+
+  if (endY < startY || (endY === startY && endM < startM)) return [];
+
+  const out: string[] = [];
+  let y = startY;
+  let m = startM;
+  while (y < endY || (y === endY && m <= endM)) {
+    out.push(`${y}-${pad2(m + 1)}`);
+    m += 1;
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+  }
+  return out.reverse();
+}
+
+function formatMonthLabel(monthStr: string, locale: Locale) {
+  const [y, m] = monthStr.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1, 1));
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-GB", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(d);
+}
+
 export function PropertyReport({
   propertyId,
   scopeName,
+  scopeCreatedAt,
   ownerName,
   locale,
   brand,
@@ -150,21 +183,30 @@ export function PropertyReport({
 }: {
   propertyId: string;
   scopeName: string;
+  scopeCreatedAt: string | null;
   ownerName: string;
   locale: Locale;
   brand: Brand;
   labels: Labels;
 }) {
-  const [range, setRange] = useState<string>("this-month");
+  const availableMonths = useMemo(
+    () => buildAvailableMonths(scopeCreatedAt),
+    [scopeCreatedAt],
+  );
+  const [month, setMonth] = useState<string>(availableMonths[0] ?? "");
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [busy, setBusy] = useState<"excel" | "pdf" | null>(null);
+  const [busy, setBusy] = useState<"pdf" | null>(null);
 
   useEffect(() => {
+    if (!month) {
+      setData(null);
+      return;
+    }
     let cancel = false;
     setLoading(true);
     const sp = new URLSearchParams();
-    sp.set("range", range);
+    sp.set("month", month);
     if (propertyId) sp.set("propertyId", propertyId);
     fetch(`/api/report?${sp.toString()}`)
       .then((r) => r.json())
@@ -175,110 +217,9 @@ export function PropertyReport({
     return () => {
       cancel = true;
     };
-  }, [range, propertyId]);
-
-  const rangeLabels: Record<string, string> = {
-    "this-month": labels.thisMonth,
-    "last-month": labels.lastMonth,
-    "last-30": labels.last30,
-    "last-90": labels.last90,
-    ytd: labels.ytd,
-  };
+  }, [month, propertyId]);
 
   const fmt = (n: number) => formatCurrency(n, data?.currency || "AED", locale);
-
-  const exportExcel = async () => {
-    if (!data) return;
-    setBusy("excel");
-    try {
-      const xlsx = await import("xlsx");
-      const wb = xlsx.utils.book_new();
-
-      const summary: (string | number)[][] = [
-        ["Issuing company"],
-        [data.issuingCompany.brandName, data.issuingCompany.legalName],
-        [data.issuingCompany.address],
-        [data.issuingCompany.email ?? "", data.issuingCompany.phone ?? ""],
-        [],
-        ["Recipient"],
-        [data.recipient?.name ?? ownerName],
-        [data.recipient?.taxId ?? ""],
-        [data.recipient?.email ?? ""],
-        [data.recipient?.address ?? ""],
-        [],
-        ["Settlement N°", data.settlementNo],
-        ["Date", data.settlementDate.slice(0, 10)],
-        [
-          "Period",
-          `${formatDate(data.period.from, locale)} → ${formatDate(data.period.to, locale)}`,
-        ],
-        ["Currency", data.currency],
-        ["Scope", scopeName],
-        [],
-        ["Total income", data.settlement.totalOwnerPayout],
-        ["Total deductions", -data.settlement.totalDeductions],
-        ["SETTLEMENT TOTAL", data.settlement.settlementTotal],
-      ];
-      xlsx.utils.book_append_sheet(
-        wb,
-        xlsx.utils.aoa_to_sheet(summary),
-        "Summary",
-      );
-
-      xlsx.utils.book_append_sheet(
-        wb,
-        xlsx.utils.json_to_sheet(
-          data.reservations.map((r) => ({
-            "Booking ID": r.id,
-            Property: r.propertyName,
-            Guest: r.guestName ?? "",
-            "Stay period": `${r.checkIn.slice(0, 10)} - ${r.checkOut.slice(0, 10)}`,
-            Nights: r.nights,
-            Amount: r.totalPrice,
-            "Agency commission": r.agencyCommission,
-            "Portal commission": r.portalCommission,
-            "Amount paid to owner": r.payout,
-          })),
-        ),
-        "Bookings",
-      );
-
-      xlsx.utils.book_append_sheet(
-        wb,
-        xlsx.utils.json_to_sheet(
-          data.expenses.map((e) => ({
-            Date: e.date.slice(0, 10),
-            Property: e.propertyName,
-            Type: EXPENSE_TYPE_LABELS[e.type] ?? e.type,
-            Description: e.description,
-            Amount: -e.amount,
-          })),
-        ),
-        "Expenses",
-      );
-
-      xlsx.utils.book_append_sheet(
-        wb,
-        xlsx.utils.json_to_sheet(
-          data.advances.map((a) => ({
-            Date: a.date.slice(0, 10),
-            Property: a.propertyName,
-            Concept: a.concept,
-            Amount: -a.amount,
-          })),
-        ),
-        "Payments on account",
-      );
-
-      const slug = scopeName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      xlsx.writeFile(
-        wb,
-        `${slug}-settlement-${data.settlementNo}.xlsx`,
-      );
-    } finally {
-      setBusy(null);
-    }
-  };
 
   const exportPdf = async () => {
     if (!data) return;
@@ -294,7 +235,6 @@ export function PropertyReport({
       const colW = (pageWidth - 64 - 16) / 2;
       const headerY = 50;
 
-      // Left: Issuing company
       doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
       doc.setTextColor(20, 20, 28);
@@ -316,18 +256,13 @@ export function PropertyReport({
         doc.text(contactBits, 32, headerY + 32 + issAddrLines.length * 11);
       }
 
-      // Right: Recipient
       const rightX = 32 + colW + 16;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
       doc.setTextColor(20, 20, 28);
       doc.text("Recipient", rightX, headerY);
       doc.setFontSize(10);
-      doc.text(
-        data.recipient?.name ?? ownerName,
-        rightX,
-        headerY + 18,
-      );
+      doc.text(data.recipient?.name ?? ownerName, rightX, headerY + 18);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(80, 80, 90);
       doc.setFontSize(9);
@@ -353,20 +288,19 @@ export function PropertyReport({
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.setTextColor(47, 90, 71);
-      doc.text(`Seasonal settlement | ${scopeName}`, 44, titleY + 20);
+      doc.text(`Monthly settlement | ${scopeName}`, 44, titleY + 20);
 
-      // === Settlement meta table ===
+      // === Period meta (no settlement Nº) ===
       autoTable(doc, {
         startY: titleY + 44,
-        head: [["Settlement Nº", "Date", "Period", "Currency"]],
+        head: [["Period", "Date", "Currency"]],
         theme: "striped",
         headStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28] },
         styles: { fontSize: 9 },
         body: [
           [
-            String(data.settlementNo),
+            formatMonthLabel(month, locale),
             data.settlementDate.slice(0, 10),
-            `${formatDate(data.period.from, locale)} → ${formatDate(data.period.to, locale)}`,
             data.currency,
           ],
         ],
@@ -375,7 +309,7 @@ export function PropertyReport({
       let lastY = (doc as unknown as { lastAutoTable: { finalY: number } })
         .lastAutoTable.finalY;
 
-      // === Payments by booking ===
+      // === Payments by booking — no booking number column ===
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(20, 20, 28);
@@ -385,11 +319,10 @@ export function PropertyReport({
         startY: lastY + 30,
         head: [
           [
-            "Booking",
             "Stay period",
             "Amount",
-            "Agency",
-            "Portal",
+            "Agency commission",
+            "Portal commission",
             "To owner",
           ],
         ],
@@ -397,7 +330,6 @@ export function PropertyReport({
         headStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28] },
         styles: { fontSize: 8 },
         body: data.reservations.map((r) => [
-          r.id.slice(0, 8),
           `${formatDate(r.checkIn, locale)} - ${formatDate(r.checkOut, locale)}`,
           fmt(r.totalPrice),
           fmt(r.agencyCommission),
@@ -407,24 +339,26 @@ export function PropertyReport({
         foot: [
           [
             "Subtotal:",
-            "",
             fmt(data.settlement.totalAmount),
             fmt(data.settlement.totalAgency),
             fmt(data.settlement.totalPortal),
             fmt(data.settlement.totalOwnerPayout),
           ],
         ],
-        footStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28], fontStyle: "bold" },
+        footStyles: {
+          fillColor: [243, 247, 244],
+          textColor: [20, 20, 28],
+          fontStyle: "bold",
+        },
       });
 
       lastY = (doc as unknown as { lastAutoTable: { finalY: number } })
         .lastAutoTable.finalY;
 
-      // === Expenses ===
       if (data.expenses.length > 0) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(10);
-        doc.text("Expense", 32, lastY + 22);
+        doc.text("Expenses", 32, lastY + 22);
         autoTable(doc, {
           startY: lastY + 30,
           head: [["Date", "Type / Description", "Amount"]],
@@ -437,13 +371,16 @@ export function PropertyReport({
             `- ${fmt(e.amount)}`,
           ]),
           foot: [["Subtotal:", "", `- ${fmt(data.settlement.totalExpenses)}`]],
-          footStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28], fontStyle: "bold" },
+          footStyles: {
+            fillColor: [243, 247, 244],
+            textColor: [20, 20, 28],
+            fontStyle: "bold",
+          },
         });
         lastY = (doc as unknown as { lastAutoTable: { finalY: number } })
           .lastAutoTable.finalY;
       }
 
-      // === Payments on account ===
       if (data.advances.length > 0) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(10);
@@ -460,13 +397,17 @@ export function PropertyReport({
             `- ${fmt(a.amount)}`,
           ]),
           foot: [["Subtotal:", "", `- ${fmt(data.settlement.totalAdvances)}`]],
-          footStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28], fontStyle: "bold" },
+          footStyles: {
+            fillColor: [243, 247, 244],
+            textColor: [20, 20, 28],
+            fontStyle: "bold",
+          },
         });
         lastY = (doc as unknown as { lastAutoTable: { finalY: number } })
           .lastAutoTable.finalY;
       }
 
-      // === Summary ===
+      // === Settlement total ===
       autoTable(doc, {
         startY: lastY + 24,
         theme: "grid",
@@ -482,9 +423,9 @@ export function PropertyReport({
       });
 
       // Footer
-      const totalPages = (doc as unknown as {
-        getNumberOfPages: () => number;
-      }).getNumberOfPages();
+      const totalPages = (
+        doc as unknown as { getNumberOfPages: () => number }
+      ).getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
         doc.setFontSize(8);
@@ -502,56 +443,60 @@ export function PropertyReport({
       }
 
       const slug = scopeName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      doc.save(`${slug}-settlement-${data.settlementNo}.pdf`);
+      doc.save(`${slug}-${month}.pdf`);
     } finally {
       setBusy(null);
     }
   };
 
-  // Also keep brand variable referenced (typescript noUnusedParameters could complain)
   void brand;
+
+  if (availableMonths.length === 0) {
+    return (
+      <div className="grid place-items-center rounded-2xl border border-dashed border-[var(--color-border)] bg-white px-6 py-10 text-center text-sm text-[var(--color-muted)]">
+        {labels.noMonthsAvailable}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      <div className="-mx-4 overflow-x-auto px-4 no-scrollbar">
-        <div className="flex gap-2 pb-1">
-          {RANGE_OPTIONS.map((r) => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={cn(
-                "shrink-0 rounded-full border px-3.5 py-1 text-xs font-semibold transition-all duration-200 active:scale-95",
-                range === r
-                  ? "border-[var(--color-brand)] bg-[var(--color-brand)] text-white shadow shadow-emerald-700/25"
-                  : "border-[var(--color-border)] bg-white text-[var(--color-muted)] hover:border-[var(--color-brand)] hover:text-[var(--color-brand)]",
-              )}
-            >
-              {rangeLabels[r]}
-            </button>
-          ))}
+      {/* Month picker */}
+      <label className="block">
+        <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+          {labels.selectMonth}
+        </span>
+        <div className="relative">
+          <select
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className="h-11 w-full appearance-none rounded-2xl border border-[var(--color-border)] bg-white pl-4 pr-10 text-sm font-semibold text-[var(--color-fg)] shadow-sm transition-colors hover:border-[var(--color-brand)] focus:border-[var(--color-brand)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
+          >
+            {availableMonths.map((mk) => (
+              <option key={mk} value={mk}>
+                {formatMonthLabel(mk, locale)}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
         </div>
-      </div>
+      </label>
 
       {loading && !data ? (
         <ReportSkeleton />
       ) : data ? (
         <FadeIn delay={0.05}>
-          {/* Settlement header */}
+          {/* Period summary */}
           <div className="rounded-2xl border border-[var(--color-border)] bg-white p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-                Settlement N° {data.settlementNo}
-              </div>
-              <div className="text-[10px] text-[var(--color-muted)]">
-                {data.settlementDate.slice(0, 10)}
-              </div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+              {scopeName}
             </div>
-            <div className="mt-1 text-sm font-bold">
-              {formatDate(data.period.from, locale)} →{" "}
-              {formatDate(data.period.to, locale)}
+            <div className="mt-0.5 text-base font-bold tracking-tight">
+              {formatMonthLabel(month, locale)}
             </div>
             <div className="text-[11px] text-[var(--color-muted)]">
-              {data.issuingCompany.legalName} → {data.recipient?.name ?? ownerName}
+              {data.issuingCompany.legalName} →{" "}
+              {data.recipient?.name ?? ownerName}
               {data.recipient?.taxId && ` (${data.recipient.taxId})`}
             </div>
           </div>
@@ -570,10 +515,15 @@ export function PropertyReport({
                   <thead className="bg-[var(--color-surface-2)] text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
                     <tr>
                       <th className="px-3 py-2 text-left font-semibold">Stay</th>
-                      <th className="px-3 py-2 text-right font-semibold">Amount</th>
-                      <th className="px-3 py-2 text-right font-semibold">Agency</th>
-                      <th className="px-3 py-2 text-right font-semibold">Portal</th>
-                      <th className="px-3 py-2 text-right font-semibold">To owner</th>
+                      <th className="px-3 py-2 text-right font-semibold">
+                        Agency
+                      </th>
+                      <th className="px-3 py-2 text-right font-semibold">
+                        Portal
+                      </th>
+                      <th className="px-3 py-2 text-right font-semibold">
+                        To owner
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -591,9 +541,6 @@ export function PropertyReport({
                             {formatDate(r.checkOut, locale)} · {r.nights}n
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">
-                          {fmt(r.totalPrice)}
-                        </td>
                         <td className="px-3 py-2 text-right tabular-nums text-[var(--color-muted)]">
                           {fmt(r.agencyCommission)}
                         </td>
@@ -608,9 +555,6 @@ export function PropertyReport({
                     <tr className="border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/60">
                       <td className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider">
                         Subtotal
-                      </td>
-                      <td className="px-3 py-2 text-right text-xs font-bold tabular-nums">
-                        {fmt(data.settlement.totalAmount)}
                       </td>
                       <td className="px-3 py-2 text-right text-xs font-bold tabular-nums text-[var(--color-muted)]">
                         {fmt(data.settlement.totalAgency)}
@@ -628,7 +572,6 @@ export function PropertyReport({
             )}
           </Section>
 
-          {/* Section: Expenses */}
           {data.expenses.length > 0 && (
             <Section
               title="Expenses"
@@ -660,7 +603,10 @@ export function PropertyReport({
                       </tr>
                     ))}
                     <tr className="border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/60">
-                      <td colSpan={2} className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider">
+                      <td
+                        colSpan={2}
+                        className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider"
+                      >
                         Subtotal
                       </td>
                       <td className="px-3 py-2 text-right text-xs font-bold tabular-nums text-rose-600">
@@ -673,7 +619,6 @@ export function PropertyReport({
             </Section>
           )}
 
-          {/* Section: Advances */}
           {data.advances.length > 0 && (
             <Section
               title="Payments on account"
@@ -698,7 +643,10 @@ export function PropertyReport({
                       </tr>
                     ))}
                     <tr className="border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/60">
-                      <td colSpan={2} className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider">
+                      <td
+                        colSpan={2}
+                        className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider"
+                      >
                         Subtotal
                       </td>
                       <td className="px-3 py-2 text-right text-xs font-bold tabular-nums text-rose-600">
@@ -711,67 +659,23 @@ export function PropertyReport({
             </Section>
           )}
 
-          {/* Summary */}
-          <div
-            className="rounded-3xl border border-[var(--color-border)] p-4 text-white sm:p-5"
-            style={{
-              background:
-                "linear-gradient(135deg, #4f8a6f 0%, #3d6f57 55%, #2f5a47 100%)",
-              boxShadow:
-                "0 14px 28px -14px rgba(47,90,71,0.4), 0 4px 12px -6px rgba(79,138,111,0.35)",
-            }}
-          >
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="rounded-xl bg-white/15 p-3 backdrop-blur-sm">
-                <div className="text-[9px] uppercase tracking-wider text-white/80">
-                  Total income
-                </div>
-                <div className="mt-0.5 text-sm font-bold">
-                  {fmt(data.settlement.totalOwnerPayout)}
-                </div>
-              </div>
-              <div className="rounded-xl bg-white/15 p-3 backdrop-blur-sm">
-                <div className="text-[9px] uppercase tracking-wider text-white/80">
-                  Total deductions
-                </div>
-                <div className="mt-0.5 text-sm font-bold">
-                  − {fmt(data.settlement.totalDeductions)}
-                </div>
-              </div>
-            </div>
-            <div className="mt-3 flex items-center justify-between rounded-xl bg-white/20 px-4 py-3 backdrop-blur-sm">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-white">
-                Settlement total
-              </span>
-              <span className="text-2xl font-bold">
-                {fmt(data.settlement.settlementTotal)}
-              </span>
-            </div>
-          </div>
-
-          {/* Download */}
-          <div className="sticky bottom-0 -mx-5 -mb-5 mt-5 grid grid-cols-2 gap-2 border-t border-[var(--color-border)] bg-white/95 p-4 backdrop-blur-md">
-            <button
-              onClick={exportExcel}
-              disabled={busy !== null}
-              className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--color-border)] bg-white px-3 py-3 text-sm font-semibold transition-colors hover:border-emerald-500 hover:bg-emerald-500/5 disabled:opacity-60"
-            >
-              {busy === "excel" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-              )}
-              {labels.excel}
-            </button>
+          {/* Single PDF download */}
+          <div className="sticky bottom-0 -mx-5 -mb-5 mt-5 border-t border-[var(--color-border)] bg-white/95 p-4 backdrop-blur-md">
             <button
               onClick={exportPdf}
               disabled={busy !== null}
-              className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--color-border)] bg-white px-3 py-3 text-sm font-semibold transition-colors hover:border-rose-500 hover:bg-rose-500/5 disabled:opacity-60"
+              className={cn(
+                "flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-sm font-semibold text-white shadow transition-all active:scale-[0.99] disabled:opacity-60",
+              )}
+              style={{
+                background:
+                  "linear-gradient(135deg, #4f8a6f 0%, #3d6f57 60%, #2f5a47 100%)",
+              }}
             >
               {busy === "pdf" ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <FileText className="h-4 w-4 text-rose-500" />
+                <FileText className="h-4 w-4" />
               )}
               {labels.pdf}
             </button>
@@ -823,7 +727,6 @@ function ReportSkeleton() {
       <Skeleton className="h-48 w-full" rounded="rounded-2xl" />
       <Skeleton className="h-5 w-32" rounded="rounded-md" />
       <Skeleton className="h-32 w-full" rounded="rounded-2xl" />
-      <Skeleton className="h-32 w-full" rounded="rounded-3xl" />
     </div>
   );
 }

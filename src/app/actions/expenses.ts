@@ -4,18 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-
-export const EXPENSE_TYPES = [
-  "DEWA",
-  "CHILLER",
-  "DU",
-  "GAS",
-  "CLEANING",
-  "DTCM",
-  "SERVICE_CHARGE",
-  "OTHERS",
-] as const;
-export type ExpenseTypeKey = (typeof EXPENSE_TYPES)[number];
+import { EXPENSE_TYPES } from "@/lib/expense-types";
 
 const ExpenseSchema = z.object({
   id: z.string().optional(),

@@ -24,10 +24,14 @@ export default async function OwnerReportsPage({
       name: true,
       address: true,
       color: true,
+      createdAt: true,
       _count: { select: { reservations: true } },
     },
     orderBy: { createdAt: "asc" },
   });
+  const earliestCreatedAt = properties.length
+    ? properties.reduce((m, p) => (p.createdAt < m ? p.createdAt : m), properties[0].createdAt)
+    : null;
 
   const t = await getTranslations({ locale, namespace: "owner" });
   const tCommon = await getTranslations({ locale, namespace: "common" });
@@ -42,8 +46,10 @@ export default async function OwnerReportsPage({
         name: p.name,
         address: p.address,
         color: p.color,
+        createdAt: p.createdAt.toISOString(),
         reservationCount: p._count.reservations,
       }))}
+      earliestCreatedAt={earliestCreatedAt ? earliestCreatedAt.toISOString() : null}
       brand={{
         name: settings.brandName,
         legalName: settings.legalName,
@@ -56,24 +62,13 @@ export default async function OwnerReportsPage({
         allProperties: t("allProperties"),
         noProperties: t("noProperties"),
         reservations: tCommon("reservations"),
-        thisMonth: t("thisMonth"),
-        lastMonth: t("lastMonth"),
-        last30: t("last30"),
-        last90: t("last90"),
-        ytd: t("ytd"),
-        kpiRevenue: t("kpiRevenue"),
-        kpiNights: t("kpiNights"),
-        kpiOccupancy: t("kpiOccupancy"),
-        kpiAdr: t("kpiAdr"),
-        kpiRevpar: t("kpiRevpar"),
-        kpiBookings: t("kpiBookings"),
-        kpiAvgStay: t("kpiAvgStay"),
         guest: t("guest"),
         payout: tAdmin("payout"),
         loading: tCommon("loading"),
         noData: tCommon("noData"),
-        excel: "Excel",
-        pdf: "PDF",
+        pdf: t("downloadPdf"),
+        selectMonth: t("selectMonth"),
+        noMonthsAvailable: t("noMonthsAvailable"),
       }}
     />
   );

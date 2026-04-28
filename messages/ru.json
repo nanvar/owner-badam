@@ -190,6 +190,9 @@
     "tabOverview": "Обзор",
     "checkinShort": "Заезд",
     "checkoutShort": "Выезд",
-    "guest": "Гость"
+    "guest": "Гость",
+    "selectMonth": "Выберите месяц",
+    "downloadPdf": "Скачать PDF",
+    "noMonthsAvailable": "Отчёты появятся после завершения первого полного месяца с момента добавления объекта."
   }
 }
