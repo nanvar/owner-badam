@@ -214,7 +214,7 @@ export function OwnerDashboardView({
           </CardHeader>
           <CardBody className="h-64 sm:h-72">
             {monthly.some((m) => m.revenue > 0) ? (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minHeight={200} minWidth={200}>
                 <AreaChart data={monthly} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
                   <defs>
                     <linearGradient id="revArea" x1="0" y1="0" x2="0" y2="1">
