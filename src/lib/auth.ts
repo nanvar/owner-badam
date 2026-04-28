@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -34,7 +35,9 @@ export async function signSession(payload: SessionPayload) {
     .sign(KEY);
 }
 
-export async function readSession(): Promise<SessionPayload | null> {
+// Memoised per request so the layout's session decode isn't repeated
+// in every nested page/server component.
+export const readSession = cache(async (): Promise<SessionPayload | null> => {
   const store = await cookies();
   const token = store.get(COOKIE_NAME)?.value;
   if (!token) return null;
@@ -44,7 +47,7 @@ export async function readSession(): Promise<SessionPayload | null> {
   } catch {
     return null;
   }
-}
+});
 
 export async function setSessionCookie(token: string) {
   const store = await cookies();

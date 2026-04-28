@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "./prisma";
 import type { AppSettings } from "@/generated/prisma/client";
 
@@ -30,7 +31,9 @@ export const FALLBACK_SETTINGS: Settings = {
   updatedAt: new Date(),
 };
 
-export async function getSettings(): Promise<Settings> {
+// React cache() de-duplicates this call within a single request, so layouts
+// and pages that all need the brand info only hit the DB once per render.
+export const getSettings = cache(async (): Promise<Settings> => {
   try {
     const row = await prisma.appSettings.findUnique({ where: { id: 1 } });
     if (row) return row;
@@ -38,4 +41,4 @@ export async function getSettings(): Promise<Settings> {
     // fall through to fallback
   }
   return FALLBACK_SETTINGS;
-}
+});
