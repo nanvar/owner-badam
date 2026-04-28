@@ -1,30 +1,28 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  Building2,
-  CalendarCheck,
-  MapPin,
-  FileText,
-  Moon,
-  Coins,
-} from "lucide-react";
+import { ArrowLeft, Building2, MapPin, FileText } from "lucide-react";
 import { isLocale, type Locale } from "@/i18n/config";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { formatCurrency } from "@/lib/utils";
+import { computeKpis, periodFromRange } from "@/lib/metrics";
+import { PeriodHero } from "./period-hero";
 import { ReservationsTabs } from "./reservations-tabs";
 
 export default async function ApartmentDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
+  searchParams: Promise<{ range?: string }>;
 }) {
   const { locale, id } = await params;
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
   const session = await requireRole("OWNER");
+  const sp = await searchParams;
+  const range = sp.range ?? "this-month";
+  const period = periodFromRange(range);
 
   const property = await prisma.property.findFirst({
     where: { id, ownerId: session.userId },
@@ -41,10 +39,25 @@ export default async function ApartmentDetailPage({
   const loc = locale as Locale;
   const today = new Date();
 
-  const totalRevenue = property.reservations.reduce((s, r) => s + r.totalPrice, 0);
-  const totalNights = property.reservations.reduce((s, r) => s + r.nights, 0);
-  const totalBookings = property.reservations.length;
-  const adr = totalNights > 0 ? totalRevenue / totalNights : 0;
+  // KPIs scoped to this property + selected period
+  const kpiItems = property.reservations.map((r) => ({
+    id: r.id,
+    propertyId: r.propertyId,
+    propertyName: property.name,
+    propertyColor: property.color,
+    guestName: r.guestName,
+    numGuests: r.numGuests,
+    checkIn: r.checkIn,
+    checkOut: r.checkOut,
+    nights: r.nights,
+    pricePerNight: r.pricePerNight,
+    totalPrice: r.totalPrice,
+    cleaningFee: r.cleaningFee,
+    payout: r.payout,
+    currency: r.currency,
+    detailsFilled: r.detailsFilled,
+  }));
+  const kpis = computeKpis(kpiItems, 1, period);
 
   const upcoming = property.reservations
     .filter((r) => r.checkOut >= today)
@@ -73,8 +86,7 @@ export default async function ApartmentDetailPage({
     }));
 
   return (
-    <div className="space-y-4">
-      {/* Back link */}
+    <div className="space-y-5">
       <Link
         href={`/${locale}/owner/apartments`}
         className="inline-flex items-center gap-1 text-sm text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
@@ -83,7 +95,6 @@ export default async function ApartmentDetailPage({
         {tOwner("myProperties")}
       </Link>
 
-      {/* COMPACT HEADER — name+address inline with icon, Reports button on right */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span
@@ -113,47 +124,33 @@ export default async function ApartmentDetailPage({
         </Link>
       </div>
 
-      {/* HERO STATS — single brand-gradient card */}
-      <div
-        className="relative overflow-hidden rounded-3xl border border-[var(--color-border)] p-5 text-white sm:p-6"
-        style={{
-          background:
-            "linear-gradient(135deg, #4f8a6f 0%, #3d6f57 55%, #2f5a47 100%)",
-          boxShadow:
-            "0 18px 36px -16px rgba(47,90,71,0.45), 0 8px 18px -10px rgba(79,138,111,0.35)",
+      <PeriodHero
+        locale={loc}
+        range={range}
+        kpis={{
+          revenue: kpis.revenue,
+          bookings: kpis.bookings,
+          nights: kpis.nights,
+          availableNights: kpis.availableNights,
+          occupancy: kpis.occupancy,
+          adr: kpis.adr,
+          revpar: kpis.revpar,
         }}
-      >
-        <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
-        <div className="pointer-events-none absolute -bottom-16 -left-10 h-36 w-36 rounded-full bg-emerald-200/20 blur-2xl" />
+        labels={{
+          revenue: tOwner("kpiRevenue"),
+          bookings: tOwner("kpiBookings"),
+          nights: tOwner("kpiNights"),
+          occupancy: tOwner("kpiOccupancy"),
+          adr: tOwner("kpiAdr"),
+          revpar: tOwner("kpiRevpar"),
+          thisMonth: tOwner("thisMonth"),
+          lastMonth: tOwner("lastMonth"),
+          last30: tOwner("last30"),
+          last90: tOwner("last90"),
+          ytd: tOwner("ytd"),
+        }}
+      />
 
-        <div className="relative">
-          <div className="text-xs font-medium uppercase tracking-wider text-white/80">
-            {tOwner("kpiRevenue")}
-          </div>
-          <div className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">
-            {formatCurrency(totalRevenue, "AED", loc)}
-          </div>
-        </div>
-        <div className="relative mt-4 grid grid-cols-3 gap-2">
-          <HeroStat
-            icon={<CalendarCheck className="h-3.5 w-3.5" />}
-            label={tOwner("kpiBookings")}
-            value={totalBookings}
-          />
-          <HeroStat
-            icon={<Moon className="h-3.5 w-3.5" />}
-            label={tOwner("kpiNights")}
-            value={totalNights}
-          />
-          <HeroStat
-            icon={<Coins className="h-3.5 w-3.5" />}
-            label={tOwner("kpiAdr")}
-            value={formatCurrency(adr, "AED", loc)}
-          />
-        </div>
-      </div>
-
-      {/* Reservation tabs (Upcoming | Past) */}
       <ReservationsTabs
         upcoming={upcoming}
         past={past}
@@ -167,26 +164,6 @@ export default async function ApartmentDetailPage({
           total: tCommon("total"),
         }}
       />
-    </div>
-  );
-}
-
-function HeroStat({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl bg-white/15 p-3 backdrop-blur-sm">
-      <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-white/80">
-        {icon}
-        <span className="truncate">{label}</span>
-      </div>
-      <div className="mt-1 text-base font-bold sm:text-lg">{value}</div>
     </div>
   );
 }
