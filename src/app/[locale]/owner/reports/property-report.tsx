@@ -5,13 +5,10 @@ import {
   FileSpreadsheet,
   FileText,
   Loader2,
-  Percent,
-  TrendingUp,
-  ArrowUpRight,
+  Receipt,
+  Wallet,
   CalendarCheck,
-  User,
 } from "lucide-react";
-import { AnimatedNumber } from "@/components/ui/animated-number";
 import { FadeIn } from "@/components/ui/motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
@@ -58,17 +55,6 @@ const RANGE_OPTIONS = [
   "ytd",
 ] as const;
 
-type Kpis = {
-  revenue: number;
-  payout: number;
-  bookings: number;
-  nights: number;
-  availableNights: number;
-  occupancy: number;
-  adr: number;
-  revpar: number;
-  avgStay: number;
-};
 type Reservation = {
   id: string;
   propertyName: string;
@@ -79,25 +65,79 @@ type Reservation = {
   nights: number;
   pricePerNight: number;
   totalPrice: number;
-  cleaningFee: number;
-  serviceFee: number;
-  taxes: number;
+  agencyCommission: number;
+  portalCommission: number;
   payout: number;
   currency: string;
 };
+
+type ExpenseRow = {
+  id: string;
+  propertyName: string;
+  date: string;
+  type: string;
+  description: string;
+  amount: number;
+};
+
+type AdvanceRow = {
+  id: string;
+  propertyName: string;
+  date: string;
+  concept: string;
+  amount: number;
+};
+
+type Settlement = {
+  totalAmount: number;
+  totalAgency: number;
+  totalPortal: number;
+  totalOwnerPayout: number;
+  totalExpenses: number;
+  totalAdvances: number;
+  totalDeductions: number;
+  settlementTotal: number;
+};
+
+type IssuingCompany = {
+  brandName: string;
+  legalName: string;
+  address: string;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+};
+
+type Recipient = {
+  name: string;
+  email: string;
+  phone: string | null;
+  taxId: string | null;
+  address: string | null;
+};
+
 type ReportData = {
   period: { from: string; to: string };
-  kpis: Kpis;
-  byProperty: {
-    propertyId: string;
-    propertyName: string;
-    propertyColor: string;
-    revenue: number;
-    nights: number;
-    bookings: number;
-  }[];
+  settlementNo: number;
+  settlementDate: string;
+  issuingCompany: IssuingCompany;
+  recipient: Recipient | null;
   reservations: Reservation[];
-  propertyCount: number;
+  expenses: ExpenseRow[];
+  advances: AdvanceRow[];
+  settlement: Settlement;
+  currency: string;
+};
+
+const EXPENSE_TYPE_LABELS: Record<string, string> = {
+  DEWA: "DEWA",
+  CHILLER: "Chiller",
+  DU: "Du",
+  GAS: "Gas",
+  CLEANING: "Cleaning",
+  DTCM: "DTCM Registration",
+  SERVICE_CHARGE: "Service Charge",
+  OTHERS: "Others",
 };
 
 export function PropertyReport({
@@ -108,7 +148,7 @@ export function PropertyReport({
   brand,
   labels,
 }: {
-  propertyId: string; // empty string = all properties
+  propertyId: string;
   scopeName: string;
   ownerName: string;
   locale: Locale;
@@ -145,6 +185,8 @@ export function PropertyReport({
     ytd: labels.ytd,
   };
 
+  const fmt = (n: number) => formatCurrency(n, data?.currency || "AED", locale);
+
   const exportExcel = async () => {
     if (!data) return;
     setBusy("excel");
@@ -152,26 +194,30 @@ export function PropertyReport({
       const xlsx = await import("xlsx");
       const wb = xlsx.utils.book_new();
 
-      const summary = [
-        [brand.name, brand.legalName],
-        ["Report", `${ownerName} — ${scopeName}`],
+      const summary: (string | number)[][] = [
+        ["Issuing company"],
+        [data.issuingCompany.brandName, data.issuingCompany.legalName],
+        [data.issuingCompany.address],
+        [data.issuingCompany.email ?? "", data.issuingCompany.phone ?? ""],
+        [],
+        ["Recipient"],
+        [data.recipient?.name ?? ownerName],
+        [data.recipient?.taxId ?? ""],
+        [data.recipient?.email ?? ""],
+        [data.recipient?.address ?? ""],
+        [],
+        ["Settlement N°", data.settlementNo],
+        ["Date", data.settlementDate.slice(0, 10)],
         [
           "Period",
           `${formatDate(data.period.from, locale)} → ${formatDate(data.period.to, locale)}`,
         ],
-        ["Generated", new Date().toISOString().slice(0, 10)],
+        ["Currency", data.currency],
+        ["Scope", scopeName],
         [],
-        [labels.kpiRevenue, data.kpis.revenue],
-        [labels.kpiNights, data.kpis.nights],
-        [labels.kpiOccupancy, `${(data.kpis.occupancy * 100).toFixed(1)}%`],
-        [labels.kpiAdr, data.kpis.adr],
-        [labels.kpiRevpar, data.kpis.revpar],
-        [labels.kpiBookings, data.kpis.bookings],
-        [labels.kpiAvgStay, data.kpis.avgStay.toFixed(2)],
-        [],
-        ["Contact", brand.email ?? ""],
-        ["Phone", brand.phone ?? ""],
-        ["Website", brand.website ?? ""],
+        ["Total income", data.settlement.totalOwnerPayout],
+        ["Total deductions", -data.settlement.totalDeductions],
+        ["SETTLEMENT TOTAL", data.settlement.settlementTotal],
       ];
       xlsx.utils.book_append_sheet(
         wb,
@@ -183,27 +229,51 @@ export function PropertyReport({
         wb,
         xlsx.utils.json_to_sheet(
           data.reservations.map((r) => ({
+            "Booking ID": r.id,
             Property: r.propertyName,
             Guest: r.guestName ?? "",
-            "Check-in": r.checkIn.slice(0, 10),
-            "Check-out": r.checkOut.slice(0, 10),
+            "Stay period": `${r.checkIn.slice(0, 10)} - ${r.checkOut.slice(0, 10)}`,
             Nights: r.nights,
-            "Price/night": r.pricePerNight,
-            Cleaning: r.cleaningFee,
-            Service: r.serviceFee,
-            Taxes: r.taxes,
-            Total: r.totalPrice,
-            Payout: r.payout,
-            Currency: r.currency,
+            Amount: r.totalPrice,
+            "Agency commission": r.agencyCommission,
+            "Portal commission": r.portalCommission,
+            "Amount paid to owner": r.payout,
           })),
         ),
-        "Reservations",
+        "Bookings",
+      );
+
+      xlsx.utils.book_append_sheet(
+        wb,
+        xlsx.utils.json_to_sheet(
+          data.expenses.map((e) => ({
+            Date: e.date.slice(0, 10),
+            Property: e.propertyName,
+            Type: EXPENSE_TYPE_LABELS[e.type] ?? e.type,
+            Description: e.description,
+            Amount: -e.amount,
+          })),
+        ),
+        "Expenses",
+      );
+
+      xlsx.utils.book_append_sheet(
+        wb,
+        xlsx.utils.json_to_sheet(
+          data.advances.map((a) => ({
+            Date: a.date.slice(0, 10),
+            Property: a.propertyName,
+            Concept: a.concept,
+            Amount: -a.amount,
+          })),
+        ),
+        "Payments on account",
       );
 
       const slug = scopeName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
       xlsx.writeFile(
         wb,
-        `${slug}-${data.period.from.slice(0, 10)}_to_${data.period.to.slice(0, 10)}.xlsx`,
+        `${slug}-settlement-${data.settlementNo}.xlsx`,
       );
     } finally {
       setBusy(null);
@@ -220,91 +290,229 @@ export function PropertyReport({
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
 
-      doc.setFillColor(79, 138, 111);
-      doc.rect(0, 0, pageWidth, 80, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "bold");
-      doc.text(brand.name.toUpperCase(), 32, 28);
-      doc.setFontSize(20);
-      doc.text("Performance report", 32, 50);
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      doc.text(`${ownerName}  ·  ${scopeName}`, 32, 66);
+      // === Header bands: Issuing company (left) + Recipient (right) ===
+      const colW = (pageWidth - 64 - 16) / 2;
+      const headerY = 50;
 
+      // Left: Issuing company
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
       doc.setTextColor(20, 20, 28);
+      doc.text("Issuing company", 32, headerY);
+      doc.setFontSize(10);
+      doc.text(data.issuingCompany.legalName, 32, headerY + 18);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(80, 80, 90);
+      doc.setFontSize(9);
+      const issAddrLines = doc.splitTextToSize(
+        data.issuingCompany.address || "",
+        colW,
+      );
+      doc.text(issAddrLines, 32, headerY + 32);
+      const contactBits = [data.issuingCompany.email, data.issuingCompany.phone]
+        .filter(Boolean)
+        .join("  ·  ");
+      if (contactBits) {
+        doc.text(contactBits, 32, headerY + 32 + issAddrLines.length * 11);
+      }
+
+      // Right: Recipient
+      const rightX = 32 + colW + 16;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(20, 20, 28);
+      doc.text("Recipient", rightX, headerY);
       doc.setFontSize(10);
       doc.text(
-        `${formatDate(data.period.from, locale)} → ${formatDate(data.period.to, locale)}`,
-        32,
-        108,
+        data.recipient?.name ?? ownerName,
+        rightX,
+        headerY + 18,
       );
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(80, 80, 90);
+      doc.setFontSize(9);
+      let rY = headerY + 32;
+      if (data.recipient?.taxId) {
+        doc.text(data.recipient.taxId, rightX, rY);
+        rY += 11;
+      }
+      if (data.recipient?.email) {
+        doc.text(data.recipient.email, rightX, rY);
+        rY += 11;
+      }
+      if (data.recipient?.address) {
+        const addrLines = doc.splitTextToSize(data.recipient.address, colW);
+        doc.text(addrLines, rightX, rY);
+        rY += addrLines.length * 11;
+      }
 
+      // === Title bar ===
+      const titleY = Math.max(headerY + 90, rY + 20);
+      doc.setFillColor(243, 247, 244);
+      doc.rect(32, titleY, pageWidth - 64, 30, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(47, 90, 71);
+      doc.text(`Seasonal settlement | ${scopeName}`, 44, titleY + 20);
+
+      // === Settlement meta table ===
       autoTable(doc, {
-        startY: 122,
-        head: [["Metric", "Value"]],
+        startY: titleY + 44,
+        head: [["Settlement Nº", "Date", "Period", "Currency"]],
         theme: "striped",
         headStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28] },
+        styles: { fontSize: 9 },
         body: [
-          [labels.kpiRevenue, formatCurrency(data.kpis.revenue, "AED", locale)],
-          [labels.kpiNights, `${data.kpis.nights} / ${data.kpis.availableNights}`],
-          [labels.kpiOccupancy, `${(data.kpis.occupancy * 100).toFixed(1)}%`],
-          [labels.kpiAdr, formatCurrency(data.kpis.adr, "AED", locale)],
-          [labels.kpiRevpar, formatCurrency(data.kpis.revpar, "AED", locale)],
-          [labels.kpiBookings, String(data.kpis.bookings)],
-          [labels.kpiAvgStay, data.kpis.avgStay.toFixed(2)],
+          [
+            String(data.settlementNo),
+            data.settlementDate.slice(0, 10),
+            `${formatDate(data.period.from, locale)} → ${formatDate(data.period.to, locale)}`,
+            data.currency,
+          ],
         ],
       });
 
-      if (data.reservations.length > 0) {
+      let lastY = (doc as unknown as { lastAutoTable: { finalY: number } })
+        .lastAutoTable.finalY;
+
+      // === Payments by booking ===
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(20, 20, 28);
+      doc.text("Payments by booking", 32, lastY + 22);
+
+      autoTable(doc, {
+        startY: lastY + 30,
+        head: [
+          [
+            "Booking",
+            "Stay period",
+            "Amount",
+            "Agency",
+            "Portal",
+            "To owner",
+          ],
+        ],
+        theme: "striped",
+        headStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28] },
+        styles: { fontSize: 8 },
+        body: data.reservations.map((r) => [
+          r.id.slice(0, 8),
+          `${formatDate(r.checkIn, locale)} - ${formatDate(r.checkOut, locale)}`,
+          fmt(r.totalPrice),
+          fmt(r.agencyCommission),
+          fmt(r.portalCommission),
+          fmt(r.payout),
+        ]),
+        foot: [
+          [
+            "Subtotal:",
+            "",
+            fmt(data.settlement.totalAmount),
+            fmt(data.settlement.totalAgency),
+            fmt(data.settlement.totalPortal),
+            fmt(data.settlement.totalOwnerPayout),
+          ],
+        ],
+        footStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28], fontStyle: "bold" },
+      });
+
+      lastY = (doc as unknown as { lastAutoTable: { finalY: number } })
+        .lastAutoTable.finalY;
+
+      // === Expenses ===
+      if (data.expenses.length > 0) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.text("Expense", 32, lastY + 22);
         autoTable(doc, {
-          startY:
-            (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 16,
-          head: [["Property", labels.guest, "In", "Out", "Nights", "Total"]],
-          theme: "grid",
+          startY: lastY + 30,
+          head: [["Date", "Type / Description", "Amount"]],
+          theme: "striped",
           headStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28] },
-          styles: { fontSize: 9 },
-          body: data.reservations.map((r) => [
-            r.propertyName,
-            r.guestName ?? "—",
-            r.checkIn.slice(0, 10),
-            r.checkOut.slice(0, 10),
-            String(r.nights),
-            formatCurrency(r.totalPrice, r.currency || "AED", locale),
+          styles: { fontSize: 8 },
+          body: data.expenses.map((e) => [
+            formatDate(e.date, locale),
+            `${EXPENSE_TYPE_LABELS[e.type] ?? e.type} / ${e.description}`,
+            `- ${fmt(e.amount)}`,
           ]),
+          foot: [["Subtotal:", "", `- ${fmt(data.settlement.totalExpenses)}`]],
+          footStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28], fontStyle: "bold" },
         });
+        lastY = (doc as unknown as { lastAutoTable: { finalY: number } })
+          .lastAutoTable.finalY;
       }
 
-      const totalPages = (
-        doc as unknown as { getNumberOfPages: () => number }
-      ).getNumberOfPages();
-      const contactBits = [
-        brand.email,
-        brand.phone,
-        brand.website?.replace(/^https?:\/\//, ""),
-      ]
-        .filter(Boolean)
-        .join("  ·  ");
+      // === Payments on account ===
+      if (data.advances.length > 0) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.text("Payments on account", 32, lastY + 22);
+        autoTable(doc, {
+          startY: lastY + 30,
+          head: [["Date", "Concept", "Amount"]],
+          theme: "striped",
+          headStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28] },
+          styles: { fontSize: 8 },
+          body: data.advances.map((a) => [
+            formatDate(a.date, locale),
+            a.concept,
+            `- ${fmt(a.amount)}`,
+          ]),
+          foot: [["Subtotal:", "", `- ${fmt(data.settlement.totalAdvances)}`]],
+          footStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28], fontStyle: "bold" },
+        });
+        lastY = (doc as unknown as { lastAutoTable: { finalY: number } })
+          .lastAutoTable.finalY;
+      }
+
+      // === Summary ===
+      autoTable(doc, {
+        startY: lastY + 24,
+        theme: "grid",
+        styles: { fontSize: 9, fontStyle: "bold" },
+        body: [
+          [
+            `Total income: ${fmt(data.settlement.totalOwnerPayout)}`,
+            `Total deductions: ${fmt(-data.settlement.totalDeductions)}`,
+            `SETTLEMENT TOTAL: ${fmt(data.settlement.settlementTotal)}`,
+          ],
+        ],
+        bodyStyles: { fillColor: [243, 247, 244], textColor: [47, 90, 71] },
+      });
+
+      // Footer
+      const totalPages = (doc as unknown as {
+        getNumberOfPages: () => number;
+      }).getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
         doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
         doc.setTextColor(120, 120, 130);
-        doc.text(contactBits, 32, pageHeight - 18);
+        const footerBits = [
+          data.issuingCompany.email,
+          data.issuingCompany.phone,
+          data.issuingCompany.website?.replace(/^https?:\/\//, ""),
+        ]
+          .filter(Boolean)
+          .join("  ·  ");
+        doc.text(footerBits, 32, pageHeight - 18);
         doc.text(`${i} / ${totalPages}`, pageWidth - 50, pageHeight - 18);
       }
 
       const slug = scopeName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      doc.save(
-        `${slug}-${data.period.from.slice(0, 10)}_to_${data.period.to.slice(0, 10)}.pdf`,
-      );
+      doc.save(`${slug}-settlement-${data.settlementNo}.pdf`);
     } finally {
       setBusy(null);
     }
   };
 
+  // Also keep brand variable referenced (typescript noUnusedParameters could complain)
+  void brand;
+
   return (
     <div className="space-y-4">
-      {/* PERIOD CHIPS */}
       <div className="-mx-4 overflow-x-auto px-4 no-scrollbar">
         <div className="flex gap-2 pb-1">
           {RANGE_OPTIONS.map((r) => (
@@ -328,115 +536,220 @@ export function PropertyReport({
         <ReportSkeleton />
       ) : data ? (
         <FadeIn delay={0.05}>
-          {/* HERO */}
+          {/* Settlement header */}
+          <div className="rounded-2xl border border-[var(--color-border)] bg-white p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+                Settlement N° {data.settlementNo}
+              </div>
+              <div className="text-[10px] text-[var(--color-muted)]">
+                {data.settlementDate.slice(0, 10)}
+              </div>
+            </div>
+            <div className="mt-1 text-sm font-bold">
+              {formatDate(data.period.from, locale)} →{" "}
+              {formatDate(data.period.to, locale)}
+            </div>
+            <div className="text-[11px] text-[var(--color-muted)]">
+              {data.issuingCompany.legalName} → {data.recipient?.name ?? ownerName}
+              {data.recipient?.taxId && ` (${data.recipient.taxId})`}
+            </div>
+          </div>
+
+          {/* Section: Bookings */}
+          <Section
+            title="Payments by booking"
+            icon={<CalendarCheck className="h-4 w-4 text-[var(--color-brand)]" />}
+            count={data.reservations.length}
+          >
+            {data.reservations.length === 0 ? (
+              <Empty text={labels.noData} />
+            ) : (
+              <div className="overflow-hidden rounded-2xl border border-[var(--color-border)]">
+                <table className="w-full text-xs">
+                  <thead className="bg-[var(--color-surface-2)] text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold">Stay</th>
+                      <th className="px-3 py-2 text-right font-semibold">Amount</th>
+                      <th className="px-3 py-2 text-right font-semibold">Agency</th>
+                      <th className="px-3 py-2 text-right font-semibold">Portal</th>
+                      <th className="px-3 py-2 text-right font-semibold">To owner</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.reservations.map((r) => (
+                      <tr
+                        key={r.id}
+                        className="border-t border-[var(--color-border)]"
+                      >
+                        <td className="px-3 py-2">
+                          <div className="font-semibold">
+                            {r.guestName ?? labels.guest}
+                          </div>
+                          <div className="text-[10px] text-[var(--color-muted)]">
+                            {formatDate(r.checkIn, locale)} →{" "}
+                            {formatDate(r.checkOut, locale)} · {r.nights}n
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {fmt(r.totalPrice)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-[var(--color-muted)]">
+                          {fmt(r.agencyCommission)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-[var(--color-muted)]">
+                          {fmt(r.portalCommission)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums font-bold">
+                          {fmt(r.payout)}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/60">
+                      <td className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider">
+                        Subtotal
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs font-bold tabular-nums">
+                        {fmt(data.settlement.totalAmount)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs font-bold tabular-nums text-[var(--color-muted)]">
+                        {fmt(data.settlement.totalAgency)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs font-bold tabular-nums text-[var(--color-muted)]">
+                        {fmt(data.settlement.totalPortal)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs font-bold tabular-nums">
+                        {fmt(data.settlement.totalOwnerPayout)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Section>
+
+          {/* Section: Expenses */}
+          {data.expenses.length > 0 && (
+            <Section
+              title="Expenses"
+              icon={<Receipt className="h-4 w-4 text-rose-500" />}
+              count={data.expenses.length}
+            >
+              <div className="overflow-hidden rounded-2xl border border-[var(--color-border)]">
+                <table className="w-full text-xs">
+                  <tbody>
+                    {data.expenses.map((e) => (
+                      <tr
+                        key={e.id}
+                        className="border-t border-[var(--color-border)] first:border-t-0"
+                      >
+                        <td className="w-20 whitespace-nowrap px-3 py-2 text-[10px] text-[var(--color-muted)]">
+                          {formatDate(e.date, locale)}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="font-semibold">
+                            {EXPENSE_TYPE_LABELS[e.type] ?? e.type}
+                          </div>
+                          <div className="text-[10px] text-[var(--color-muted)]">
+                            {e.description}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-rose-600">
+                          − {fmt(e.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/60">
+                      <td colSpan={2} className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider">
+                        Subtotal
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs font-bold tabular-nums text-rose-600">
+                        − {fmt(data.settlement.totalExpenses)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </Section>
+          )}
+
+          {/* Section: Advances */}
+          {data.advances.length > 0 && (
+            <Section
+              title="Payments on account"
+              icon={<Wallet className="h-4 w-4 text-amber-500" />}
+              count={data.advances.length}
+            >
+              <div className="overflow-hidden rounded-2xl border border-[var(--color-border)]">
+                <table className="w-full text-xs">
+                  <tbody>
+                    {data.advances.map((a) => (
+                      <tr
+                        key={a.id}
+                        className="border-t border-[var(--color-border)] first:border-t-0"
+                      >
+                        <td className="w-20 whitespace-nowrap px-3 py-2 text-[10px] text-[var(--color-muted)]">
+                          {formatDate(a.date, locale)}
+                        </td>
+                        <td className="px-3 py-2 font-semibold">{a.concept}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-rose-600">
+                          − {fmt(a.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/60">
+                      <td colSpan={2} className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider">
+                        Subtotal
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs font-bold tabular-nums text-rose-600">
+                        − {fmt(data.settlement.totalAdvances)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </Section>
+          )}
+
+          {/* Summary */}
           <div
-            className="relative overflow-hidden rounded-3xl border border-[var(--color-border)] p-4 text-white sm:p-5"
+            className="rounded-3xl border border-[var(--color-border)] p-4 text-white sm:p-5"
             style={{
               background:
                 "linear-gradient(135deg, #4f8a6f 0%, #3d6f57 55%, #2f5a47 100%)",
               boxShadow:
-                "0 16px 32px -14px rgba(47,90,71,0.4), 0 6px 16px -10px rgba(79,138,111,0.35)",
+                "0 14px 28px -14px rgba(47,90,71,0.4), 0 4px 12px -6px rgba(79,138,111,0.35)",
             }}
           >
-            <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
-            <div className="pointer-events-none absolute -bottom-14 -left-10 h-32 w-32 rounded-full bg-emerald-200/20 blur-2xl" />
-            <div className="relative">
-              <div className="text-[10px] font-medium uppercase tracking-wider text-white/80">
-                {labels.kpiRevenue} · {rangeLabels[range] ?? range}
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="rounded-xl bg-white/15 p-3 backdrop-blur-sm">
+                <div className="text-[9px] uppercase tracking-wider text-white/80">
+                  Total income
+                </div>
+                <div className="mt-0.5 text-sm font-bold">
+                  {fmt(data.settlement.totalOwnerPayout)}
+                </div>
               </div>
-              <div className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
-                <AnimatedNumber
-                  value={data.kpis.revenue}
-                  format={(v) => formatCurrency(v, "AED", locale)}
-                />
-              </div>
-              <div className="mt-0.5 text-xs text-white/80">
-                <AnimatedNumber value={data.kpis.bookings} />{" "}
-                {labels.kpiBookings.toLowerCase()} ·{" "}
-                <AnimatedNumber value={data.kpis.nights} />{" "}
-                {labels.kpiNights.toLowerCase()}
+              <div className="rounded-xl bg-white/15 p-3 backdrop-blur-sm">
+                <div className="text-[9px] uppercase tracking-wider text-white/80">
+                  Total deductions
+                </div>
+                <div className="mt-0.5 text-sm font-bold">
+                  − {fmt(data.settlement.totalDeductions)}
+                </div>
               </div>
             </div>
-            <div className="relative mt-3 grid grid-cols-3 gap-2">
-              <Mini
-                label={labels.kpiOccupancy}
-                value={`${(data.kpis.occupancy * 100).toFixed(0)}%`}
-                icon={<Percent className="h-3 w-3" />}
-              />
-              <Mini
-                label={labels.kpiAdr}
-                value={formatCurrency(data.kpis.adr, "AED", locale)}
-                icon={<TrendingUp className="h-3 w-3" />}
-              />
-              <Mini
-                label={labels.kpiRevpar}
-                value={formatCurrency(data.kpis.revpar, "AED", locale)}
-                icon={<ArrowUpRight className="h-3 w-3" />}
-              />
-            </div>
-          </div>
-
-          {/* SECONDARY KPIs */}
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <SmallKpi
-              label={labels.kpiNights}
-              value={`${data.kpis.nights} / ${data.kpis.availableNights}`}
-            />
-            <SmallKpi label={labels.kpiAvgStay} value={data.kpis.avgStay.toFixed(1)} />
-            <SmallKpi
-              label={labels.payout}
-              value={formatCurrency(data.kpis.payout, "AED", locale)}
-            />
-          </div>
-
-          {/* RESERVATIONS */}
-          <div className="mt-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold tracking-tight">
-                <CalendarCheck className="-mt-0.5 mr-1 inline h-4 w-4 text-[var(--color-brand)]" />
-                {labels.reservations}
-              </h3>
-              <span className="text-xs text-[var(--color-muted)]">
-                {data.reservations.length}
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-white/20 px-4 py-3 backdrop-blur-sm">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-white">
+                Settlement total
+              </span>
+              <span className="text-2xl font-bold">
+                {fmt(data.settlement.settlementTotal)}
               </span>
             </div>
-            {data.reservations.length === 0 ? (
-              <div className="grid place-items-center rounded-2xl border border-dashed border-[var(--color-border)] bg-white px-6 py-8 text-sm text-[var(--color-muted)]">
-                {labels.noData}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {data.reservations.map((r) => (
-                  <div
-                    key={r.id}
-                    className="flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-white p-3"
-                  >
-                    <span
-                      className="mt-1 h-7 w-1 shrink-0 rounded-full"
-                      style={{ background: r.propertyColor }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 text-sm font-semibold">
-                        <User className="h-3.5 w-3.5 shrink-0 text-[var(--color-muted)]" />
-                        <span className="truncate">
-                          {r.guestName ?? labels.guest}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 truncate text-[11px] text-[var(--color-muted)]">
-                        {r.propertyName} · {formatDate(r.checkIn, locale)} →{" "}
-                        {formatDate(r.checkOut, locale)} · {r.nights}n
-                      </div>
-                    </div>
-                    <div className="text-right text-sm font-bold whitespace-nowrap">
-                      {formatCurrency(r.totalPrice, r.currency || "AED", locale)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
-          {/* DOWNLOAD */}
+          {/* Download */}
           <div className="sticky bottom-0 -mx-5 -mb-5 mt-5 grid grid-cols-2 gap-2 border-t border-[var(--color-border)] bg-white/95 p-4 backdrop-blur-md">
             <button
               onClick={exportExcel}
@@ -469,39 +782,35 @@ export function PropertyReport({
   );
 }
 
-function Mini({
-  label,
-  value,
+function Section({
+  title,
   icon,
+  count,
+  children,
 }: {
-  label: string;
-  value: React.ReactNode;
+  title: string;
   icon: React.ReactNode;
+  count: number;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl bg-white/15 p-2.5 backdrop-blur-sm">
-      <div className="flex items-center gap-1 text-[9px] font-medium uppercase tracking-wider text-white/80">
+    <section className="mt-3 space-y-2">
+      <div className="flex items-center gap-2">
         {icon}
-        <span className="truncate">{label}</span>
+        <h3 className="text-sm font-bold tracking-tight">{title}</h3>
+        <span className="ml-auto text-[10px] text-[var(--color-muted)]">
+          {count}
+        </span>
       </div>
-      <div className="mt-0.5 text-sm font-bold sm:text-base">{value}</div>
-    </div>
+      {children}
+    </section>
   );
 }
 
-function SmallKpi({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
+function Empty({ text }: { text: string }) {
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-white p-3">
-      <div className="text-[9px] font-medium uppercase tracking-wider text-[var(--color-muted)]">
-        {label}
-      </div>
-      <div className="mt-1 text-sm font-bold">{value}</div>
+    <div className="grid place-items-center rounded-2xl border border-dashed border-[var(--color-border)] bg-white px-6 py-8 text-sm text-[var(--color-muted)]">
+      {text}
     </div>
   );
 }
@@ -509,18 +818,12 @@ function SmallKpi({
 function ReportSkeleton() {
   return (
     <div className="space-y-3">
-      <Skeleton className="h-44 w-full" rounded="rounded-3xl" />
-      <div className="grid grid-cols-3 gap-2">
-        <Skeleton className="h-16 w-full" rounded="rounded-xl" />
-        <Skeleton className="h-16 w-full" rounded="rounded-xl" />
-        <Skeleton className="h-16 w-full" rounded="rounded-xl" />
-      </div>
+      <Skeleton className="h-20 w-full" rounded="rounded-2xl" />
+      <Skeleton className="h-5 w-40" rounded="rounded-md" />
+      <Skeleton className="h-48 w-full" rounded="rounded-2xl" />
       <Skeleton className="h-5 w-32" rounded="rounded-md" />
-      <div className="space-y-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-16 w-full" rounded="rounded-xl" />
-        ))}
-      </div>
+      <Skeleton className="h-32 w-full" rounded="rounded-2xl" />
+      <Skeleton className="h-32 w-full" rounded="rounded-3xl" />
     </div>
   );
 }

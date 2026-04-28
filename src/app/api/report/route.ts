@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { readSession } from "@/lib/auth";
+import { getSettings } from "@/lib/settings";
 import {
   buildPropertySeries,
   computeKpis,
@@ -34,21 +35,52 @@ export async function GET(req: Request) {
     ? { ...propertyWhere, id: propertyId }
     : propertyWhere;
 
-  const [properties, reservations] = await Promise.all([
-    prisma.property.findMany({ where: propertyFilter, select: { id: true, name: true, color: true } }),
-    prisma.reservation.findMany({
-      where: {
-        property: propertyFilter,
-        OR: [
-          { checkIn: { gte: period.from, lt: period.to } },
-          { checkOut: { gt: period.from, lte: period.to } },
-          { AND: [{ checkIn: { lt: period.from } }, { checkOut: { gt: period.to } }] },
-        ],
-      },
-      include: { property: { select: { name: true, color: true } } },
-      orderBy: { checkIn: "asc" },
-    }),
-  ]);
+  const [owner, settings, properties, reservations, expenses, advances] =
+    await Promise.all([
+      prisma.user.findUnique({
+        where: { id: session.userId },
+        select: {
+          name: true,
+          email: true,
+          phone: true,
+          taxId: true,
+          address: true,
+        },
+      }),
+      getSettings(),
+      prisma.property.findMany({
+        where: propertyFilter,
+        select: { id: true, name: true, color: true },
+      }),
+      prisma.reservation.findMany({
+        where: {
+          property: propertyFilter,
+          OR: [
+            { checkIn: { gte: period.from, lt: period.to } },
+            { checkOut: { gt: period.from, lte: period.to } },
+            { AND: [{ checkIn: { lt: period.from } }, { checkOut: { gt: period.to } }] },
+          ],
+        },
+        include: { property: { select: { name: true, color: true } } },
+        orderBy: { checkIn: "asc" },
+      }),
+      prisma.expense.findMany({
+        where: {
+          property: propertyFilter,
+          date: { gte: period.from, lt: period.to },
+        },
+        include: { property: { select: { name: true, color: true } } },
+        orderBy: { date: "asc" },
+      }),
+      prisma.advance.findMany({
+        where: {
+          property: propertyFilter,
+          date: { gte: period.from, lt: period.to },
+        },
+        include: { property: { select: { name: true, color: true } } },
+        orderBy: { date: "asc" },
+      }),
+    ]);
 
   const items = reservations.map((r) => ({
     id: r.id,
@@ -62,6 +94,8 @@ export async function GET(req: Request) {
     nights: r.nights,
     pricePerNight: r.pricePerNight,
     totalPrice: r.totalPrice,
+    agencyCommission: r.agencyCommission,
+    portalCommission: r.portalCommission,
     cleaningFee: r.cleaningFee,
     serviceFee: r.serviceFee,
     taxes: r.taxes,
@@ -73,8 +107,46 @@ export async function GET(req: Request) {
   const kpis = computeKpis(items, properties.length, period);
   const byProperty = buildPropertySeries(items, period);
 
+  // Settlement totals (Vayk-style)
+  const totalAmount = items.reduce((s, r) => s + r.totalPrice, 0);
+  const totalAgency = items.reduce((s, r) => s + r.agencyCommission, 0);
+  const totalPortal = items.reduce((s, r) => s + r.portalCommission, 0);
+  const totalOwnerPayout = items.reduce((s, r) => s + r.payout, 0);
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  const totalAdvances = advances.reduce((s, a) => s + a.amount, 0);
+  const totalDeductions = totalExpenses + totalAdvances;
+  const settlementTotal = totalOwnerPayout - totalDeductions;
+
+  // Settlement number derived from period end (year * 1000 + day-of-year-ish)
+  const periodEnd = new Date(period.to);
+  const settlementNo =
+    periodEnd.getFullYear() * 10000 +
+    (periodEnd.getMonth() + 1) * 100 +
+    periodEnd.getDate();
+
   return NextResponse.json({
     period: { from: period.from.toISOString(), to: period.to.toISOString() },
+    settlementNo,
+    settlementDate: new Date().toISOString(),
+    issuingCompany: {
+      brandName: settings.brandName,
+      legalName: settings.legalName,
+      address: [settings.address, settings.city, settings.country]
+        .filter(Boolean)
+        .join(", "),
+      email: settings.email,
+      phone: settings.phone,
+      website: settings.website,
+    },
+    recipient: owner
+      ? {
+          name: owner.name ?? owner.email,
+          email: owner.email,
+          phone: owner.phone,
+          taxId: owner.taxId,
+          address: owner.address,
+        }
+      : null,
     kpis,
     byProperty,
     reservations: items.map((r) => ({
@@ -82,6 +154,34 @@ export async function GET(req: Request) {
       checkIn: r.checkIn.toISOString(),
       checkOut: r.checkOut.toISOString(),
     })),
+    expenses: expenses.map((e) => ({
+      id: e.id,
+      propertyId: e.propertyId,
+      propertyName: e.property.name,
+      date: e.date.toISOString(),
+      type: e.type,
+      description: e.description,
+      amount: e.amount,
+    })),
+    advances: advances.map((a) => ({
+      id: a.id,
+      propertyId: a.propertyId,
+      propertyName: a.property.name,
+      date: a.date.toISOString(),
+      concept: a.concept,
+      amount: a.amount,
+    })),
+    settlement: {
+      totalAmount,
+      totalAgency,
+      totalPortal,
+      totalOwnerPayout,
+      totalExpenses,
+      totalAdvances,
+      totalDeductions,
+      settlementTotal,
+    },
     propertyCount: properties.length,
+    currency: settings.currency,
   });
 }
