@@ -45,7 +45,13 @@ export function AppShell({
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[var(--color-surface)]/85 backdrop-blur-md">
+      <header
+        className="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[var(--color-surface)]/90 backdrop-blur-md"
+        style={{
+          boxShadow:
+            "0 8px 24px -16px rgba(15,23,42,0.18), 0 4px 12px -8px rgba(15,23,42,0.08)",
+        }}
+      >
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
           <Link
             href={`/${locale}/${variant}`}
@@ -144,7 +150,8 @@ export function AppShell({
         className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-border)] bg-white md:hidden"
         style={{
           paddingBottom: "max(env(safe-area-inset-bottom), 0.5rem)",
-          boxShadow: "0 -8px 24px -12px rgba(15,23,42,0.12)",
+          boxShadow:
+            "0 -16px 40px -12px rgba(15,23,42,0.22), 0 -6px 16px -8px rgba(15,23,42,0.12), 0 -1px 0 rgba(15,23,42,0.04)",
         }}
       >
         <div className="mx-auto flex max-w-md items-stretch">
