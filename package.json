@@ -22,6 +22,7 @@
     "@fullcalendar/list": "^6.1.20",
     "@fullcalendar/react": "^6.1.20",
     "@hookform/resolvers": "^5.2.2",
+    "@prisma/adapter-mariadb": "^7.8.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "bcryptjs": "^3.0.3",
@@ -32,6 +33,7 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^1.11.0",
+    "mariadb": "^3.5.2",
     "motion": "^12.38.0",
     "next": "16.2.4",
     "next-intl": "^4.9.1",
@@ -58,5 +60,11 @@
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5"
+  },
+  "overrides": {
+    "zeptomatch": "1.x",
+    "@prisma/dev": {
+      "zeptomatch": "1.x"
+    }
   }
 }

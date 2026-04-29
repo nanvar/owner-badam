@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
 }
 
 enum Role {
@@ -38,12 +38,12 @@ model User {
 model Property {
   id            String    @id @default(cuid())
   name          String
-  address       String?
-  airbnbIcalUrl String?
+  address       String?   @db.Text
+  airbnbIcalUrl String?   @db.Text
   basePrice     Float     @default(0)
   cleaningFee   Float     @default(0)
   color         String    @default("#3b82f6")
-  notes         String?
+  notes         String?   @db.Text
   ownerId       String
   owner         User      @relation("OwnerProperties", fields: [ownerId], references: [id], onDelete: Cascade)
   createdAt     DateTime  @default(now())
@@ -80,9 +80,9 @@ model Reservation {
   taxes             Float             @default(0)
   payout            Float             @default(0) // amount paid to owner
   currency          String            @default("AED")
-  notes             String?
-  rawSummary        String?
-  rawDescription    String?
+  notes             String?           @db.Text
+  rawSummary        String?           @db.Text
+  rawDescription    String?           @db.Text
   detailsFilled     Boolean           @default(false)
   syncedAt          DateTime          @default(now())
   createdAt         DateTime          @default(now())
@@ -111,7 +111,7 @@ model Expense {
   property    Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   date        DateTime
   type        ExpenseType
-  description String
+  description String      @db.Text
   amount      Float       // positive — represented as a deduction in reports
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -139,23 +139,23 @@ model AppSettings {
   brandName   String   @default("Badam Owners")
   legalName   String   @default("Badam Holiday Homes")
   tagline     String   @default("Curated short-term rentals across Dubai.")
-  logoUrl     String?
-  faviconUrl  String?
+  logoUrl     String?  @db.Text
+  faviconUrl  String?  @db.Text
   email       String?
   phone       String?
   whatsapp    String?
-  website     String?
-  address     String?
+  website     String?  @db.Text
+  address     String?  @db.Text
   city        String?
   country     String?
-  instagram   String?
-  facebook    String?
-  linkedin    String?
-  tiktok      String?
-  youtube     String?
-  bookingUrl  String?
-  ownerPortal String?
-  about       String?
+  instagram   String?  @db.Text
+  facebook    String?  @db.Text
+  linkedin    String?  @db.Text
+  tiktok      String?  @db.Text
+  youtube     String?  @db.Text
+  bookingUrl  String?  @db.Text
+  ownerPortal String?  @db.Text
+  about       String?  @db.Text
   currency    String   @default("AED")
   timezone    String   @default("Asia/Dubai")
   updatedAt   DateTime @updatedAt

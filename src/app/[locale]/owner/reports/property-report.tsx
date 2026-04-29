@@ -289,18 +289,12 @@ export function PropertyReport({
 
       const drawColumn = (
         x: number,
-        heading: string,
         title: string,
         lines: string[],
         align: "left" | "right" = "left",
       ) => {
         const anchorX = align === "right" ? x + colW : x;
         let cy = blockTop;
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(8);
-        doc.setTextColor(47, 90, 71);
-        doc.text(heading, anchorX, cy, { align });
-        cy += 14;
         doc.setFont("helvetica", "bold");
         doc.setFontSize(11);
         doc.setTextColor(20, 20, 28);
@@ -337,13 +331,11 @@ export function PropertyReport({
 
       const leftEnd = drawColumn(
         leftX,
-        "FROM",
         data.issuingCompany.brandName,
         leftLines,
       );
       const rightEnd = drawColumn(
         rightX,
-        "BILL TO",
         data.recipient?.name ?? ownerName,
         rightLines,
         "right",
@@ -393,12 +385,24 @@ export function PropertyReport({
       };
 
       // ---- 5. Payments by booking ----
+      const right = (content: string) => ({
+        content,
+        styles: { halign: "right" as const },
+      });
       sectionTitle("Payments by booking", y);
       autoTable(doc, {
         startY: y + 8,
         margin: { left: margin, right: margin },
         tableWidth: innerW,
-        head: [["Stay period", "Amount", "Agency", "Portal", "To owner"]],
+        head: [
+          [
+            "Stay period",
+            right("Amount"),
+            right("Agency"),
+            right("Portal"),
+            right("To owner"),
+          ],
+        ],
         theme: "grid",
         headStyles: {
           fillColor: [243, 247, 244],
@@ -423,10 +427,10 @@ export function PropertyReport({
         foot: [
           [
             "Subtotal",
-            fmt(data.settlement.totalAmount),
-            fmt(data.settlement.totalAgency),
-            fmt(data.settlement.totalPortal),
-            fmt(data.settlement.totalOwnerPayout),
+            right(fmt(data.settlement.totalAmount)),
+            right(fmt(data.settlement.totalAgency)),
+            right(fmt(data.settlement.totalPortal)),
+            right(fmt(data.settlement.totalOwnerPayout)),
           ],
         ],
         footStyles: baseFootStyles,
@@ -442,7 +446,7 @@ export function PropertyReport({
           startY: lastY + 32,
           margin: { left: margin, right: margin },
           tableWidth: innerW,
-          head: [["Date", "Type", "Description", "Amount"]],
+          head: [["Date", "Type", "Description", right("Amount")]],
           theme: "grid",
           headStyles: {
             fillColor: [253, 242, 242],
@@ -463,7 +467,12 @@ export function PropertyReport({
             `- ${fmt(e.amount)}`,
           ]),
           foot: [
-            ["Subtotal", "", "", `- ${fmt(data.settlement.totalExpenses)}`],
+            [
+              "Subtotal",
+              "",
+              "",
+              right(`- ${fmt(data.settlement.totalExpenses)}`),
+            ],
           ],
           footStyles: {
             ...baseFootStyles,
@@ -482,7 +491,7 @@ export function PropertyReport({
           startY: lastY + 32,
           margin: { left: margin, right: margin },
           tableWidth: innerW,
-          head: [["Date", "Concept", "Amount"]],
+          head: [["Date", "Concept", right("Amount")]],
           theme: "grid",
           headStyles: {
             fillColor: [254, 247, 233],
@@ -500,7 +509,13 @@ export function PropertyReport({
             a.concept,
             `- ${fmt(a.amount)}`,
           ]),
-          foot: [["Subtotal", "", `- ${fmt(data.settlement.totalAdvances)}`]],
+          foot: [
+            [
+              "Subtotal",
+              "",
+              right(`- ${fmt(data.settlement.totalAdvances)}`),
+            ],
+          ],
           footStyles: {
             ...baseFootStyles,
             fillColor: [254, 247, 233],

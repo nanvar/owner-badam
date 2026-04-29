@@ -74,7 +74,12 @@ export async function GET(req: Request) {
       prisma.reservation.findMany({
         where: {
           property: propertyFilter,
-          checkIn: { gte: period.from, lte: period.to },
+          // Any reservation that overlaps the period — its nights are then
+          // pro-rated below so each month only sees the slice it owns.
+          AND: [
+            { checkIn: { lte: period.to } },
+            { checkOut: { gt: period.from } },
+          ],
         },
         include: { property: { select: { name: true, color: true } } },
         orderBy: { checkIn: "asc" },
@@ -97,27 +102,57 @@ export async function GET(req: Request) {
       }),
     ]);
 
-  const items = reservations.map((r) => ({
-    id: r.id,
-    propertyId: r.propertyId,
-    propertyName: r.property.name,
-    propertyColor: r.property.color,
-    guestName: r.guestName,
-    numGuests: r.numGuests,
-    checkIn: r.checkIn,
-    checkOut: r.checkOut,
-    nights: r.nights,
-    pricePerNight: r.pricePerNight,
-    totalPrice: r.totalPrice,
-    agencyCommission: r.agencyCommission,
-    portalCommission: r.portalCommission,
-    cleaningFee: r.cleaningFee,
-    serviceFee: r.serviceFee,
-    taxes: r.taxes,
-    payout: r.payout,
-    currency: r.currency,
-    detailsFilled: r.detailsFilled,
-  }));
+  // Night-based proration. For each reservation that overlaps the period,
+  // figure out which nights fall inside it and split totals accordingly.
+  const ONE_DAY = 86_400_000;
+  const periodStartMs = period.from.getTime();
+  const periodEndExclusiveMs = period.to.getTime() + 1; // start of next month UTC
+  const lastDayOfMonth = new Date(periodEndExclusiveMs - ONE_DAY); // UTC midnight of the last day
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  const items = reservations
+    .map((r) => {
+      const checkInMs = r.checkIn.getTime();
+      const checkOutMs = r.checkOut.getTime();
+      const sliceStartMs = Math.max(checkInMs, periodStartMs);
+      const sliceEndMs = Math.min(checkOutMs, periodEndExclusiveMs);
+      const nightsInPeriod = Math.max(
+        0,
+        Math.round((sliceEndMs - sliceStartMs) / ONE_DAY),
+      );
+      const totalNights = r.nights || 1;
+      const ratio = nightsInPeriod / totalNights;
+
+      // Display dates: clamp into the month, so cross-month bookings
+      // show "Feb 26 - Feb 28" in Feb and "Mar 1 - Mar 5" in Mar.
+      const displayCheckIn =
+        checkInMs < periodStartMs ? period.from : r.checkIn;
+      const displayCheckOut =
+        checkOutMs > periodEndExclusiveMs ? lastDayOfMonth : r.checkOut;
+
+      return {
+        id: r.id,
+        propertyId: r.propertyId,
+        propertyName: r.property.name,
+        propertyColor: r.property.color,
+        guestName: r.guestName,
+        numGuests: r.numGuests,
+        checkIn: displayCheckIn,
+        checkOut: displayCheckOut,
+        nights: nightsInPeriod,
+        pricePerNight: r.pricePerNight,
+        totalPrice: round2(r.totalPrice * ratio),
+        agencyCommission: round2(r.agencyCommission * ratio),
+        portalCommission: round2(r.portalCommission * ratio),
+        cleaningFee: r.cleaningFee,
+        serviceFee: r.serviceFee,
+        taxes: r.taxes,
+        payout: round2(r.payout * ratio),
+        currency: r.currency,
+        detailsFilled: r.detailsFilled,
+      };
+    })
+    .filter((item) => item.nights > 0);
 
   const kpis = computeKpis(items, properties.length, period);
   const byProperty = buildPropertySeries(items, period);
