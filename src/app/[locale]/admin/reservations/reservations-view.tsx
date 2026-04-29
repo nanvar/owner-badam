@@ -8,6 +8,8 @@ import {
   Phone,
   Mail,
   Search,
+  RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -21,6 +23,8 @@ import {
   deleteReservationAction,
   type ReservationState,
 } from "@/app/actions/reservations";
+import { syncAllAction, type SyncState } from "@/app/actions/sync";
+import { SyncSummary } from "../properties-view";
 import type { Locale } from "@/i18n/config";
 
 type Item = {
@@ -58,10 +62,12 @@ export function ReservationsView({
   items: Item[];
   labels: Record<string, string>;
 }) {
-  const [filter, setFilter] = useState<"all" | "incomplete" | "complete">("all");
+  const [filter, setFilter] = useState<"incomplete" | "complete">("incomplete");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Item | null>(null);
   const [deletePending, startDelete] = useTransition();
+  const [syncState, setSyncState] = useState<SyncState | null>(null);
+  const [syncPending, startSync] = useTransition();
 
   const filtered = useMemo(() => {
     return items.filter((i) => {
@@ -75,10 +81,44 @@ export function ReservationsView({
       return true;
     });
   }, [items, filter, search]);
+  const incompleteCount = useMemo(
+    () => items.filter((i) => !i.detailsFilled).length,
+    [items],
+  );
+  const completeCount = items.length - incompleteCount;
 
   return (
     <div>
-      <PageHeader title={labels.title} />
+      <PageHeader
+        title={labels.title}
+        right={
+          <Button
+            variant="secondary"
+            loading={syncPending}
+            onClick={() =>
+              startSync(async () => {
+                const r = await syncAllAction();
+                setSyncState(r);
+              })
+            }
+          >
+            <RefreshCw className="h-4 w-4" />
+            {syncPending ? labels.syncing : labels.syncNow}
+          </Button>
+        }
+      />
+      {syncState && syncState.status === "ok" && (
+        <SyncSummary
+          results={syncState.results}
+          onClose={() => setSyncState(null)}
+        />
+      )}
+      {syncState && syncState.status === "error" && (
+        <div className="mb-4 flex items-center gap-2 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-600">
+          <AlertTriangle className="h-4 w-4" />
+          {syncState.message}
+        </div>
+      )}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[180px] max-w-md">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
@@ -90,17 +130,26 @@ export function ReservationsView({
           />
         </div>
         <div className="ml-auto flex rounded-xl border border-[var(--color-border)] bg-white p-1">
-          {(["all", "incomplete", "complete"] as const).map((f) => (
+          {(["incomplete", "complete"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
                 filter === f
                   ? "bg-[var(--color-brand)] text-white"
                   : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
               }`}
             >
-              {f === "all" ? labels.all : f === "incomplete" ? labels.incomplete : labels.complete}
+              {f === "incomplete" ? labels.incomplete : labels.complete}
+              <span
+                className={`rounded-full px-1.5 text-[10px] font-bold ${
+                  filter === f
+                    ? "bg-white/25 text-white"
+                    : "bg-[var(--color-surface-2)] text-[var(--color-muted)]"
+                }`}
+              >
+                {f === "incomplete" ? incompleteCount : completeCount}
+              </span>
             </button>
           ))}
         </div>
@@ -267,7 +316,7 @@ function ReservationEditor({
               name="numGuests"
               type="number"
               min={0}
-              defaultValue={reservation.numGuests ?? 0}
+              defaultValue={reservation.numGuests || ""}
             />
           </Field>
         </div>
@@ -311,7 +360,7 @@ function ReservationEditor({
               type="number"
               step="0.01"
               min="0"
-              value={totalPrice}
+              value={totalPrice || ""}
               onChange={(e) => setTotalPrice(parseFloat(e.target.value) || 0)}
             />
           </Field>
@@ -326,7 +375,7 @@ function ReservationEditor({
                 type="number"
                 step="0.01"
                 min="0"
-                value={agencyCommission}
+                value={agencyCommission || ""}
                 onChange={(e) =>
                   setAgencyCommission(parseFloat(e.target.value) || 0)
                 }
@@ -342,7 +391,7 @@ function ReservationEditor({
                 type="number"
                 step="0.01"
                 min="0"
-                value={portalCommission}
+                value={portalCommission || ""}
                 onChange={(e) =>
                   setPortalCommission(parseFloat(e.target.value) || 0)
                 }
@@ -376,7 +425,7 @@ function ReservationEditor({
                   type="number"
                   step="0.01"
                   min="0"
-                  defaultValue={reservation.cleaningFee || 0}
+                  defaultValue={reservation.cleaningFee || ""}
                 />
               </Field>
               <Field label={`${labels.serviceFee} (${labels.currency})`} htmlFor="serviceFee">
@@ -386,7 +435,7 @@ function ReservationEditor({
                   type="number"
                   step="0.01"
                   min="0"
-                  defaultValue={reservation.serviceFee || 0}
+                  defaultValue={reservation.serviceFee || ""}
                 />
               </Field>
               <Field label={`${labels.taxes} (${labels.currency})`} htmlFor="taxes">
@@ -396,7 +445,7 @@ function ReservationEditor({
                   type="number"
                   step="0.01"
                   min="0"
-                  defaultValue={reservation.taxes || 0}
+                  defaultValue={reservation.taxes || ""}
                 />
               </Field>
             </div>

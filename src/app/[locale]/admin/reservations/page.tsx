@@ -77,6 +77,8 @@ export default async function ReservationsAdminPage({
         delete: tCommon("delete"),
         currency: tCommon("currency"),
         all: tCommon("all"),
+        syncNow: tCommon("syncNow"),
+        syncing: tCommon("syncing"),
       }}
     />
   );

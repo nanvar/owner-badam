@@ -4,10 +4,10 @@ import Link from "next/link";
 import { ArrowLeft, Building2, CalendarCheck, Coins, User, Mail } from "lucide-react";
 import { isLocale, type Locale } from "@/i18n/config";
 import { prisma } from "@/lib/prisma";
-import { Card, CardBody, CardHeader, CardTitle, StatCard } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { StatCard } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
+import { PropertiesView } from "../../properties-view";
 
 export default async function OwnerDetailPage({
   params,
@@ -33,6 +33,12 @@ export default async function OwnerDetailPage({
     },
   });
   if (!owner || owner.role !== "OWNER") notFound();
+
+  const propertyIds = owner.properties.map((p) => p.id);
+  const expenses = await prisma.expense.findMany({
+    where: { propertyId: { in: propertyIds } },
+    orderBy: { date: "desc" },
+  });
 
   const tCommon = await getTranslations({ locale, namespace: "common" });
   const tAdmin = await getTranslations({ locale, namespace: "admin" });
@@ -101,75 +107,78 @@ export default async function OwnerDetailPage({
         />
       </div>
 
-      <Card className="mt-6 overflow-hidden">
-        <CardHeader>
-          <CardTitle>
-            <Building2 className="-mt-0.5 mr-1 inline h-4 w-4" />
-            {tCommon("properties")}
-          </CardTitle>
-        </CardHeader>
-        <CardBody className="p-0">
-          {owner.properties.length === 0 ? (
-            <p className="px-5 py-12 text-center text-sm text-[var(--color-muted)]">
-              {tAdmin("noProperties")}
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
-                  <tr>
-                    <th className="px-5 py-3 text-left font-semibold">{tAdmin("name")}</th>
-                    <th className="px-4 py-3 text-left font-semibold">iCal</th>
-                    <th className="px-4 py-3 text-right font-semibold">{tAdmin("basePrice")}</th>
-                    <th className="px-4 py-3 text-right font-semibold">{tAdmin("cleaningFee")}</th>
-                    <th className="px-4 py-3 text-right font-semibold">{tCommon("reservations")}</th>
-                    <th className="px-4 py-3 text-left font-semibold">{tCommon("lastSynced")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {owner.properties.map((p) => (
-                    <tr key={p.id} className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60">
-                      <td className="px-5 py-3">
-                        <div className="flex items-center gap-3">
-                          <span
-                            className="h-8 w-1 shrink-0 rounded-full"
-                            style={{ background: p.color }}
-                          />
-                          <div className="min-w-0">
-                            <div className="truncate font-semibold">{p.name}</div>
-                            {p.address && (
-                              <div className="truncate text-xs text-[var(--color-muted)]">
-                                {p.address}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {p.airbnbIcalUrl ? (
-                          <Badge tone="success">set</Badge>
-                        ) : (
-                          <Badge tone="warning">missing</Badge>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold">
-                        {formatCurrency(p.basePrice, "AED", loc)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {formatCurrency(p.cleaningFee, "AED", loc)}
-                      </td>
-                      <td className="px-4 py-3 text-right">{p._count.reservations}</td>
-                      <td className="px-4 py-3 text-xs text-[var(--color-muted)] whitespace-nowrap">
-                        {p.lastSyncedAt ? formatDate(p.lastSyncedAt, loc) : tCommon("never")}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardBody>
-      </Card>
+      <div className="mt-6">
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold tracking-tight">
+          <Building2 className="h-4 w-4 text-[var(--color-brand)]" />
+          {tCommon("properties")}
+        </h2>
+        <PropertiesView
+          locale={loc}
+          hideTitle
+          lockedOwnerId={owner.id}
+          properties={owner.properties.map((p) => ({
+            id: p.id,
+            name: p.name,
+            address: p.address,
+            airbnbIcalUrl: p.airbnbIcalUrl,
+            basePrice: p.basePrice,
+            cleaningFee: p.cleaningFee,
+            color: p.color,
+            notes: p.notes,
+            ownerId: owner.id,
+            ownerName: owner.name ?? owner.email,
+            reservationCount: p._count.reservations,
+            lastSyncedAt: p.lastSyncedAt ? p.lastSyncedAt.toISOString() : null,
+          }))}
+          owners={[{ id: owner.id, name: owner.name, email: owner.email }]}
+          expenses={expenses.map((e) => ({
+            id: e.id,
+            propertyId: e.propertyId,
+            date: e.date.toISOString(),
+            type: e.type,
+            description: e.description,
+            amount: e.amount,
+          }))}
+          labels={{
+            title: tCommon("properties"),
+            addProperty: tAdmin("addProperty"),
+            editProperty: tAdmin("editProperty"),
+            deleteConfirm: tAdmin("deleteConfirm"),
+            name: tAdmin("name"),
+            address: tAdmin("address"),
+            icalUrl: tAdmin("icalUrl"),
+            basePrice: tAdmin("basePrice"),
+            cleaningFee: tAdmin("cleaningFee"),
+            color: tAdmin("color"),
+            owner: tAdmin("owner"),
+            notes: tCommon("notes"),
+            save: tCommon("save"),
+            cancel: tCommon("cancel"),
+            edit: tCommon("edit"),
+            delete: tCommon("delete"),
+            noProperties: tAdmin("noProperties"),
+            syncNow: tCommon("syncNow"),
+            syncing: tCommon("syncing"),
+            lastSynced: tCommon("lastSynced"),
+            never: tCommon("never"),
+            currency: tCommon("currency"),
+            syncDescription: tAdmin("syncDescription"),
+            reservations: tCommon("reservations"),
+            actions: tCommon("actions"),
+            expenses: tAdmin("navExpenses"),
+            showExpenses: tAdmin("showExpenses"),
+            addExpense: tAdmin("addExpense"),
+            editExpense: tAdmin("editExpense"),
+            noExpenses: tAdmin("noExpenses"),
+            total: tAdmin("total"),
+            date: tAdmin("date"),
+            type: tAdmin("type"),
+            description: tAdmin("description"),
+            amount: tAdmin("amount"),
+            deleteLedgerConfirm: tAdmin("deleteLedgerConfirm"),
+          }}
+        />
+      </div>
     </div>
   );
 }

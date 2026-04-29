@@ -52,7 +52,7 @@ export function AppShell({
             "0 8px 24px -16px rgba(15,23,42,0.18), 0 4px 12px -8px rgba(15,23,42,0.08)",
         }}
       >
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
+        <div className="mx-auto grid max-w-6xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3">
           <Link
             href={`/${locale}/${variant}`}
             className="flex items-center gap-2 font-semibold tracking-tight"
@@ -69,19 +69,8 @@ export function AppShell({
                 <Sparkles className="h-4 w-4" />
               </span>
             )}
-            <span className="hidden sm:inline">{brand?.name ?? "Badam Owners"}</span>
           </Link>
-          <span
-            className={cn(
-              "hidden rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider sm:inline",
-              variant === "admin"
-                ? "bg-amber-500/15 text-amber-600"
-                : "bg-emerald-500/15 text-emerald-600",
-            )}
-          >
-            {variant}
-          </span>
-          <nav className="ml-2 hidden flex-1 items-center gap-1 md:flex">
+          <nav className="hidden items-center justify-center gap-1 md:flex">
             {nav.map((item) => {
               const isRoot =
                 item.href === `/${locale}/${variant}`;
@@ -105,7 +94,7 @@ export function AppShell({
               );
             })}
           </nav>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-2 justify-self-end">
             {topRight}
             <div className="relative">
               <details className="group">
