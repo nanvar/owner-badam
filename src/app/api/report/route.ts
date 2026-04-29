@@ -9,6 +9,19 @@ import {
   type Period,
 } from "@/lib/metrics";
 
+async function fetchLogoAsDataUrl(url: string | null): Promise<string | null> {
+  if (!url) return null;
+  try {
+    const res = await fetch(url, { cache: "force-cache" });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const mime = res.headers.get("content-type") || "image/png";
+    return `data:${mime};base64,${buf.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: Request) {
   const session = await readSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -61,11 +74,7 @@ export async function GET(req: Request) {
       prisma.reservation.findMany({
         where: {
           property: propertyFilter,
-          OR: [
-            { checkIn: { gte: period.from, lt: period.to } },
-            { checkOut: { gt: period.from, lte: period.to } },
-            { AND: [{ checkIn: { lt: period.from } }, { checkOut: { gt: period.to } }] },
-          ],
+          checkIn: { gte: period.from, lte: period.to },
         },
         include: { property: { select: { name: true, color: true } } },
         orderBy: { checkIn: "asc" },
@@ -73,7 +82,7 @@ export async function GET(req: Request) {
       prisma.expense.findMany({
         where: {
           property: propertyFilter,
-          date: { gte: period.from, lt: period.to },
+          date: { gte: period.from, lte: period.to },
         },
         include: { property: { select: { name: true, color: true } } },
         orderBy: { date: "asc" },
@@ -81,7 +90,7 @@ export async function GET(req: Request) {
       prisma.advance.findMany({
         where: {
           property: propertyFilter,
-          date: { gte: period.from, lt: period.to },
+          date: { gte: period.from, lte: period.to },
         },
         include: { property: { select: { name: true, color: true } } },
         orderBy: { date: "asc" },
@@ -137,6 +146,8 @@ export async function GET(req: Request) {
     issuingCompany: {
       brandName: settings.brandName,
       legalName: settings.legalName,
+      logoUrl: settings.logoUrl,
+      logoDataUrl: await fetchLogoAsDataUrl(settings.logoUrl),
       address: [settings.address, settings.city, settings.country]
         .filter(Boolean)
         .join(", "),

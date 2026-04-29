@@ -3,7 +3,6 @@ import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { getSettings } from "@/lib/settings";
 import { ReportPropertyPicker } from "./report-property-picker";
 
 export default async function OwnerReportsPage({
@@ -15,7 +14,6 @@ export default async function OwnerReportsPage({
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
   const session = await requireRole("OWNER");
-  const settings = await getSettings();
 
   const properties = await prisma.property.findMany({
     where: { ownerId: session.userId },
@@ -50,13 +48,6 @@ export default async function OwnerReportsPage({
         reservationCount: p._count.reservations,
       }))}
       earliestCreatedAt={earliestCreatedAt ? earliestCreatedAt.toISOString() : null}
-      brand={{
-        name: settings.brandName,
-        legalName: settings.legalName,
-        email: settings.email,
-        phone: settings.phone,
-        website: settings.website,
-      }}
       labels={{
         title: tCommon("reports"),
         allProperties: t("allProperties"),

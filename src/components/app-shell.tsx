@@ -2,10 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { motion } from "motion/react";
-import { LogOut, Globe, Sparkles } from "lucide-react";
+import {
+  LogOut,
+  Globe,
+  Sparkles,
+  Mail,
+  Phone,
+  MessageCircle,
+  Info,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Sheet } from "@/components/ui/sheet";
 import { logoutAction } from "@/app/actions/auth";
 import type { Locale } from "@/i18n/config";
 
@@ -30,10 +39,25 @@ export function AppShell({
   children: React.ReactNode;
   variant: "admin" | "owner";
   topRight?: React.ReactNode;
-  brand?: { name: string; logoUrl: string | null };
+  brand?: {
+    name: string;
+    logoUrl: string | null;
+    legalName?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    whatsapp?: string | null;
+    website?: string | null;
+    address?: string | null;
+  };
 }) {
   const pathname = usePathname();
   const [pending, start] = useTransition();
+  const [contactOpen, setContactOpen] = useState(false);
+
+  const hasContacts = !!(
+    brand &&
+    (brand.email || brand.phone || brand.whatsapp || brand.website || brand.address)
+  );
 
   const switchLocale = (newLocale: Locale) => {
     if (newLocale === locale) return;
@@ -140,6 +164,8 @@ export function AppShell({
         {children}
       </main>
 
+      {brand && hasContacts && <BrandFooter brand={brand} />}
+
       <nav
         className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-border)] bg-white md:hidden"
         style={{
@@ -200,8 +226,54 @@ export function AppShell({
               </Link>
             );
           })}
+          {brand && hasContacts && (
+            <button
+              type="button"
+              onClick={() => setContactOpen(true)}
+              className="group relative flex flex-1 flex-col items-center justify-center gap-1.5 px-1 pt-2.5 pb-2"
+              aria-label="Contact"
+            >
+              <span className="relative grid h-9 w-[60px] place-items-center">
+                <motion.span
+                  initial={false}
+                  animate={{ scale: contactOpen ? 1.05 : 1 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 28 }}
+                  className={cn(
+                    "relative grid h-6 w-6 place-items-center transition-colors duration-200 [&>svg]:h-[22px] [&>svg]:w-[22px]",
+                    contactOpen
+                      ? "text-[var(--color-brand)]"
+                      : "text-[#9ca3af]",
+                  )}
+                >
+                  <Info />
+                </motion.span>
+              </span>
+              <span
+                className={cn(
+                  "block w-full truncate text-center text-[11px] leading-none tracking-tight transition-colors duration-200",
+                  contactOpen
+                    ? "font-semibold text-[var(--color-brand)]"
+                    : "font-medium text-[#9ca3af]",
+                )}
+              >
+                Contact
+              </span>
+            </button>
+          )}
         </div>
       </nav>
+
+      {brand && hasContacts && (
+        <Sheet
+          open={contactOpen}
+          onClose={() => setContactOpen(false)}
+          side="bottom"
+          title={brand.legalName || brand.name}
+          description={brand.address ?? undefined}
+        >
+          <ContactList brand={brand} />
+        </Sheet>
+      )}
     </div>
   );
 }
@@ -228,3 +300,195 @@ export function PageHeader({
   );
 }
 
+function ContactList({
+  brand,
+}: {
+  brand: {
+    name: string;
+    logoUrl: string | null;
+    legalName?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    whatsapp?: string | null;
+    website?: string | null;
+    address?: string | null;
+  };
+}) {
+  const websiteHref = brand.website
+    ? brand.website.startsWith("http")
+      ? brand.website
+      : `https://${brand.website}`
+    : null;
+  const websiteLabel = brand.website
+    ? brand.website.replace(/^https?:\/\//, "")
+    : null;
+  const whatsappHref = brand.whatsapp
+    ? `https://wa.me/${brand.whatsapp.replace(/[^0-9]/g, "")}`
+    : null;
+
+  const Row = ({
+    href,
+    icon,
+    label,
+    value,
+    accent,
+  }: {
+    href: string;
+    icon: React.ReactNode;
+    label: string;
+    value: string;
+    accent: string;
+  }) => (
+    <a
+      href={href}
+      className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-white px-4 py-3 transition-colors hover:bg-[var(--color-surface-2)]"
+    >
+      <span
+        className={cn(
+          "grid h-10 w-10 place-items-center rounded-xl",
+          accent,
+        )}
+      >
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+          {label}
+        </div>
+        <div className="mt-0.5 truncate text-sm font-semibold text-[var(--color-foreground)]">
+          {value}
+        </div>
+      </div>
+    </a>
+  );
+
+  return (
+    <div className="space-y-2 pb-2">
+      {brand.email && (
+        <Row
+          href={`mailto:${brand.email}`}
+          icon={<Mail className="h-5 w-5 text-emerald-600" />}
+          label="Email"
+          value={brand.email}
+          accent="bg-emerald-500/10"
+        />
+      )}
+      {brand.phone && (
+        <Row
+          href={`tel:${brand.phone.replace(/[^+\d]/g, "")}`}
+          icon={<Phone className="h-5 w-5 text-sky-600" />}
+          label="Phone"
+          value={brand.phone}
+          accent="bg-sky-500/10"
+        />
+      )}
+      {whatsappHref && brand.whatsapp && (
+        <Row
+          href={whatsappHref}
+          icon={<MessageCircle className="h-5 w-5 text-emerald-600" />}
+          label="WhatsApp"
+          value={brand.whatsapp}
+          accent="bg-emerald-500/10"
+        />
+      )}
+      {websiteHref && websiteLabel && (
+        <Row
+          href={websiteHref}
+          icon={<Globe className="h-5 w-5 text-indigo-600" />}
+          label="Website"
+          value={websiteLabel}
+          accent="bg-indigo-500/10"
+        />
+      )}
+    </div>
+  );
+}
+
+function BrandFooter({
+  brand,
+}: {
+  brand: {
+    name: string;
+    logoUrl: string | null;
+    legalName?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    whatsapp?: string | null;
+    website?: string | null;
+    address?: string | null;
+  };
+}) {
+  const websiteHref = brand.website
+    ? brand.website.startsWith("http")
+      ? brand.website
+      : `https://${brand.website}`
+    : null;
+  const websiteLabel = brand.website
+    ? brand.website.replace(/^https?:\/\//, "")
+    : null;
+  const whatsappHref = brand.whatsapp
+    ? `https://wa.me/${brand.whatsapp.replace(/[^0-9]/g, "")}`
+    : null;
+  return (
+    <footer
+      className="hidden border-t border-[var(--color-border)] bg-white md:block"
+      style={{
+        boxShadow:
+          "0 -10px 28px -18px rgba(15,23,42,0.18), 0 -3px 10px -6px rgba(15,23,42,0.08)",
+      }}
+    >
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 text-sm">
+        <div className="font-semibold text-[var(--color-foreground)]">
+          {brand.legalName || brand.name}
+          {brand.address && (
+            <span className="ml-2 font-normal text-[var(--color-foreground)]/70">
+              · {brand.address}
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[var(--color-foreground)]/80">
+          {brand.email && (
+            <a
+              href={`mailto:${brand.email}`}
+              className="flex items-center gap-1.5 font-medium hover:text-[var(--color-brand)]"
+            >
+              <Mail className="h-4 w-4" />
+              {brand.email}
+            </a>
+          )}
+          {brand.phone && (
+            <a
+              href={`tel:${brand.phone.replace(/[^+\d]/g, "")}`}
+              className="flex items-center gap-1.5 font-medium hover:text-[var(--color-brand)]"
+            >
+              <Phone className="h-4 w-4" />
+              {brand.phone}
+            </a>
+          )}
+          {whatsappHref && (
+            <a
+              href={whatsappHref}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 font-medium hover:text-emerald-500"
+            >
+              <MessageCircle className="h-4 w-4" />
+              {brand.whatsapp}
+            </a>
+          )}
+          {websiteHref && websiteLabel && (
+            <a
+              href={websiteHref}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 font-medium hover:text-[var(--color-brand)]"
+            >
+              <Globe className="h-4 w-4" />
+              {websiteLabel}
+            </a>
+          )}
+        </div>
+      </div>
+    </footer>
+  );
+}

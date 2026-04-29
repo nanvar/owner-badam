@@ -11,7 +11,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Sheet } from "@/components/ui/sheet";
 import { StaggerList, StaggerItem, HoverLift } from "@/components/ui/motion";
-import { PropertyReport, type Brand, type Labels } from "./property-report";
+import { PropertyReport, type Labels } from "./property-report";
 import type { Locale } from "@/i18n/config";
 
 type Property = {
@@ -32,14 +32,12 @@ export function ReportPropertyPicker({
   ownerName,
   properties,
   earliestCreatedAt,
-  brand,
   labels,
 }: {
   locale: Locale;
   ownerName: string;
   properties: Property[];
   earliestCreatedAt: string | null;
-  brand: Brand;
   labels: Labels;
 }) {
   const [selected, setSelected] = useState<Selection | null>(null);
@@ -57,11 +55,11 @@ export function ReportPropertyPicker({
       <StaggerList className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {/* "All properties" entry first */}
         {properties.length > 0 && (
-          <StaggerItem>
-            <HoverLift>
+          <StaggerItem className="h-full">
+            <HoverLift className="h-full">
               <button
                 onClick={() => setSelected({ kind: "all" })}
-                className="group flex w-full items-stretch gap-0 overflow-hidden rounded-2xl border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)] text-left shadow-sm transition-shadow hover:shadow-md"
+                className="group flex h-full w-full items-stretch gap-0 overflow-hidden rounded-2xl border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)] text-left shadow-sm transition-shadow hover:shadow-md"
               >
                 <span className="w-1.5 shrink-0 bg-[var(--color-brand)]" />
                 <div className="flex flex-1 items-center gap-3 px-4 py-3.5">
@@ -85,11 +83,11 @@ export function ReportPropertyPicker({
         )}
 
         {properties.map((p) => (
-          <StaggerItem key={p.id}>
-            <HoverLift>
+          <StaggerItem key={p.id} className="h-full">
+            <HoverLift className="h-full">
               <button
                 onClick={() => setSelected({ kind: "one", property: p })}
-                className="group flex w-full items-stretch gap-0 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white text-left shadow-sm transition-shadow hover:shadow-md"
+                className="group flex h-full w-full items-stretch gap-0 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white text-left shadow-sm transition-shadow hover:shadow-md"
               >
                 <span
                   className="w-1.5 shrink-0"
@@ -166,7 +164,6 @@ export function ReportPropertyPicker({
             }
             ownerName={ownerName}
             locale={locale}
-            brand={brand}
             labels={labels}
           />
         )}

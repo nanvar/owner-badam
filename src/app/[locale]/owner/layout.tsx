@@ -43,7 +43,16 @@ export default async function OwnerLayout({
       user={{ name: session.name, email: session.email, role: session.role }}
       nav={nav}
       variant="owner"
-      brand={{ name: settings.brandName, logoUrl: settings.logoUrl }}
+      brand={{
+        name: settings.brandName,
+        logoUrl: settings.logoUrl,
+        legalName: settings.legalName,
+        email: settings.email,
+        phone: settings.phone,
+        whatsapp: settings.whatsapp,
+        website: settings.website,
+        address: settings.address,
+      }}
     >
       {children}
     </AppShell>

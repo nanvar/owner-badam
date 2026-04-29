@@ -14,14 +14,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import type { Locale } from "@/i18n/config";
 
-export type Brand = {
-  name: string;
-  legalName: string;
-  email: string | null;
-  phone: string | null;
-  website: string | null;
-};
-
 export type Labels = {
   title: string;
   allProperties: string;
@@ -83,6 +75,8 @@ type Settlement = {
 type IssuingCompany = {
   brandName: string;
   legalName: string;
+  logoUrl: string | null;
+  logoDataUrl: string | null;
   address: string;
   email: string | null;
   phone: string | null;
@@ -178,7 +172,6 @@ export function PropertyReport({
   scopeCreatedAt,
   ownerName,
   locale,
-  brand,
   labels,
 }: {
   propertyId: string;
@@ -186,7 +179,6 @@ export function PropertyReport({
   scopeCreatedAt: string | null;
   ownerName: string;
   locale: Locale;
-  brand: Brand;
   labels: Labels;
 }) {
   const availableMonths = useMemo(
@@ -230,105 +222,197 @@ export function PropertyReport({
       const doc = new jsPDF({ orientation: "portrait", unit: "pt" });
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 40;
+      const innerW = pageWidth - margin * 2;
+      const center = pageWidth / 2;
 
-      // === Header bands: Issuing company (left) + Recipient (right) ===
-      const colW = (pageWidth - 64 - 16) / 2;
-      const headerY = 50;
+      // ---- 1. Use pre-fetched server-side base64 logo ----
+      let logo: { dataUrl: string; format: string; w: number; h: number } | null =
+        null;
+      if (data.issuingCompany.logoDataUrl) {
+        try {
+          const dataUrl = data.issuingCompany.logoDataUrl;
+          const mimeMatch = /^data:([^;]+);base64,/.exec(dataUrl);
+          const mime = mimeMatch ? mimeMatch[1] : "image/png";
+          const format = /jpeg|jpg/i.test(mime) ? "JPEG" : "PNG";
+          const dims = await new Promise<{ w: number; h: number }>(
+            (resolve, reject) => {
+              const img = new window.Image();
+              img.onload = () =>
+                resolve({ w: img.naturalWidth, h: img.naturalHeight });
+              img.onerror = () => reject(new Error("decode failed"));
+              img.src = dataUrl;
+            },
+          );
+          const targetH = 64;
+          logo = {
+            dataUrl,
+            format,
+            w: (dims.w / dims.h) * targetH,
+            h: targetH,
+          };
+        } catch {
+          logo = null;
+        }
+      }
 
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(20, 20, 28);
-      doc.text("Issuing company", 32, headerY);
-      doc.setFontSize(10);
-      doc.text(data.issuingCompany.legalName, 32, headerY + 18);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(80, 80, 90);
-      doc.setFontSize(9);
-      const issAddrLines = doc.splitTextToSize(
-        data.issuingCompany.address || "",
-        colW,
+      // ---- 2. Centered logo only (nothing under it) ----
+      let y = 50;
+      if (logo) {
+        const logoTargetH = 80;
+        const logoW = (logo.w / logo.h) * logoTargetH;
+        doc.addImage(
+          logo.dataUrl,
+          logo.format,
+          center - logoW / 2,
+          y,
+          logoW,
+          logoTargetH,
+        );
+        y += logoTargetH + 22;
+      } else {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(22);
+        doc.setTextColor(47, 90, 71);
+        doc.text(data.issuingCompany.brandName, center, y + 16, {
+          align: "center",
+        });
+        y += 38;
+      }
+
+      // ---- 3. Two-column block: company (left) | owner (right) ----
+      const colGap = 24;
+      const colW = (innerW - colGap) / 2;
+      const leftX = margin;
+      const rightX = margin + colW + colGap;
+      const blockTop = y;
+
+      const drawColumn = (
+        x: number,
+        heading: string,
+        title: string,
+        lines: string[],
+        align: "left" | "right" = "left",
+      ) => {
+        const anchorX = align === "right" ? x + colW : x;
+        let cy = blockTop;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.setTextColor(47, 90, 71);
+        doc.text(heading, anchorX, cy, { align });
+        cy += 14;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(20, 20, 28);
+        doc.text(title, anchorX, cy, { align });
+        cy += 14;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(100, 100, 110);
+        for (const line of lines) {
+          if (!line) continue;
+          const wrapped = doc.splitTextToSize(line, colW);
+          const arr = Array.isArray(wrapped) ? wrapped : [wrapped];
+          for (const w of arr) {
+            doc.text(w, anchorX, cy, { align });
+            cy += 12;
+          }
+        }
+        return cy;
+      };
+
+      const leftLines = [
+        data.issuingCompany.legalName,
+        data.issuingCompany.address,
+        data.issuingCompany.email ?? "",
+        data.issuingCompany.phone ?? "",
+        data.issuingCompany.website?.replace(/^https?:\/\//, "") ?? "",
+      ];
+      const rightLines = [
+        data.recipient?.taxId ?? "",
+        data.recipient?.email ?? "",
+        data.recipient?.phone ?? "",
+        data.recipient?.address ?? "",
+      ];
+
+      const leftEnd = drawColumn(
+        leftX,
+        "FROM",
+        data.issuingCompany.brandName,
+        leftLines,
       );
-      doc.text(issAddrLines, 32, headerY + 32);
-      const contactBits = [data.issuingCompany.email, data.issuingCompany.phone]
-        .filter(Boolean)
-        .join("  ·  ");
-      if (contactBits) {
-        doc.text(contactBits, 32, headerY + 32 + issAddrLines.length * 11);
-      }
+      const rightEnd = drawColumn(
+        rightX,
+        "BILL TO",
+        data.recipient?.name ?? ownerName,
+        rightLines,
+        "right",
+      );
+      y = Math.max(leftEnd, rightEnd) + 16;
 
-      const rightX = 32 + colW + 16;
+      // ---- 4. Property name + Monthly settlement title ----
+      doc.setDrawColor(225, 230, 227);
+      doc.setLineWidth(0.6);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 22;
+
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
+      doc.setFontSize(16);
       doc.setTextColor(20, 20, 28);
-      doc.text("Recipient", rightX, headerY);
-      doc.setFontSize(10);
-      doc.text(data.recipient?.name ?? ownerName, rightX, headerY + 18);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(80, 80, 90);
-      doc.setFontSize(9);
-      let rY = headerY + 32;
-      if (data.recipient?.taxId) {
-        doc.text(data.recipient.taxId, rightX, rY);
-        rY += 11;
-      }
-      if (data.recipient?.email) {
-        doc.text(data.recipient.email, rightX, rY);
-        rY += 11;
-      }
-      if (data.recipient?.address) {
-        const addrLines = doc.splitTextToSize(data.recipient.address, colW);
-        doc.text(addrLines, rightX, rY);
-        rY += addrLines.length * 11;
-      }
-
-      // === Title bar ===
-      const titleY = Math.max(headerY + 90, rY + 20);
-      doc.setFillColor(243, 247, 244);
-      doc.rect(32, titleY, pageWidth - 64, 30, "F");
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.setTextColor(47, 90, 71);
-      doc.text(`Monthly settlement | ${scopeName}`, 44, titleY + 20);
-
-      // === Period meta (no settlement Nº) ===
-      autoTable(doc, {
-        startY: titleY + 44,
-        head: [["Period", "Date", "Currency"]],
-        theme: "striped",
-        headStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28] },
-        styles: { fontSize: 9 },
-        body: [
-          [
-            formatMonthLabel(month, locale),
-            data.settlementDate.slice(0, 10),
-            data.currency,
-          ],
-        ],
+      doc.text(`${scopeName} - Monthly settlement`, center, y, {
+        align: "center",
       });
+      y += 16;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(110, 110, 120);
+      doc.text(formatMonthLabel(month, locale), center, y, {
+        align: "center",
+      });
+      y += 22;
 
-      let lastY = (doc as unknown as { lastAutoTable: { finalY: number } })
-        .lastAutoTable.finalY;
+      // ---- Common table styling ----
+      const baseStyles = {
+        fontSize: 9,
+        cellPadding: 6,
+        lineColor: [200, 208, 204] as [number, number, number],
+        lineWidth: 0.8,
+        valign: "middle" as const,
+      };
+      const baseFootStyles = {
+        fillColor: [248, 250, 249] as [number, number, number],
+        textColor: [20, 20, 28] as [number, number, number],
+        fontStyle: "bold" as const,
+      };
 
-      // === Payments by booking — no booking number column ===
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.setTextColor(20, 20, 28);
-      doc.text("Payments by booking", 32, lastY + 22);
+      const sectionTitle = (text: string, atY: number) => {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(47, 90, 71);
+        doc.text(text, margin, atY);
+      };
 
+      // ---- 5. Payments by booking ----
+      sectionTitle("Payments by booking", y);
       autoTable(doc, {
-        startY: lastY + 30,
-        head: [
-          [
-            "Stay period",
-            "Amount",
-            "Agency commission",
-            "Portal commission",
-            "To owner",
-          ],
-        ],
-        theme: "striped",
-        headStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28] },
-        styles: { fontSize: 8 },
+        startY: y + 8,
+        margin: { left: margin, right: margin },
+        tableWidth: innerW,
+        head: [["Stay period", "Amount", "Agency", "Portal", "To owner"]],
+        theme: "grid",
+        headStyles: {
+          fillColor: [243, 247, 244],
+          textColor: [47, 90, 71],
+          fontStyle: "bold",
+        },
+        columnStyles: {
+          0: { halign: "left" },
+          1: { halign: "right" },
+          2: { halign: "right" },
+          3: { halign: "right" },
+          4: { halign: "right" },
+        },
+        styles: baseStyles,
         body: data.reservations.map((r) => [
           `${formatDate(r.checkIn, locale)} - ${formatDate(r.checkOut, locale)}`,
           fmt(r.totalPrice),
@@ -338,91 +422,123 @@ export function PropertyReport({
         ]),
         foot: [
           [
-            "Subtotal:",
+            "Subtotal",
             fmt(data.settlement.totalAmount),
             fmt(data.settlement.totalAgency),
             fmt(data.settlement.totalPortal),
             fmt(data.settlement.totalOwnerPayout),
           ],
         ],
-        footStyles: {
-          fillColor: [243, 247, 244],
-          textColor: [20, 20, 28],
-          fontStyle: "bold",
-        },
+        footStyles: baseFootStyles,
       });
 
-      lastY = (doc as unknown as { lastAutoTable: { finalY: number } })
+      let lastY = (doc as unknown as { lastAutoTable: { finalY: number } })
         .lastAutoTable.finalY;
 
+      // ---- 6. Expenses ----
       if (data.expenses.length > 0) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(10);
-        doc.text("Expenses", 32, lastY + 22);
+        sectionTitle("Expenses", lastY + 26);
         autoTable(doc, {
-          startY: lastY + 30,
-          head: [["Date", "Type / Description", "Amount"]],
-          theme: "striped",
-          headStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28] },
-          styles: { fontSize: 8 },
+          startY: lastY + 32,
+          margin: { left: margin, right: margin },
+          tableWidth: innerW,
+          head: [["Date", "Type", "Description", "Amount"]],
+          theme: "grid",
+          headStyles: {
+            fillColor: [253, 242, 242],
+            textColor: [136, 19, 55],
+            fontStyle: "bold",
+          },
+          columnStyles: {
+            0: { halign: "left", cellWidth: 64 },
+            1: { halign: "left", cellWidth: 96 },
+            2: { halign: "left" },
+            3: { halign: "right", cellWidth: 72 },
+          },
+          styles: baseStyles,
           body: data.expenses.map((e) => [
             formatDate(e.date, locale),
-            `${EXPENSE_TYPE_LABELS[e.type] ?? e.type} / ${e.description}`,
+            EXPENSE_TYPE_LABELS[e.type] ?? e.type,
+            e.description,
             `- ${fmt(e.amount)}`,
           ]),
-          foot: [["Subtotal:", "", `- ${fmt(data.settlement.totalExpenses)}`]],
+          foot: [
+            ["Subtotal", "", "", `- ${fmt(data.settlement.totalExpenses)}`],
+          ],
           footStyles: {
-            fillColor: [243, 247, 244],
-            textColor: [20, 20, 28],
-            fontStyle: "bold",
+            ...baseFootStyles,
+            fillColor: [253, 242, 242],
+            textColor: [136, 19, 55],
           },
         });
         lastY = (doc as unknown as { lastAutoTable: { finalY: number } })
           .lastAutoTable.finalY;
       }
 
+      // ---- 7. Advances (payments on account) ----
       if (data.advances.length > 0) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(10);
-        doc.text("Payments on account", 32, lastY + 22);
+        sectionTitle("Payments on account", lastY + 26);
         autoTable(doc, {
-          startY: lastY + 30,
+          startY: lastY + 32,
+          margin: { left: margin, right: margin },
+          tableWidth: innerW,
           head: [["Date", "Concept", "Amount"]],
-          theme: "striped",
-          headStyles: { fillColor: [243, 247, 244], textColor: [20, 20, 28] },
-          styles: { fontSize: 8 },
+          theme: "grid",
+          headStyles: {
+            fillColor: [254, 247, 233],
+            textColor: [120, 53, 15],
+            fontStyle: "bold",
+          },
+          columnStyles: {
+            0: { halign: "left", cellWidth: 64 },
+            1: { halign: "left" },
+            2: { halign: "right", cellWidth: 72 },
+          },
+          styles: baseStyles,
           body: data.advances.map((a) => [
             formatDate(a.date, locale),
             a.concept,
             `- ${fmt(a.amount)}`,
           ]),
-          foot: [["Subtotal:", "", `- ${fmt(data.settlement.totalAdvances)}`]],
+          foot: [["Subtotal", "", `- ${fmt(data.settlement.totalAdvances)}`]],
           footStyles: {
-            fillColor: [243, 247, 244],
-            textColor: [20, 20, 28],
-            fontStyle: "bold",
+            ...baseFootStyles,
+            fillColor: [254, 247, 233],
+            textColor: [120, 53, 15],
           },
         });
         lastY = (doc as unknown as { lastAutoTable: { finalY: number } })
           .lastAutoTable.finalY;
       }
 
-      // === Settlement total ===
-      autoTable(doc, {
-        startY: lastY + 24,
-        theme: "grid",
-        styles: { fontSize: 9, fontStyle: "bold" },
-        body: [
-          [
-            `Total income: ${fmt(data.settlement.totalOwnerPayout)}`,
-            `Total deductions: ${fmt(-data.settlement.totalDeductions)}`,
-            `SETTLEMENT TOTAL: ${fmt(data.settlement.settlementTotal)}`,
-          ],
-        ],
-        bodyStyles: { fillColor: [243, 247, 244], textColor: [47, 90, 71] },
-      });
+      // ---- 8. Final settlement card ----
+      const totalY = lastY + 28;
+      const cardH = 64;
+      doc.setFillColor(47, 90, 71);
+      doc.roundedRect(margin, totalY, innerW, cardH, 10, 10, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(220, 232, 226);
+      doc.text("SETTLEMENT TOTAL", margin + 18, totalY + 22);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.setTextColor(255, 255, 255);
+      doc.text(
+        fmt(data.settlement.settlementTotal),
+        pageWidth - margin - 18,
+        totalY + 36,
+        { align: "right" },
+      );
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(220, 232, 226);
+      doc.text(
+        `Income ${fmt(data.settlement.totalOwnerPayout)}   ·   Deductions ${fmt(-data.settlement.totalDeductions)}`,
+        margin + 18,
+        totalY + cardH - 14,
+      );
 
-      // Footer
+      // ---- 9. Footer (page number only) ----
       const totalPages = (
         doc as unknown as { getNumberOfPages: () => number }
       ).getNumberOfPages();
@@ -430,16 +546,18 @@ export function PropertyReport({
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setFont("helvetica", "normal");
-        doc.setTextColor(120, 120, 130);
-        const footerBits = [
-          data.issuingCompany.email,
-          data.issuingCompany.phone,
-          data.issuingCompany.website?.replace(/^https?:\/\//, ""),
-        ]
-          .filter(Boolean)
-          .join("  ·  ");
-        doc.text(footerBits, 32, pageHeight - 18);
-        doc.text(`${i} / ${totalPages}`, pageWidth - 50, pageHeight - 18);
+        doc.setTextColor(150, 150, 160);
+        doc.text(
+          `${data.issuingCompany.brandName} · ${formatMonthLabel(month, locale)}`,
+          margin,
+          pageHeight - 22,
+        );
+        doc.text(
+          `${i} / ${totalPages}`,
+          pageWidth - margin,
+          pageHeight - 22,
+          { align: "right" },
+        );
       }
 
       const slug = scopeName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -448,8 +566,6 @@ export function PropertyReport({
       setBusy(null);
     }
   };
-
-  void brand;
 
   if (availableMonths.length === 0) {
     return (
