@@ -8,7 +8,11 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["node-ical"],
+  serverExternalPackages: [
+    "node-ical",
+    "mariadb",
+    "@prisma/adapter-mariadb",
+  ],
   turbopack: {
     root: projectRoot,
   },
