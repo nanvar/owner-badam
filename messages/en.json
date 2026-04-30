@@ -196,6 +196,23 @@
     "guest": "Guest",
     "selectMonth": "Select month",
     "downloadPdf": "Download PDF",
-    "noMonthsAvailable": "Reports become available once the first full month after your property was added has ended."
+    "noMonthsAvailable": "Reports become available once the first full month after your property was added has ended.",
+    "monthlySettlement": "Monthly settlement",
+    "paymentsByBooking": "Payments by booking",
+    "expensesSection": "Expenses",
+    "paymentsOnAccount": "Payments on account",
+    "stay": "Stay",
+    "agency": "Agency",
+    "portal": "Portal",
+    "toOwner": "To owner",
+    "subtotal": "Subtotal",
+    "totalIncome": "Total income",
+    "totalDeductions": "Total deductions",
+    "settlementTotal": "Settlement total",
+    "amount": "Amount",
+    "date": "Date",
+    "type": "Type",
+    "description": "Description",
+    "concept": "Concept"
   }
 }

@@ -60,6 +60,23 @@ export default async function OwnerReportsPage({
         pdf: t("downloadPdf"),
         selectMonth: t("selectMonth"),
         noMonthsAvailable: t("noMonthsAvailable"),
+        monthlySettlement: t("monthlySettlement"),
+        paymentsByBooking: t("paymentsByBooking"),
+        expensesSection: t("expensesSection"),
+        paymentsOnAccount: t("paymentsOnAccount"),
+        stay: t("stay"),
+        agency: t("agency"),
+        portal: t("portal"),
+        toOwner: t("toOwner"),
+        subtotal: t("subtotal"),
+        totalIncome: t("totalIncome"),
+        totalDeductions: t("totalDeductions"),
+        settlementTotal: t("settlementTotal"),
+        amount: t("amount"),
+        date: t("date"),
+        type: t("type"),
+        description: t("description"),
+        concept: t("concept"),
       }}
     />
   );

@@ -40,10 +40,21 @@ model Property {
   name          String
   address       String?   @db.Text
   airbnbIcalUrl String?   @db.Text
+  airbnbUrl     String?   @db.Text
   basePrice     Float     @default(0)
   cleaningFee   Float     @default(0)
   color         String    @default("#3b82f6")
   notes         String?   @db.Text
+  // Listing details — populated by the Airbnb crawler.
+  description   String?   @db.Text
+  bedrooms      Int?
+  bathrooms     Float?
+  beds          Int?
+  maxGuests     Int?
+  amenities     Json?
+  photos        Json?
+  crawledAt     DateTime?
+  crawlPayload  Json?
   ownerId       String
   owner         User      @relation("OwnerProperties", fields: [ownerId], references: [id], onDelete: Cascade)
   createdAt     DateTime  @default(now())

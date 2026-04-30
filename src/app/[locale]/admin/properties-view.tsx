@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState, useTransition } from "react";
 import {
   Plus,
@@ -11,6 +12,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Receipt,
+  ChevronRight,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,7 @@ type Property = {
   name: string;
   address: string | null;
   airbnbIcalUrl: string | null;
+  airbnbUrl: string | null;
   basePrice: number;
   cleaningFee: number;
   color: string;
@@ -261,6 +264,7 @@ function PropertyCard({
   const expenseTotal = expenses
     ? expenses.reduce((s, e) => s + e.amount, 0)
     : 0;
+  const detailHref = `/${locale}/admin/owners/${property.ownerId}/properties/${property.id}`;
   return (
     <div className="flex overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white shadow-sm transition-shadow hover:shadow-md">
       <span
@@ -269,9 +273,10 @@ function PropertyCard({
       />
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-bold tracking-tight">
+          <Link href={detailHref} className="group min-w-0 flex-1">
+            <div className="flex items-center gap-1 truncate text-sm font-bold tracking-tight group-hover:text-[var(--color-brand)]">
               {property.name}
+              <ChevronRight className="h-3.5 w-3.5 text-[var(--color-muted)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--color-brand)]" />
             </div>
             {property.address && (
               <div className="mt-0.5 truncate text-xs text-[var(--color-muted)]">
@@ -286,7 +291,7 @@ function PropertyCard({
                 </Badge>
               </div>
             )}
-          </div>
+          </Link>
           <div className="flex shrink-0 items-center gap-0.5">
             {!hideSync && (
               <Button
@@ -422,6 +427,19 @@ function PropertyEditor({
             type="url"
             defaultValue={property?.airbnbIcalUrl ?? ""}
             placeholder="https://www.airbnb.com/calendar/ical/..."
+          />
+        </Field>
+        <Field
+          label="Airbnb listing URL"
+          htmlFor="airbnbUrl"
+          hint="Public link to the Airbnb listing — used to import photos & details"
+        >
+          <Input
+            id="airbnbUrl"
+            name="airbnbUrl"
+            type="url"
+            defaultValue={property?.airbnbUrl ?? ""}
+            placeholder="https://www.airbnb.com/rooms/..."
           />
         </Field>
         {lockedOwnerId ? (

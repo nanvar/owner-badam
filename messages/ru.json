@@ -196,6 +196,23 @@
     "guest": "Гость",
     "selectMonth": "Выберите месяц",
     "downloadPdf": "Скачать PDF",
-    "noMonthsAvailable": "Отчёты появятся после завершения первого полного месяца с момента добавления объекта."
+    "noMonthsAvailable": "Отчёты появятся после завершения первого полного месяца с момента добавления объекта.",
+    "monthlySettlement": "Ежемесячный отчёт",
+    "paymentsByBooking": "Платежи по бронированиям",
+    "expensesSection": "Расходы",
+    "paymentsOnAccount": "Авансовые платежи",
+    "stay": "Проживание",
+    "agency": "Агентство",
+    "portal": "Портал",
+    "toOwner": "Владельцу",
+    "subtotal": "Промежуточный итог",
+    "totalIncome": "Общий доход",
+    "totalDeductions": "Общие удержания",
+    "settlementTotal": "Итог расчёта",
+    "amount": "Сумма",
+    "date": "Дата",
+    "type": "Тип",
+    "description": "Описание",
+    "concept": "Назначение"
   }
 }

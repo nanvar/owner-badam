@@ -26,6 +26,23 @@ export type Labels = {
   pdf: string;
   selectMonth: string;
   noMonthsAvailable: string;
+  monthlySettlement: string;
+  paymentsByBooking: string;
+  expensesSection: string;
+  paymentsOnAccount: string;
+  stay: string;
+  agency: string;
+  portal: string;
+  toOwner: string;
+  subtotal: string;
+  totalIncome: string;
+  totalDeductions: string;
+  settlementTotal: string;
+  amount: string;
+  date: string;
+  type: string;
+  description: string;
+  concept: string;
 };
 
 type Reservation = {
@@ -117,6 +134,45 @@ const EXPENSE_TYPE_LABELS: Record<string, string> = {
 
 function pad2(n: number) {
   return n < 10 ? `0${n}` : String(n);
+}
+
+// jsPDF's built-in helvetica only covers Latin. Roboto supports Latin + Cyrillic
+// + Latin Extended, which is what we need for Russian month names and any
+// non-ASCII content (guest names, addresses, expense descriptions).
+// DejaVu Sans is the most reliable Cyrillic-capable TTF for jsPDF — its CMap
+// is parsed cleanly by jsPDF's TrueType loader, unlike Roboto's modern static
+// variants which jsPDF can fail to map correctly even with Identity-H encoding.
+const FONT_REGULAR_URL =
+  "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.0/ttf/DejaVuSans.ttf";
+const FONT_BOLD_URL =
+  "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.0/ttf/DejaVuSans-Bold.ttf";
+
+let cachedFonts: { regular: string; bold: string } | null | undefined;
+
+async function loadFontBase64(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("font fetch failed");
+  const buf = new Uint8Array(await res.arrayBuffer());
+  const CHUNK = 0x8000;
+  let bin = "";
+  for (let i = 0; i < buf.length; i += CHUNK) {
+    bin += String.fromCharCode(...buf.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+}
+
+async function loadCyrillicFonts() {
+  if (cachedFonts !== undefined) return cachedFonts;
+  try {
+    const [regular, bold] = await Promise.all([
+      loadFontBase64(FONT_REGULAR_URL),
+      loadFontBase64(FONT_BOLD_URL),
+    ]);
+    cachedFonts = { regular, bold };
+  } catch {
+    cachedFonts = null;
+  }
+  return cachedFonts;
 }
 
 function monthKey(d: Date) {
@@ -226,6 +282,20 @@ export function PropertyReport({
       const innerW = pageWidth - margin * 2;
       const center = pageWidth / 2;
 
+      // Register a Cyrillic-capable font (Roboto). If CDN fetch fails, we
+      // fall back to helvetica which only renders Latin glyphs.
+      // Identity-H encoding is required so jsPDF uses the font's Unicode CMap
+      // instead of WinAnsi (which would strip the high byte of Cyrillic chars).
+      const fonts = await loadCyrillicFonts();
+      let FONT = "helvetica";
+      if (fonts) {
+        doc.addFileToVFS("DejaVuSans.ttf", fonts.regular);
+        doc.addFont("DejaVuSans.ttf", "DejaVuSans", "normal");
+        doc.addFileToVFS("DejaVuSans-Bold.ttf", fonts.bold);
+        doc.addFont("DejaVuSans-Bold.ttf", "DejaVuSans", "bold");
+        FONT = "DejaVuSans";
+      }
+
       // ---- 1. Use pre-fetched server-side base64 logo ----
       let logo: { dataUrl: string; format: string; w: number; h: number } | null =
         null;
@@ -271,7 +341,7 @@ export function PropertyReport({
         );
         y += logoTargetH + 22;
       } else {
-        doc.setFont("helvetica", "bold");
+        doc.setFont(FONT, "bold");
         doc.setFontSize(22);
         doc.setTextColor(47, 90, 71);
         doc.text(data.issuingCompany.brandName, center, y + 16, {
@@ -295,12 +365,12 @@ export function PropertyReport({
       ) => {
         const anchorX = align === "right" ? x + colW : x;
         let cy = blockTop;
-        doc.setFont("helvetica", "bold");
+        doc.setFont(FONT, "bold");
         doc.setFontSize(11);
         doc.setTextColor(20, 20, 28);
         doc.text(title, anchorX, cy, { align });
         cy += 14;
-        doc.setFont("helvetica", "normal");
+        doc.setFont(FONT, "normal");
         doc.setFontSize(9);
         doc.setTextColor(100, 100, 110);
         for (const line of lines) {
@@ -348,14 +418,14 @@ export function PropertyReport({
       doc.line(margin, y, pageWidth - margin, y);
       y += 22;
 
-      doc.setFont("helvetica", "bold");
+      doc.setFont(FONT, "bold");
       doc.setFontSize(16);
       doc.setTextColor(20, 20, 28);
-      doc.text(`${scopeName} - Monthly settlement`, center, y, {
+      doc.text(`${scopeName} - ${labels.monthlySettlement}`, center, y, {
         align: "center",
       });
       y += 16;
-      doc.setFont("helvetica", "normal");
+      doc.setFont(FONT, "normal");
       doc.setFontSize(11);
       doc.setTextColor(110, 110, 120);
       doc.text(formatMonthLabel(month, locale), center, y, {
@@ -365,6 +435,7 @@ export function PropertyReport({
 
       // ---- Common table styling ----
       const baseStyles = {
+        font: FONT,
         fontSize: 9,
         cellPadding: 6,
         lineColor: [200, 208, 204] as [number, number, number],
@@ -372,13 +443,14 @@ export function PropertyReport({
         valign: "middle" as const,
       };
       const baseFootStyles = {
+        font: FONT,
         fillColor: [248, 250, 249] as [number, number, number],
         textColor: [20, 20, 28] as [number, number, number],
         fontStyle: "bold" as const,
       };
 
       const sectionTitle = (text: string, atY: number) => {
-        doc.setFont("helvetica", "bold");
+        doc.setFont(FONT, "bold");
         doc.setFontSize(11);
         doc.setTextColor(47, 90, 71);
         doc.text(text, margin, atY);
@@ -389,18 +461,18 @@ export function PropertyReport({
         content,
         styles: { halign: "right" as const },
       });
-      sectionTitle("Payments by booking", y);
+      sectionTitle(labels.paymentsByBooking, y);
       autoTable(doc, {
         startY: y + 8,
         margin: { left: margin, right: margin },
         tableWidth: innerW,
         head: [
           [
-            "Stay period",
-            right("Amount"),
-            right("Agency"),
-            right("Portal"),
-            right("To owner"),
+            labels.stay,
+            right(labels.amount),
+            right(labels.agency),
+            right(labels.portal),
+            right(labels.toOwner),
           ],
         ],
         theme: "grid",
@@ -426,7 +498,7 @@ export function PropertyReport({
         ]),
         foot: [
           [
-            "Subtotal",
+            labels.subtotal,
             right(fmt(data.settlement.totalAmount)),
             right(fmt(data.settlement.totalAgency)),
             right(fmt(data.settlement.totalPortal)),
@@ -441,12 +513,19 @@ export function PropertyReport({
 
       // ---- 6. Expenses ----
       if (data.expenses.length > 0) {
-        sectionTitle("Expenses", lastY + 26);
+        sectionTitle(labels.expensesSection, lastY + 26);
         autoTable(doc, {
           startY: lastY + 32,
           margin: { left: margin, right: margin },
           tableWidth: innerW,
-          head: [["Date", "Type", "Description", right("Amount")]],
+          head: [
+            [
+              labels.date,
+              labels.type,
+              labels.description,
+              right(labels.amount),
+            ],
+          ],
           theme: "grid",
           headStyles: {
             fillColor: [253, 242, 242],
@@ -468,7 +547,7 @@ export function PropertyReport({
           ]),
           foot: [
             [
-              "Subtotal",
+              labels.subtotal,
               "",
               "",
               right(`- ${fmt(data.settlement.totalExpenses)}`),
@@ -486,12 +565,12 @@ export function PropertyReport({
 
       // ---- 7. Advances (payments on account) ----
       if (data.advances.length > 0) {
-        sectionTitle("Payments on account", lastY + 26);
+        sectionTitle(labels.paymentsOnAccount, lastY + 26);
         autoTable(doc, {
           startY: lastY + 32,
           margin: { left: margin, right: margin },
           tableWidth: innerW,
-          head: [["Date", "Concept", right("Amount")]],
+          head: [[labels.date, labels.concept, right(labels.amount)]],
           theme: "grid",
           headStyles: {
             fillColor: [254, 247, 233],
@@ -511,7 +590,7 @@ export function PropertyReport({
           ]),
           foot: [
             [
-              "Subtotal",
+              labels.subtotal,
               "",
               right(`- ${fmt(data.settlement.totalAdvances)}`),
             ],
@@ -531,11 +610,11 @@ export function PropertyReport({
       const cardH = 64;
       doc.setFillColor(47, 90, 71);
       doc.roundedRect(margin, totalY, innerW, cardH, 10, 10, "F");
-      doc.setFont("helvetica", "bold");
+      doc.setFont(FONT, "bold");
       doc.setFontSize(8);
       doc.setTextColor(220, 232, 226);
-      doc.text("SETTLEMENT TOTAL", margin + 18, totalY + 22);
-      doc.setFont("helvetica", "bold");
+      doc.text(labels.settlementTotal.toUpperCase(), margin + 18, totalY + 22);
+      doc.setFont(FONT, "bold");
       doc.setFontSize(22);
       doc.setTextColor(255, 255, 255);
       doc.text(
@@ -544,11 +623,11 @@ export function PropertyReport({
         totalY + 36,
         { align: "right" },
       );
-      doc.setFont("helvetica", "normal");
+      doc.setFont(FONT, "normal");
       doc.setFontSize(8);
       doc.setTextColor(220, 232, 226);
       doc.text(
-        `Income ${fmt(data.settlement.totalOwnerPayout)}   ·   Deductions ${fmt(-data.settlement.totalDeductions)}`,
+        `${labels.totalIncome} ${fmt(data.settlement.totalOwnerPayout)}   ·   ${labels.totalDeductions} ${fmt(-data.settlement.totalDeductions)}`,
         margin + 18,
         totalY + cardH - 14,
       );
@@ -560,7 +639,7 @@ export function PropertyReport({
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
         doc.setFontSize(8);
-        doc.setFont("helvetica", "normal");
+        doc.setFont(FONT, "normal");
         doc.setTextColor(150, 150, 160);
         doc.text(
           `${data.issuingCompany.brandName} · ${formatMonthLabel(month, locale)}`,
@@ -634,7 +713,7 @@ export function PropertyReport({
 
           {/* Section: Bookings */}
           <Section
-            title="Payments by booking"
+            title={labels.paymentsByBooking}
             icon={<CalendarCheck className="h-4 w-4 text-[var(--color-brand)]" />}
             count={data.reservations.length}
           >
@@ -645,15 +724,17 @@ export function PropertyReport({
                 <table className="w-full text-xs">
                   <thead className="bg-[var(--color-surface-2)] text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
                     <tr>
-                      <th className="px-3 py-2 text-left font-semibold">Stay</th>
-                      <th className="px-3 py-2 text-right font-semibold">
-                        Agency
+                      <th className="px-3 py-2 text-left font-semibold">
+                        {labels.stay}
                       </th>
                       <th className="px-3 py-2 text-right font-semibold">
-                        Portal
+                        {labels.agency}
                       </th>
                       <th className="px-3 py-2 text-right font-semibold">
-                        To owner
+                        {labels.portal}
+                      </th>
+                      <th className="px-3 py-2 text-right font-semibold">
+                        {labels.toOwner}
                       </th>
                     </tr>
                   </thead>
@@ -685,7 +766,7 @@ export function PropertyReport({
                     ))}
                     <tr className="border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/60">
                       <td className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider">
-                        Subtotal
+                        {labels.subtotal}
                       </td>
                       <td className="px-3 py-2 text-right text-xs font-bold tabular-nums text-[var(--color-muted)]">
                         {fmt(data.settlement.totalAgency)}
@@ -705,7 +786,7 @@ export function PropertyReport({
 
           {data.expenses.length > 0 && (
             <Section
-              title="Expenses"
+              title={labels.expensesSection}
               icon={<Receipt className="h-4 w-4 text-rose-500" />}
               count={data.expenses.length}
             >
@@ -738,7 +819,7 @@ export function PropertyReport({
                         colSpan={2}
                         className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider"
                       >
-                        Subtotal
+                        {labels.subtotal}
                       </td>
                       <td className="px-3 py-2 text-right text-xs font-bold tabular-nums text-rose-600">
                         − {fmt(data.settlement.totalExpenses)}
@@ -752,7 +833,7 @@ export function PropertyReport({
 
           {data.advances.length > 0 && (
             <Section
-              title="Payments on account"
+              title={labels.paymentsOnAccount}
               icon={<Wallet className="h-4 w-4 text-amber-500" />}
               count={data.advances.length}
             >
@@ -778,7 +859,7 @@ export function PropertyReport({
                         colSpan={2}
                         className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider"
                       >
-                        Subtotal
+                        {labels.subtotal}
                       </td>
                       <td className="px-3 py-2 text-right text-xs font-bold tabular-nums text-rose-600">
                         − {fmt(data.settlement.totalAdvances)}
@@ -789,6 +870,24 @@ export function PropertyReport({
               </div>
             </Section>
           )}
+
+          {/* Settlement total summary */}
+          <div
+            className="mt-5 mb-12 flex items-center justify-between rounded-3xl border border-[var(--color-brand)]/20 px-5 py-4 sm:px-6 sm:py-5"
+            style={{
+              background:
+                "linear-gradient(135deg, #f3f7f4 0%, #e8efe9 60%, #dde7df 100%)",
+              boxShadow:
+                "0 12px 24px -16px rgba(47,90,71,0.18), 0 3px 10px -6px rgba(47,90,71,0.10)",
+            }}
+          >
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-brand)]">
+              {labels.settlementTotal}
+            </span>
+            <span className="text-2xl font-bold tracking-tight tabular-nums text-[var(--color-foreground)]">
+              {fmt(data.settlement.settlementTotal)}
+            </span>
+          </div>
 
           {/* Single PDF download */}
           <div className="sticky bottom-0 -mx-5 -mb-5 mt-5 border-t border-[var(--color-border)] bg-white/95 p-4 backdrop-blur-md">

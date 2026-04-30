@@ -121,6 +121,7 @@ export default async function OwnerDetailPage({
             name: p.name,
             address: p.address,
             airbnbIcalUrl: p.airbnbIcalUrl,
+            airbnbUrl: p.airbnbUrl,
             basePrice: p.basePrice,
             cleaningFee: p.cleaningFee,
             color: p.color,
