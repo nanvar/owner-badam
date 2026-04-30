@@ -55,6 +55,7 @@ type Property = {
   ownerName: string;
   reservationCount: number;
   lastSyncedAt: string | null;
+  createdAt?: string;
 };
 
 type Owner = { id: string; name: string | null; email: string };
@@ -480,6 +481,21 @@ function PropertyEditor({
             />
           </Field>
         </div>
+        <Field
+          label="Added on"
+          htmlFor="createdAt"
+          hint="Drives the months available in the owner's reports"
+        >
+          <Input
+            id="createdAt"
+            name="createdAt"
+            type="date"
+            defaultValue={
+              property?.createdAt ? property.createdAt.slice(0, 10) : ""
+            }
+            max={new Date().toISOString().slice(0, 10)}
+          />
+        </Field>
         <Field label={labels.notes} htmlFor="notes">
           <Textarea
             id="notes"

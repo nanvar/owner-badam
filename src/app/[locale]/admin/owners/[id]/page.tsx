@@ -130,6 +130,7 @@ export default async function OwnerDetailPage({
             ownerName: owner.name ?? owner.email,
             reservationCount: p._count.reservations,
             lastSyncedAt: p.lastSyncedAt ? p.lastSyncedAt.toISOString() : null,
+            createdAt: p.createdAt.toISOString(),
           }))}
           owners={[{ id: owner.id, name: owner.name, email: owner.email }]}
           expenses={expenses.map((e) => ({

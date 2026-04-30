@@ -14,6 +14,9 @@ const PropertySchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#4f8a6f"),
   ownerId: z.string().min(1),
   notes: z.string().max(1000).optional().or(z.literal("")),
+  // Manual override of the property's "added on" date — drives the months
+  // that show up in the owner's reports.
+  createdAt: z.string().optional().or(z.literal("")),
 });
 
 export type PropertyState =
@@ -35,11 +38,26 @@ export async function upsertPropertyAction(
     color: formData.get("color") || "#4f8a6f",
     ownerId: formData.get("ownerId"),
     notes: formData.get("notes") || "",
+    createdAt: formData.get("createdAt") || "",
   });
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
   const data = parsed.data;
+  // Parse the manual createdAt as midnight UTC so it lands on the intended
+  // calendar day regardless of server timezone. Falls back to undefined so
+  // Prisma keeps the existing value (on update) or applies its default (on
+  // create).
+  let manualCreatedAt: Date | undefined;
+  if (data.createdAt) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(data.createdAt);
+    if (m) {
+      const d = new Date(
+        Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])),
+      );
+      if (!Number.isNaN(d.getTime())) manualCreatedAt = d;
+    }
+  }
   const upserted = data.id
     ? await prisma.property.update({
         where: { id: data.id },
@@ -51,6 +69,7 @@ export async function upsertPropertyAction(
           color: data.color,
           notes: data.notes || null,
           ownerId: data.ownerId,
+          ...(manualCreatedAt ? { createdAt: manualCreatedAt } : {}),
         },
       })
     : await prisma.property.create({
@@ -62,6 +81,7 @@ export async function upsertPropertyAction(
           color: data.color,
           notes: data.notes || null,
           ownerId: data.ownerId,
+          ...(manualCreatedAt ? { createdAt: manualCreatedAt } : {}),
         },
       });
   revalidatePath("/", "layout");
