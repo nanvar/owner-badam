@@ -12,10 +12,12 @@ import {
   Phone,
   MessageCircle,
   Info,
+  KeyRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet } from "@/components/ui/sheet";
 import { logoutAction } from "@/app/actions/auth";
+import { ChangePasswordForm } from "./change-password-form";
 import type { Locale } from "@/i18n/config";
 
 type NavItem = {
@@ -53,6 +55,7 @@ export function AppShell({
   const pathname = usePathname();
   const [pending, start] = useTransition();
   const [contactOpen, setContactOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
 
   const hasContacts = !!(
     brand &&
@@ -142,10 +145,25 @@ export function AppShell({
                 </div>
               </details>
             </div>
-            <div className="hidden flex-col text-right text-xs leading-tight sm:flex">
+            <button
+              type="button"
+              onClick={() => setPasswordOpen(true)}
+              className="hidden flex-col text-right text-xs leading-tight transition-colors hover:text-[var(--color-brand)] sm:flex"
+              aria-label="Change password"
+              title="Change password"
+            >
               <span className="font-semibold">{user.name ?? user.email}</span>
               <span className="text-[var(--color-muted)]">{user.email}</span>
-            </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPasswordOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-muted)] transition-colors hover:border-[var(--color-brand)] hover:bg-[var(--color-brand-soft)] hover:text-[var(--color-brand)]"
+              aria-label="Change password"
+              title="Change password"
+            >
+              <KeyRound className="h-4 w-4" />
+            </button>
             <form action={() => start(() => logoutAction())}>
               <button
                 type="submit"
@@ -274,6 +292,16 @@ export function AppShell({
           <ContactList brand={brand} />
         </Sheet>
       )}
+
+      <Sheet
+        open={passwordOpen}
+        onClose={() => setPasswordOpen(false)}
+        side="bottom"
+        title="Change password"
+        description={user.email}
+      >
+        <ChangePasswordForm onDone={() => setPasswordOpen(false)} />
+      </Sheet>
     </div>
   );
 }

@@ -182,3 +182,17 @@ export async function deleteOwnerAction(id: string) {
   await prisma.user.delete({ where: { id } });
   revalidatePath("/", "layout");
 }
+
+export async function setUserBlockedAction(id: string, blocked: boolean) {
+  const session = await requireRole("ADMIN");
+  if (session.userId === id) {
+    throw new Error("Cannot block the currently signed-in user");
+  }
+  const target = await prisma.user.findUnique({
+    where: { id },
+    select: { role: true },
+  });
+  if (!target) throw new Error("User not found");
+  await prisma.user.update({ where: { id }, data: { blocked } });
+  revalidatePath("/", "layout");
+}

@@ -1,7 +1,16 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { Plus, User, Building2, Edit3, Trash2, ChevronRight } from "lucide-react";
+import {
+  Plus,
+  User,
+  Building2,
+  Edit3,
+  Trash2,
+  ChevronRight,
+  Ban,
+  Unlock,
+} from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -12,7 +21,10 @@ import {
   createOwnerAction,
   updateOwnerAction,
   deleteOwnerAction,
+  setUserBlockedAction,
 } from "@/app/actions/properties";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 type OwnerRow = {
   id: string;
@@ -21,6 +33,7 @@ type OwnerRow = {
   phone: string | null;
   taxId: string | null;
   address: string | null;
+  blocked: boolean;
   createdAt: string;
   propertyCount: number;
 };
@@ -47,6 +60,8 @@ export function OwnersView({
   >(updateOwnerAction, undefined);
 
   const [deletePending, startDelete] = useTransition();
+  const [blockPending, startBlock] = useTransition();
+  const [pendingBlockId, setPendingBlockId] = useState<string | null>(null);
   const router = useRouter();
   const params = useParams();
   const locale = (params?.locale as string) ?? "en";
@@ -98,10 +113,25 @@ export function OwnersView({
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
+                        <span
+                          className={cn(
+                            "grid h-9 w-9 shrink-0 place-items-center rounded-xl",
+                            o.blocked
+                              ? "bg-rose-500/10 text-rose-600"
+                              : "bg-[var(--color-brand-soft)] text-[var(--color-brand)]",
+                          )}
+                        >
                           <User className="h-4 w-4" />
                         </span>
-                        <span className="font-semibold">{o.name ?? "—"}</span>
+                        <div>
+                          <div className="font-semibold">{o.name ?? "—"}</div>
+                          {o.blocked && (
+                            <Badge tone="danger" className="mt-1">
+                              <Ban className="h-3 w-3" />
+                              Blocked
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-[var(--color-muted)]">{o.email}</td>
@@ -110,6 +140,30 @@ export function OwnersView({
                     </td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => {
+                            setPendingBlockId(o.id);
+                            startBlock(async () => {
+                              await setUserBlockedAction(o.id, !o.blocked);
+                              setPendingBlockId(null);
+                            });
+                          }}
+                          disabled={blockPending && pendingBlockId === o.id}
+                          aria-label={o.blocked ? "Unblock" : "Block"}
+                          title={o.blocked ? "Unblock" : "Block"}
+                          className={cn(
+                            "rounded-lg p-1.5 transition-colors disabled:opacity-50",
+                            o.blocked
+                              ? "text-emerald-600 hover:bg-emerald-500/10"
+                              : "text-[var(--color-muted)] hover:bg-amber-500/10 hover:text-amber-600",
+                          )}
+                        >
+                          {o.blocked ? (
+                            <Unlock className="h-4 w-4" />
+                          ) : (
+                            <Ban className="h-4 w-4" />
+                          )}
+                        </button>
                         <button
                           onClick={() => setEditing(o)}
                           aria-label="Edit"

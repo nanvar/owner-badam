@@ -22,6 +22,7 @@ export default async function OwnersPage({
       phone: true,
       taxId: true,
       address: true,
+      blocked: true,
       createdAt: true,
       _count: { select: { properties: true } },
     },
@@ -40,6 +41,7 @@ export default async function OwnersPage({
         phone: o.phone,
         taxId: o.taxId,
         address: o.address,
+        blocked: o.blocked,
         createdAt: o.createdAt.toISOString(),
         propertyCount: o._count.properties,
       }))}

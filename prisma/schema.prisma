@@ -25,6 +25,7 @@ model User {
   password  String
   role      Role     @default(OWNER)
   locale    String   @default("en")
+  blocked   Boolean  @default(false)
   // Owner profile (used as Recipient in settlements)
   phone     String?
   taxId     String?  // e.g. TC765777558

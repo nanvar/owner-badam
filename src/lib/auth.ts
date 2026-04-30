@@ -70,6 +70,9 @@ export async function login(email: string, password: string) {
   if (!user) return { ok: false, error: "Invalid credentials" } as const;
   const valid = await verifyPassword(password, user.password);
   if (!valid) return { ok: false, error: "Invalid credentials" } as const;
+  if (user.blocked) {
+    return { ok: false, error: "This account is blocked." } as const;
+  }
   const payload: SessionPayload = {
     userId: user.id,
     email: user.email,
