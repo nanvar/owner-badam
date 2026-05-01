@@ -66,6 +66,8 @@
     "@next/swc-linux-x64-gnu": "16.2.4",
     "@next/swc-linux-x64-musl": "16.2.4",
     "@swc/core-linux-x64-gnu": "*",
-    "@swc/core-linux-x64-musl": "*"
+    "@swc/core-linux-x64-musl": "*",
+    "lightningcss-linux-x64-gnu": "*",
+    "lightningcss-linux-x64-musl": "*"
   }
 }
