@@ -1,4 +1,9 @@
-import nodeIcal from "node-ical";
+// Type-only import — erased at compile time, so node-ical isn't pulled into
+// the module graph at startup. We dynamic-import the runtime module only
+// inside `syncProperty`, which means the only request paths that load
+// node-ical (and its transitive `temporal-polyfill`) are the explicit
+// "Sync now" actions. Every other page renders without touching this dep.
+import type { VEvent } from "node-ical";
 import { prisma } from "./prisma";
 
 export type SyncOutcome = {
@@ -52,9 +57,10 @@ export async function syncProperty(propertyId: string): Promise<SyncOutcome> {
   };
 
   try {
+    const nodeIcal = (await import("node-ical")).default;
     const events = await nodeIcal.async.fromURL(property.airbnbIcalUrl);
     for (const key of Object.keys(events)) {
-      const ev = events[key] as nodeIcal.VEvent;
+      const ev = events[key] as VEvent;
       if (!ev || ev.type !== "VEVENT") continue;
       if (!ev.start || !ev.end) continue;
       const checkIn = new Date(ev.start as Date);
