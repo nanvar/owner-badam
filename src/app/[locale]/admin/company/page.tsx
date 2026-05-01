@@ -32,6 +32,7 @@ type PropertyAgg = {
   portalCommissions: number;
   ownerPayout: number;
   upcomingAgency: number;
+  upcomingPayout: number;
   upcomingBookings: number;
 };
 
@@ -111,6 +112,7 @@ export default async function SuperAdminDashboard({
         portalCommissions: a?._sum.portalCommission ?? 0,
         ownerPayout: a?._sum.payout ?? 0,
         upcomingAgency: u?._sum.agencyCommission ?? 0,
+        upcomingPayout: u?._sum.payout ?? 0,
         upcomingBookings: u?._count._all ?? 0,
       };
     })
@@ -141,8 +143,15 @@ export default async function SuperAdminDashboard({
     (s, p) => s + p.upcomingBookings,
     0,
   );
+  const totalUpcomingPayout = propertyTable.reduce(
+    (s, p) => s + p.upcomingPayout,
+    0,
+  );
   const distinctOwners = new Set(propertyTable.map((p) => p.ownerName)).size;
-  const companyNet = totalAgency - totalCompanyExpenses;
+  // Profit and total payout-to-owners include upcoming so they reflect the
+  // committed (realized + pipeline) view, not just realized.
+  const companyNet = totalAgency + totalUpcomingAgency - totalCompanyExpenses;
+  const totalOwnerPayoutAll = totalOwnerPayout + totalUpcomingPayout;
 
   // === Chart data ===
   const topProperties: PropertyBar[] = propertyTable.slice(0, 10).map((p) => ({
@@ -245,13 +254,13 @@ export default async function SuperAdminDashboard({
         <KpiTile
           label="Company profit"
           value={formatCurrency(companyNet, "AED", loc)}
-          hint="revenue − expenses"
+          hint="revenue + upcoming − expenses"
           accent={companyNet >= 0 ? "emerald" : "rose"}
           icon={<Wallet className="h-4 w-4" />}
         />
         <KpiTile
           label="Paid to owners"
-          value={formatCurrency(totalOwnerPayout, "AED", loc)}
+          value={formatCurrency(totalOwnerPayoutAll, "AED", loc)}
           hint={`across ${distinctOwners} owner${distinctOwners === 1 ? "" : "s"}`}
           accent="indigo"
           icon={<Users className="h-4 w-4" />}

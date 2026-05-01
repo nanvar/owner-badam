@@ -61,6 +61,24 @@ export function AppShell({
   const [contactOpen, setContactOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
 
+  // Active nav item: prefix-match on the href (so /admin/company/expenses
+  // highlights "Company expenses"). When a more-specific sibling also
+  // matches (e.g. /admin/company is the parent of /admin/company/expenses),
+  // the parent yields to the child so only one item lights up.
+  const rootHref = `/${locale}/${variant}`;
+  const isActive = (href: string) => {
+    if (href === rootHref) return pathname === href;
+    const selfMatch = pathname === href || pathname.startsWith(href + "/");
+    if (!selfMatch) return false;
+    const moreSpecific = nav.some(
+      (other) =>
+        other.href !== href &&
+        other.href.startsWith(href + "/") &&
+        (pathname === other.href || pathname.startsWith(other.href + "/")),
+    );
+    return !moreSpecific;
+  };
+
   const hasContacts = !!(
     brand &&
     (brand.email || brand.phone || brand.whatsapp || brand.website || brand.address)
@@ -103,12 +121,7 @@ export function AppShell({
           </Link>
           <nav className="hidden items-center justify-center gap-1 md:flex">
             {nav.map((item) => {
-              const isRoot =
-                item.href === `/${locale}/${variant}`;
-              const active = isRoot
-                ? pathname === item.href
-                : pathname === item.href ||
-                  pathname.startsWith(item.href + "/");
+              const active = isActive(item.href);
               return (
                 <Link
                   key={item.href}
@@ -198,11 +211,7 @@ export function AppShell({
       >
         <div className="mx-auto flex max-w-md items-stretch">
           {nav.map((item) => {
-            const isRoot = item.href === `/${locale}/${variant}`;
-            const active = isRoot
-              ? pathname === item.href
-              : pathname === item.href ||
-                pathname.startsWith(item.href + "/");
+            const active = isActive(item.href);
             return (
               <Link
                 key={item.href}
