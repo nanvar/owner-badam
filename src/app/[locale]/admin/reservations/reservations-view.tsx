@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState, useTransition } from "react";
+import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import {
   CheckCircle2,
   AlertCircle,
@@ -273,9 +273,11 @@ function ReservationEditor({
     reservation?.portalCommission ?? 0,
   );
 
-  if (state?.status === "ok" && reservation) {
-    queueMicrotask(onClose);
-  }
+  useEffect(() => {
+    if (state?.status === "ok") {
+      onClose();
+    }
+  }, [state, onClose]);
 
   if (!reservation) {
     return null;
