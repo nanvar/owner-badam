@@ -8,6 +8,7 @@ import { StatCard } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
 import { formatCurrency } from "@/lib/utils";
 import { PropertiesView } from "../../properties-view";
+import { OwnerPaymentsSection } from "./owner-payments-section";
 
 export default async function OwnerDetailPage({
   params,
@@ -35,10 +36,17 @@ export default async function OwnerDetailPage({
   if (!owner || owner.role !== "OWNER") notFound();
 
   const propertyIds = owner.properties.map((p) => p.id);
-  const expenses = await prisma.expense.findMany({
-    where: { propertyId: { in: propertyIds } },
-    orderBy: { date: "desc" },
-  });
+  const [expenses, payments] = await Promise.all([
+    prisma.expense.findMany({
+      where: { propertyId: { in: propertyIds } },
+      orderBy: { date: "desc" },
+    }),
+    prisma.ownerPayment.findMany({
+      where: { ownerId: owner.id },
+      include: { recordedBy: { select: { name: true, email: true } } },
+      orderBy: { date: "desc" },
+    }),
+  ]);
 
   const tCommon = await getTranslations({ locale, namespace: "common" });
   const tAdmin = await getTranslations({ locale, namespace: "admin" });
@@ -181,6 +189,23 @@ export default async function OwnerDetailPage({
           }}
         />
       </div>
+
+      <OwnerPaymentsSection
+        ownerId={owner.id}
+        ownerName={owner.name ?? owner.email}
+        locale={loc}
+        payments={payments.map((p) => ({
+          id: p.id,
+          date: p.date.toISOString(),
+          amount: p.amount,
+          method: p.method,
+          reference: p.reference,
+          notes: p.notes,
+          recordedByName:
+            p.recordedBy?.name ?? p.recordedBy?.email ?? null,
+          createdAt: p.createdAt.toISOString(),
+        }))}
+      />
     </div>
   );
 }

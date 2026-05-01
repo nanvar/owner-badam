@@ -6,7 +6,6 @@ import {
   Receipt,
   Users,
   TrendingUp,
-  Clock,
   CalendarDays,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
@@ -20,6 +19,7 @@ import {
   type PropertyBar,
   type SplitSlice,
 } from "./dashboard-charts";
+import { UpcomingTile } from "./upcoming-tile";
 
 type PropertyAgg = {
   id: string;
@@ -125,26 +125,41 @@ export default async function SuperAdminDashboard({
   const totalCompanyExpenses = companyExpenseAgg._sum.amount ?? 0;
   const companyExpenseCount = companyExpenseAgg._count._all;
 
+  // Owner settlement total — what the company has actually disbursed,
+  // not the accrued reservation `payout` figure.
+  const ownerPaymentAgg = await prisma.ownerPayment.aggregate({
+    _sum: { amount: true },
+    _count: { _all: true },
+  });
+  const totalOwnerPayments = ownerPaymentAgg._sum.amount ?? 0;
+  const ownerPaymentCount = ownerPaymentAgg._count._all;
+
+  // Active reservations: today falls inside checkIn..checkOut.
+  const today = new Date();
+  const [allReservationsCount, activeReservationsCount] = await Promise.all([
+    prisma.reservation.count(),
+    prisma.reservation.count({
+      where: {
+        checkIn: { lte: today },
+        checkOut: { gt: today },
+      },
+    }),
+  ]);
+
   // KPIs
   const totalAgency = propertyTable.reduce((s, p) => s + p.agencyEarnings, 0);
   const totalPortal = propertyTable.reduce((s, p) => s + p.portalCommissions, 0);
-  const totalOwnerPayout = propertyTable.reduce(
-    (s, p) => s + p.ownerPayout,
-    0,
-  );
   const totalUpcomingAgency = propertyTable.reduce(
     (s, p) => s + p.upcomingAgency,
     0,
   );
-  const totalBookings = propertyTable.reduce((s, p) => s + p.bookings, 0);
   const totalUpcomingBookings = propertyTable.reduce(
     (s, p) => s + p.upcomingBookings,
     0,
   );
   const distinctOwners = new Set(propertyTable.map((p) => p.ownerName)).size;
-  // Revenue tile shows realized + upcoming (committed view). Profit and
-  // payout tiles use realized only — that's the money already in hand.
-  const totalAgencyAll = totalAgency + totalUpcomingAgency;
+  // Profit and revenue tiles use realized only. Upcoming is split out
+  // into its own tile (clickable for the per-property breakdown).
   const companyNet = totalAgency - totalCompanyExpenses;
 
   // === Chart data ===
@@ -156,7 +171,7 @@ export default async function SuperAdminDashboard({
 
   const split: SplitSlice[] = [
     { label: "Company (agency)", value: totalAgency, color: "#4f8a6f" },
-    { label: "Owner payout", value: totalOwnerPayout, color: "#6366f1" },
+    { label: "Owner payments", value: totalOwnerPayments, color: "#6366f1" },
     { label: "Portal", value: totalPortal, color: "#f59e0b" },
   ];
 
@@ -213,30 +228,29 @@ export default async function SuperAdminDashboard({
 
   return (
     <div>
-      <PageHeader
-        title="Company dashboard"
-        subtitle={
-          <span className="text-sm text-[var(--color-muted)]">
-            All-time aggregates across every property and owner.
-          </span>
-        }
-      />
+      <PageHeader title="Dashboard" />
 
       {/* KPI grid */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
         <KpiTile
           label="Company revenue"
-          value={formatCurrency(totalAgencyAll, "AED", loc)}
-          hint={`incl. upcoming · portal ${formatCurrency(totalPortal, "AED", loc)}`}
+          value={formatCurrency(totalAgency, "AED", loc)}
+          hint={`portal ${formatCurrency(totalPortal, "AED", loc)}`}
           accent="emerald"
           icon={<TrendingUp className="h-4 w-4" />}
         />
-        <KpiTile
-          label="Upcoming amount"
-          value={formatCurrency(totalUpcomingAgency, "AED", loc)}
-          hint={`${totalUpcomingBookings} pipeline`}
-          accent="sky"
-          icon={<Clock className="h-4 w-4" />}
+        <UpcomingTile
+          locale={loc}
+          totalAmount={totalUpcomingAgency}
+          totalBookings={totalUpcomingBookings}
+          rows={propertyTable.map((p) => ({
+            id: p.id,
+            name: p.name,
+            color: p.color,
+            ownerName: p.ownerName,
+            upcomingBookings: p.upcomingBookings,
+            upcomingAgency: p.upcomingAgency,
+          }))}
         />
         <KpiTile
           label="Company expenses"
@@ -253,16 +267,16 @@ export default async function SuperAdminDashboard({
           icon={<Wallet className="h-4 w-4" />}
         />
         <KpiTile
-          label="Paid to owners"
-          value={formatCurrency(totalOwnerPayout, "AED", loc)}
-          hint={`across ${distinctOwners} owner${distinctOwners === 1 ? "" : "s"}`}
+          label="Owners amount"
+          value={formatCurrency(totalOwnerPayments, "AED", loc)}
+          hint={`${ownerPaymentCount} payment${ownerPaymentCount === 1 ? "" : "s"} · ${distinctOwners} owner${distinctOwners === 1 ? "" : "s"}`}
           accent="indigo"
           icon={<Users className="h-4 w-4" />}
         />
         <KpiTile
           label="Reservations"
-          value={String(totalBookings)}
-          hint={`${propertyTable.length} properties`}
+          value={`${allReservationsCount} / ${activeReservationsCount}`}
+          hint="all / active today"
           accent="amber"
           icon={<CalendarDays className="h-4 w-4" />}
         />
@@ -281,10 +295,7 @@ export default async function SuperAdminDashboard({
                 <th className="px-4 py-3 text-left font-semibold">Owner</th>
                 <th className="px-4 py-3 text-right font-semibold">Bookings</th>
                 <th className="px-4 py-3 text-right font-semibold">Revenue</th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Company (agency)
-                </th>
-                <th className="px-4 py-3 text-right font-semibold">Upcoming</th>
+                <th className="px-4 py-3 text-right font-semibold">Company</th>
                 <th className="px-4 py-3 text-right font-semibold">Portal</th>
                 <th className="px-4 py-3 text-right font-semibold">
                   Owner payout
@@ -295,7 +306,7 @@ export default async function SuperAdminDashboard({
               {propertyTable.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={7}
                     className="px-4 py-12 text-center text-sm text-[var(--color-muted)]"
                   >
                     No reservations yet.
@@ -327,11 +338,6 @@ export default async function SuperAdminDashboard({
                     </td>
                     <td className="px-4 py-3 text-right font-bold tabular-nums text-emerald-600">
                       {formatCurrency(p.agencyEarnings, "AED", loc)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-sky-600">
-                      {p.upcomingAgency > 0
-                        ? formatCurrency(p.upcomingAgency, "AED", loc)
-                        : "—"}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-[var(--color-muted)]">
                       {formatCurrency(p.portalCommissions, "AED", loc)}

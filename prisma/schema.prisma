@@ -53,6 +53,11 @@ model User {
   updatedAt DateTime @updatedAt
 
   properties Property[] @relation("OwnerProperties")
+
+  // Settlement history: payments made to this user as an owner.
+  receivedPayments OwnerPayment[] @relation("OwnerPaymentRecipient")
+  // Audit trail: payments this user (as admin) recorded for someone else.
+  recordedPayments OwnerPayment[] @relation("OwnerPaymentRecorder")
 }
 
 model Property {
@@ -212,6 +217,28 @@ model CompanyExpense {
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
 
+  @@index([date])
+}
+
+// Cash settlements paid to an owner. The dashboard sums these as
+// "Owners amount" — i.e. how much the company has actually disbursed,
+// not the accrued reservation `payout` figure. recordedById tracks who
+// entered the row so management has an audit trail.
+model OwnerPayment {
+  id           String   @id @default(cuid())
+  ownerId      String
+  owner        User     @relation("OwnerPaymentRecipient", fields: [ownerId], references: [id], onDelete: Cascade)
+  date         DateTime
+  amount       Float
+  method       String?  // bank, cash, transfer, …
+  reference    String?  // invoice / period / external ref
+  notes        String?  @db.Text
+  recordedById String?
+  recordedBy   User?    @relation("OwnerPaymentRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([ownerId])
   @@index([date])
 }
 
