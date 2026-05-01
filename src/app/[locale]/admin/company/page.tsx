@@ -32,7 +32,6 @@ type PropertyAgg = {
   portalCommissions: number;
   ownerPayout: number;
   upcomingAgency: number;
-  upcomingPayout: number;
   upcomingBookings: number;
 };
 
@@ -112,7 +111,6 @@ export default async function SuperAdminDashboard({
         portalCommissions: a?._sum.portalCommission ?? 0,
         ownerPayout: a?._sum.payout ?? 0,
         upcomingAgency: u?._sum.agencyCommission ?? 0,
-        upcomingPayout: u?._sum.payout ?? 0,
         upcomingBookings: u?._count._all ?? 0,
       };
     })
@@ -143,15 +141,11 @@ export default async function SuperAdminDashboard({
     (s, p) => s + p.upcomingBookings,
     0,
   );
-  const totalUpcomingPayout = propertyTable.reduce(
-    (s, p) => s + p.upcomingPayout,
-    0,
-  );
   const distinctOwners = new Set(propertyTable.map((p) => p.ownerName)).size;
-  // Profit and total payout-to-owners include upcoming so they reflect the
-  // committed (realized + pipeline) view, not just realized.
-  const companyNet = totalAgency + totalUpcomingAgency - totalCompanyExpenses;
-  const totalOwnerPayoutAll = totalOwnerPayout + totalUpcomingPayout;
+  // Revenue tile shows realized + upcoming (committed view). Profit and
+  // payout tiles use realized only — that's the money already in hand.
+  const totalAgencyAll = totalAgency + totalUpcomingAgency;
+  const companyNet = totalAgency - totalCompanyExpenses;
 
   // === Chart data ===
   const topProperties: PropertyBar[] = propertyTable.slice(0, 10).map((p) => ({
@@ -232,8 +226,8 @@ export default async function SuperAdminDashboard({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
         <KpiTile
           label="Company revenue"
-          value={formatCurrency(totalAgency, "AED", loc)}
-          hint={`portal ${formatCurrency(totalPortal, "AED", loc)}`}
+          value={formatCurrency(totalAgencyAll, "AED", loc)}
+          hint={`incl. upcoming · portal ${formatCurrency(totalPortal, "AED", loc)}`}
           accent="emerald"
           icon={<TrendingUp className="h-4 w-4" />}
         />
@@ -254,13 +248,13 @@ export default async function SuperAdminDashboard({
         <KpiTile
           label="Company profit"
           value={formatCurrency(companyNet, "AED", loc)}
-          hint="revenue + upcoming − expenses"
+          hint="realized − expenses"
           accent={companyNet >= 0 ? "emerald" : "rose"}
           icon={<Wallet className="h-4 w-4" />}
         />
         <KpiTile
           label="Paid to owners"
-          value={formatCurrency(totalOwnerPayoutAll, "AED", loc)}
+          value={formatCurrency(totalOwnerPayout, "AED", loc)}
           hint={`across ${distinctOwners} owner${distinctOwners === 1 ? "" : "s"}`}
           accent="indigo"
           icon={<Users className="h-4 w-4" />}
