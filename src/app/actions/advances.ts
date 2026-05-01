@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
@@ -55,12 +54,10 @@ export async function upsertAdvanceAction(
       },
     });
   }
-  revalidatePath("/", "layout");
   return { status: "ok" };
 }
 
 export async function deleteAdvanceAction(id: string) {
   await requireRole("ADMIN");
   await prisma.advance.delete({ where: { id } });
-  revalidatePath("/", "layout");
 }

@@ -308,6 +308,7 @@ function ReservationEditor({
               name="guestName"
               defaultValue={reservation.guestName ?? ""}
               placeholder="Full name"
+              required
             />
           </Field>
           <Field label={labels.numGuests} htmlFor="numGuests">
@@ -359,7 +360,8 @@ function ReservationEditor({
               name="totalPrice"
               type="number"
               step="0.01"
-              min="0"
+              min="0.01"
+              required
               value={totalPrice || ""}
               onChange={(e) => setTotalPrice(parseFloat(e.target.value) || 0)}
             />
@@ -375,6 +377,7 @@ function ReservationEditor({
                 type="number"
                 step="0.01"
                 min="0"
+                required
                 value={agencyCommission || ""}
                 onChange={(e) =>
                   setAgencyCommission(parseFloat(e.target.value) || 0)
@@ -391,6 +394,7 @@ function ReservationEditor({
                 type="number"
                 step="0.01"
                 min="0"
+                required
                 value={portalCommission || ""}
                 onChange={(e) =>
                   setPortalCommission(parseFloat(e.target.value) || 0)

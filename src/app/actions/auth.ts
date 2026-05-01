@@ -1,7 +1,6 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   hashPassword,
@@ -106,6 +105,5 @@ export async function changeOwnPasswordAction(
     where: { id: user.id },
     data: { password: await hashPassword(parsed.data.newPassword) },
   });
-  revalidatePath("/", "layout");
   return { status: "ok" };
 }

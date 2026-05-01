@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
@@ -124,6 +123,5 @@ export async function updateSettingsAction(
       timezone: v.timezone,
     },
   });
-  revalidatePath("/", "layout");
   return { status: "ok" };
 }

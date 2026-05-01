@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, requireRole } from "@/lib/auth";
@@ -84,14 +83,12 @@ export async function upsertPropertyAction(
           ...(manualCreatedAt ? { createdAt: manualCreatedAt } : {}),
         },
       });
-  revalidatePath("/", "layout");
   return { status: "ok", id: upserted.id };
 }
 
 export async function deletePropertyAction(id: string) {
   await requireRole("ADMIN");
   await prisma.property.delete({ where: { id } });
-  revalidatePath("/", "layout");
 }
 
 const OwnerSchema = z.object({
@@ -132,7 +129,6 @@ export async function createOwnerAction(
       address: parsed.data.address || null,
     },
   });
-  revalidatePath("/", "layout");
   return { status: "ok" };
 }
 
@@ -187,7 +183,6 @@ export async function updateOwnerAction(
     data.password = await hashPassword(parsed.data.password);
   }
   await prisma.user.update({ where: { id: parsed.data.id }, data });
-  revalidatePath("/", "layout");
   return { status: "ok" };
 }
 
@@ -200,7 +195,6 @@ export async function deleteOwnerAction(id: string) {
   if (!target) throw new Error("User not found");
   if (target.role !== "OWNER") throw new Error("Can only delete OWNER users from this view");
   await prisma.user.delete({ where: { id } });
-  revalidatePath("/", "layout");
 }
 
 export async function setUserBlockedAction(id: string, blocked: boolean) {
@@ -214,5 +208,4 @@ export async function setUserBlockedAction(id: string, blocked: boolean) {
   });
   if (!target) throw new Error("User not found");
   await prisma.user.update({ where: { id }, data: { blocked } });
-  revalidatePath("/", "layout");
 }

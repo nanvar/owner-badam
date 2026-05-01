@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { requireRole } from "@/lib/auth";
@@ -302,7 +301,6 @@ export async function crawlAirbnbAction(propertyId: string): Promise<CrawlState>
         : Prisma.DbNull,
     },
   });
-  revalidatePath("/", "layout");
 
   const finalGuests = maxGuestsLd ?? counts.maxGuests ?? null;
   const summary = [

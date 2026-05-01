@@ -240,7 +240,7 @@ function ExpenseEditor({
             name="propertyId"
             required
             defaultValue={expense?.propertyId ?? defaultPropertyId}
-            className="h-11 w-full rounded-xl border border-[var(--color-border)] bg-white px-3 text-sm"
+            className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
           >
             {properties.map((p) => (
               <option key={p.id} value={p.id}>
@@ -269,7 +269,7 @@ function ExpenseEditor({
               name="type"
               required
               defaultValue={expense?.type ?? "OTHERS"}
-              className="h-11 w-full rounded-xl border border-[var(--color-border)] bg-white px-3 text-sm"
+              className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
             >
               {EXPENSE_TYPES.map((t) => (
                 <option key={t} value={t}>

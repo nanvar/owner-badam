@@ -458,7 +458,7 @@ function PropertyEditor({
                 name="ownerId"
                 required
                 defaultValue={property?.ownerId ?? owners[0]?.id ?? ""}
-                className="h-11 w-full rounded-xl border border-[var(--color-border)] bg-white px-3.5 text-sm"
+                className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3.5 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
               >
                 {owners.length === 0 && (
                   <option value="">— no owners yet —</option>
@@ -760,7 +760,7 @@ function ExpenseEditor({
               name="type"
               required
               defaultValue={expense?.type ?? "OTHERS"}
-              className="h-11 w-full rounded-xl border border-[var(--color-border)] bg-white px-3 text-sm"
+              className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
             >
               {EXPENSE_TYPES.map((t) => (
                 <option key={t} value={t}>
