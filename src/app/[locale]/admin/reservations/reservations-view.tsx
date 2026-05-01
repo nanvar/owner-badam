@@ -317,13 +317,21 @@ function ReservationEditor({
     updateReservationAction,
     undefined,
   );
-  const [totalPrice, setTotalPrice] = useState<number>(reservation?.totalPrice ?? 0);
-  const [agencyCommission, setAgencyCommission] = useState<number>(
-    reservation?.agencyCommission ?? 0,
+  // Track the raw string so the user can keep "0" or partial values like
+  // "0." in the field without React snapping back to empty. The numeric
+  // value used for owner-payout math is derived below.
+  const [totalPriceStr, setTotalPriceStr] = useState<string>(
+    reservation?.totalPrice ? String(reservation.totalPrice) : "",
   );
-  const [portalCommission, setPortalCommission] = useState<number>(
-    reservation?.portalCommission ?? 0,
+  const [agencyCommissionStr, setAgencyCommissionStr] = useState<string>(
+    String(reservation?.agencyCommission ?? 0),
   );
+  const [portalCommissionStr, setPortalCommissionStr] = useState<string>(
+    String(reservation?.portalCommission ?? 0),
+  );
+  const totalPrice = parseFloat(totalPriceStr) || 0;
+  const agencyCommission = parseFloat(agencyCommissionStr) || 0;
+  const portalCommission = parseFloat(portalCommissionStr) || 0;
   const [upcoming, setUpcoming] = useState<boolean>(
     reservation?.upcoming ?? false,
   );
@@ -451,8 +459,8 @@ function ReservationEditor({
               step="0.01"
               min="0.01"
               required
-              value={totalPrice || ""}
-              onChange={(e) => setTotalPrice(parseFloat(e.target.value) || 0)}
+              value={totalPriceStr}
+              onChange={(e) => setTotalPriceStr(e.target.value)}
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
@@ -467,10 +475,8 @@ function ReservationEditor({
                 step="0.01"
                 min="0"
                 required
-                value={agencyCommission || ""}
-                onChange={(e) =>
-                  setAgencyCommission(parseFloat(e.target.value) || 0)
-                }
+                value={agencyCommissionStr}
+                onChange={(e) => setAgencyCommissionStr(e.target.value)}
               />
             </Field>
             <Field
@@ -484,10 +490,8 @@ function ReservationEditor({
                 step="0.01"
                 min="0"
                 required
-                value={portalCommission || ""}
-                onChange={(e) =>
-                  setPortalCommission(parseFloat(e.target.value) || 0)
-                }
+                value={portalCommissionStr}
+                onChange={(e) => setPortalCommissionStr(e.target.value)}
               />
             </Field>
           </div>
@@ -608,9 +612,12 @@ function CompanyReservationCreator({
   );
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
-  const [totalPrice, setTotalPrice] = useState<number>(0);
-  const [agencyCommission, setAgencyCommission] = useState<number>(0);
-  const [portalCommission, setPortalCommission] = useState<number>(0);
+  const [totalPriceStr, setTotalPriceStr] = useState("");
+  const [agencyCommissionStr, setAgencyCommissionStr] = useState("0");
+  const [portalCommissionStr, setPortalCommissionStr] = useState("0");
+  const totalPrice = parseFloat(totalPriceStr) || 0;
+  const agencyCommission = parseFloat(agencyCommissionStr) || 0;
+  const portalCommission = parseFloat(portalCommissionStr) || 0;
   const [upcoming, setUpcoming] = useState(false);
 
   useEffect(() => {
@@ -759,8 +766,8 @@ function CompanyReservationCreator({
               step="0.01"
               min="0.01"
               required
-              value={totalPrice || ""}
-              onChange={(e) => setTotalPrice(parseFloat(e.target.value) || 0)}
+              value={totalPriceStr}
+              onChange={(e) => setTotalPriceStr(e.target.value)}
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
@@ -774,10 +781,8 @@ function CompanyReservationCreator({
                 type="number"
                 step="0.01"
                 min="0"
-                value={agencyCommission || ""}
-                onChange={(e) =>
-                  setAgencyCommission(parseFloat(e.target.value) || 0)
-                }
+                value={agencyCommissionStr}
+                onChange={(e) => setAgencyCommissionStr(e.target.value)}
               />
             </Field>
             <Field
@@ -790,10 +795,8 @@ function CompanyReservationCreator({
                 type="number"
                 step="0.01"
                 min="0"
-                value={portalCommission || ""}
-                onChange={(e) =>
-                  setPortalCommission(parseFloat(e.target.value) || 0)
-                }
+                value={portalCommissionStr}
+                onChange={(e) => setPortalCommissionStr(e.target.value)}
               />
             </Field>
           </div>
