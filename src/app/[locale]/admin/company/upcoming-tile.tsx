@@ -13,7 +13,10 @@ export type UpcomingRow = {
   color: string;
   ownerName: string;
   upcomingBookings: number;
+  upcomingRevenue: number;
   upcomingAgency: number;
+  upcomingPortal: number;
+  upcomingPayout: number;
 };
 
 export function UpcomingTile({
@@ -69,7 +72,7 @@ export function UpcomingTile({
             No upcoming reservations.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-[var(--color-border)]">
+          <div className="overflow-x-auto rounded-2xl border border-[var(--color-border)]">
             <table className="w-full text-sm">
               <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
                 <tr>
@@ -81,7 +84,16 @@ export function UpcomingTile({
                     Bookings
                   </th>
                   <th className="px-3 py-2.5 text-right font-semibold">
-                    Amount
+                    Revenue
+                  </th>
+                  <th className="px-3 py-2.5 text-right font-semibold">
+                    Company
+                  </th>
+                  <th className="px-3 py-2.5 text-right font-semibold">
+                    Portal
+                  </th>
+                  <th className="px-3 py-2.5 text-right font-semibold">
+                    Owner payout
                   </th>
                 </tr>
               </thead>
@@ -106,8 +118,17 @@ export function UpcomingTile({
                     <td className="px-3 py-2.5 text-right tabular-nums">
                       {r.upcomingBookings}
                     </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {formatCurrency(r.upcomingRevenue, "AED", locale)}
+                    </td>
                     <td className="px-3 py-2.5 text-right font-bold tabular-nums text-sky-600">
                       {formatCurrency(r.upcomingAgency, "AED", locale)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-[var(--color-muted)]">
+                      {formatCurrency(r.upcomingPortal, "AED", locale)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {formatCurrency(r.upcomingPayout, "AED", locale)}
                     </td>
                   </tr>
                 ))}

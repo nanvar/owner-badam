@@ -13,26 +13,24 @@ import { requireRole } from "@/lib/auth";
 import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
 import { formatCurrency } from "@/lib/utils";
-import {
-  DashboardCharts,
-  type MonthlyPoint,
-  type PropertyBar,
-  type SplitSlice,
-} from "./dashboard-charts";
 import { UpcomingTile } from "./upcoming-tile";
 
 type PropertyAgg = {
   id: string;
   name: string;
   color: string;
+  ownerId: string;
   ownerName: string;
   bookings: number;
   totalRevenue: number;
   agencyEarnings: number;
   portalCommissions: number;
   ownerPayout: number;
-  upcomingAgency: number;
   upcomingBookings: number;
+  upcomingRevenue: number;
+  upcomingAgency: number;
+  upcomingPortal: number;
+  upcomingPayout: number;
 };
 
 export default async function SuperAdminDashboard({
@@ -104,14 +102,18 @@ export default async function SuperAdminDashboard({
         id: p.id,
         name: p.name,
         color: p.color,
+        ownerId: p.owner.id,
         ownerName: p.owner.name ?? p.owner.email,
         bookings: a?._count._all ?? 0,
         totalRevenue: a?._sum.totalPrice ?? 0,
         agencyEarnings: a?._sum.agencyCommission ?? 0,
         portalCommissions: a?._sum.portalCommission ?? 0,
         ownerPayout: a?._sum.payout ?? 0,
-        upcomingAgency: u?._sum.agencyCommission ?? 0,
         upcomingBookings: u?._count._all ?? 0,
+        upcomingRevenue: u?._sum.totalPrice ?? 0,
+        upcomingAgency: u?._sum.agencyCommission ?? 0,
+        upcomingPortal: u?._sum.portalCommission ?? 0,
+        upcomingPayout: u?._sum.payout ?? 0,
       };
     })
     .filter((x): x is PropertyAgg => !!x)
@@ -125,14 +127,45 @@ export default async function SuperAdminDashboard({
   const totalCompanyExpenses = companyExpenseAgg._sum.amount ?? 0;
   const companyExpenseCount = companyExpenseAgg._count._all;
 
-  // Owner settlement total — what the company has actually disbursed,
-  // not the accrued reservation `payout` figure.
-  const ownerPaymentAgg = await prisma.ownerPayment.aggregate({
+  // Outstanding payout per owner = accrued (realized) − recorded payments.
+  // Properties belonging to a fully-paid owner drop off the reporting list,
+  // and the Owners amount card sums the remaining balance only.
+  const ownerPaymentSums = await prisma.ownerPayment.groupBy({
+    by: ["ownerId"],
     _sum: { amount: true },
-    _count: { _all: true },
   });
-  const totalOwnerPayments = ownerPaymentAgg._sum.amount ?? 0;
-  const ownerPaymentCount = ownerPaymentAgg._count._all;
+  const paidByOwner = new Map(
+    ownerPaymentSums.map((row) => [row.ownerId, row._sum.amount ?? 0]),
+  );
+  const accruedByOwner = new Map<string, number>();
+  for (const p of propertyTable) {
+    accruedByOwner.set(
+      p.ownerId,
+      (accruedByOwner.get(p.ownerId) ?? 0) + p.ownerPayout,
+    );
+  }
+  // remainingFactor = how much of each property's payout is still owed
+  // (1 = nothing paid yet, 0 = fully paid). Pro-rata across an owner's props.
+  const remainingFactorByOwner = new Map<string, number>();
+  for (const [ownerId, accrued] of accruedByOwner) {
+    const paid = paidByOwner.get(ownerId) ?? 0;
+    if (accrued <= 0) {
+      remainingFactorByOwner.set(ownerId, 0);
+    } else {
+      const remaining = Math.max(0, accrued - paid);
+      remainingFactorByOwner.set(ownerId, remaining / accrued);
+    }
+  }
+  // Filtered table for the Reporting section: only owners with money still
+  // owed. Each property's "Owner payout" reflects its share of the
+  // outstanding balance.
+  const reportingTable = propertyTable
+    .map((p) => {
+      const factor = remainingFactorByOwner.get(p.ownerId) ?? 0;
+      return { ...p, ownerPayoutOutstanding: p.ownerPayout * factor };
+    })
+    .filter((p) => p.ownerPayoutOutstanding > 0.005);
+
 
   // Active reservations: today falls inside checkIn..checkOut.
   const today = new Date();
@@ -157,74 +190,17 @@ export default async function SuperAdminDashboard({
     (s, p) => s + p.upcomingBookings,
     0,
   );
-  const distinctOwners = new Set(propertyTable.map((p) => p.ownerName)).size;
+  // Owners amount tile shows outstanding balance only (accrued − paid).
+  // distinctOwners counts only those still owed money — fully-paid owners
+  // disappear from this view.
+  const totalOwnerOutstanding = reportingTable.reduce(
+    (s, p) => s + p.ownerPayoutOutstanding,
+    0,
+  );
+  const distinctOwners = new Set(reportingTable.map((p) => p.ownerId)).size;
   // Profit and revenue tiles use realized only. Upcoming is split out
   // into its own tile (clickable for the per-property breakdown).
   const companyNet = totalAgency - totalCompanyExpenses;
-
-  // === Chart data ===
-  const topProperties: PropertyBar[] = propertyTable.slice(0, 10).map((p) => ({
-    name: p.name,
-    color: p.color,
-    agencyEarnings: p.agencyEarnings,
-  }));
-
-  const split: SplitSlice[] = [
-    { label: "Company (agency)", value: totalAgency, color: "#4f8a6f" },
-    { label: "Owner payments", value: totalOwnerPayments, color: "#6366f1" },
-    { label: "Portal", value: totalPortal, color: "#f59e0b" },
-  ];
-
-  // Last 12 months of revenue + expenses, by check-in / expense date.
-  const now = new Date();
-  const months: { y: number; m: number; label: string }[] = [];
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
-    months.push({
-      y: d.getUTCFullYear(),
-      m: d.getUTCMonth(),
-      label: d.toLocaleDateString(loc === "ru" ? "ru-RU" : "en-GB", {
-        month: "short",
-        year: "2-digit",
-        timeZone: "UTC",
-      }),
-    });
-  }
-  const startUtc = new Date(
-    Date.UTC(months[0].y, months[0].m, 1),
-  );
-  const [monthlyAgencyRows, monthlyExpenseRows] = await Promise.all([
-    prisma.reservation.findMany({
-      where: { checkIn: { gte: startUtc }, upcoming: false },
-      select: { checkIn: true, agencyCommission: true },
-    }),
-    prisma.companyExpense.findMany({
-      where: { date: { gte: startUtc } },
-      select: { date: true, amount: true },
-    }),
-  ]);
-  const monthly: MonthlyPoint[] = months.map((mo) => {
-    const monthStart = Date.UTC(mo.y, mo.m, 1);
-    const monthEnd = Date.UTC(mo.y, mo.m + 1, 1);
-    const agency = monthlyAgencyRows
-      .filter((r) => {
-        const t = r.checkIn.getTime();
-        return t >= monthStart && t < monthEnd;
-      })
-      .reduce((s, r) => s + r.agencyCommission, 0);
-    const expenses = monthlyExpenseRows
-      .filter((e) => {
-        const t = e.date.getTime();
-        return t >= monthStart && t < monthEnd;
-      })
-      .reduce((s, e) => s + e.amount, 0);
-    return {
-      label: mo.label,
-      agency: Math.round(agency * 100) / 100,
-      expenses: Math.round(expenses * 100) / 100,
-      net: Math.round((agency - expenses) * 100) / 100,
-    };
-  });
 
   return (
     <div>
@@ -249,7 +225,10 @@ export default async function SuperAdminDashboard({
             color: p.color,
             ownerName: p.ownerName,
             upcomingBookings: p.upcomingBookings,
+            upcomingRevenue: p.upcomingRevenue,
             upcomingAgency: p.upcomingAgency,
+            upcomingPortal: p.upcomingPortal,
+            upcomingPayout: p.upcomingPayout,
           }))}
         />
         <KpiTile
@@ -268,8 +247,12 @@ export default async function SuperAdminDashboard({
         />
         <KpiTile
           label="Owners amount"
-          value={formatCurrency(totalOwnerPayments, "AED", loc)}
-          hint={`${ownerPaymentCount} payment${ownerPaymentCount === 1 ? "" : "s"} · ${distinctOwners} owner${distinctOwners === 1 ? "" : "s"}`}
+          value={formatCurrency(totalOwnerOutstanding, "AED", loc)}
+          hint={
+            distinctOwners === 0
+              ? "all settled"
+              : `outstanding for ${distinctOwners} owner${distinctOwners === 1 ? "" : "s"}`
+          }
           accent="indigo"
           icon={<Users className="h-4 w-4" />}
         />
@@ -303,17 +286,17 @@ export default async function SuperAdminDashboard({
               </tr>
             </thead>
             <tbody>
-              {propertyTable.length === 0 ? (
+              {reportingTable.length === 0 ? (
                 <tr>
                   <td
                     colSpan={7}
                     className="px-4 py-12 text-center text-sm text-[var(--color-muted)]"
                   >
-                    No reservations yet.
+                    All owners are settled — nothing outstanding.
                   </td>
                 </tr>
               ) : (
-                propertyTable.map((p) => (
+                reportingTable.map((p) => (
                   <tr
                     key={p.id}
                     className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
@@ -343,7 +326,7 @@ export default async function SuperAdminDashboard({
                       {formatCurrency(p.portalCommissions, "AED", loc)}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
-                      {formatCurrency(p.ownerPayout, "AED", loc)}
+                      {formatCurrency(p.ownerPayoutOutstanding, "AED", loc)}
                     </td>
                   </tr>
                 ))
@@ -353,15 +336,6 @@ export default async function SuperAdminDashboard({
         </div>
       </Card>
 
-      {/* Charts */}
-      <div className="mt-8">
-        <DashboardCharts
-          locale={loc}
-          topProperties={topProperties}
-          split={split}
-          monthly={monthly}
-        />
-      </div>
     </div>
   );
 }
