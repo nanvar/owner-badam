@@ -122,7 +122,18 @@ export async function syncProperty(propertyId: string): Promise<SyncOutcome> {
   } catch (err) {
     outcome.ok = false;
     outcome.error = (err as Error).message;
+    // Surface the full error in server logs so we can debug from Hostinger
+    // logs when the UI summary only shows a one-line message.
+    console.error("[sync] property=%s error:", property.name, err);
   }
+  console.log(
+    "[sync] %s → created=%d updated=%d skipped=%d ok=%s",
+    property.name,
+    outcome.created,
+    outcome.updated,
+    outcome.skipped,
+    outcome.ok,
+  );
   return outcome;
 }
 

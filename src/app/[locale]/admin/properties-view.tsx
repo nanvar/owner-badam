@@ -524,37 +524,58 @@ function PropertyEditor({
 
 export function SyncSummary({ results, onClose }: { results: { propertyName: string; ok: boolean; created: number; updated: number; skipped: number; error?: string }[]; onClose: () => void }) {
   const totalCreated = results.reduce((s, r) => s + r.created, 0);
+  const totalUpdated = results.reduce((s, r) => s + r.updated, 0);
+  const totalSkipped = results.reduce((s, r) => s + r.skipped, 0);
   const failed = results.filter((r) => !r.ok);
   const hasFailures = failed.length > 0;
+  const summaryParts: string[] = [];
+  summaryParts.push(`${totalCreated} new`);
+  if (totalUpdated > 0) summaryParts.push(`${totalUpdated} updated`);
+  if (totalSkipped > 0) summaryParts.push(`${totalSkipped} skipped`);
   return (
     <div
       className={cn(
-        "mb-5 flex animate-fade-in items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm",
+        "mb-5 animate-fade-in rounded-2xl border px-4 py-3 text-sm",
         hasFailures
           ? "border-rose-500/30 bg-rose-500/5 text-rose-600"
           : "border-emerald-500/30 bg-emerald-500/5",
       )}
     >
-      <div className="flex items-center gap-2">
-        {hasFailures ? (
-          <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
-        ) : (
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-        )}
-        <span className="font-semibold">
-          {totalCreated === 0
-            ? "No new reservations"
-            : `${totalCreated} new reservation${totalCreated === 1 ? "" : "s"}`}
-          {hasFailures && ` · ${failed.length} failed`}
-        </span>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2">
+          {hasFailures ? (
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
+          ) : (
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+          )}
+          <div>
+            <div className="font-semibold">{summaryParts.join(" · ")}</div>
+            {hasFailures && (
+              <ul className="mt-1 space-y-0.5 text-xs">
+                {failed.map((f) => (
+                  <li key={f.propertyName}>
+                    <span className="font-semibold">{f.propertyName}:</span>{" "}
+                    {f.error ?? "unknown error"}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {!hasFailures && totalCreated === 0 && totalUpdated === 0 && (
+              <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+                The iCal feed had no bookings to import (all blocked/skipped, or
+                feed is empty).
+              </div>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-lg p-1 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)]"
+          aria-label="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
-      <button
-        onClick={onClose}
-        className="rounded-lg p-1 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)]"
-        aria-label="Close"
-      >
-        <X className="h-4 w-4" />
-      </button>
     </div>
   );
 }
