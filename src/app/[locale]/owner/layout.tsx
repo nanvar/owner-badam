@@ -1,5 +1,5 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { LayoutDashboard, Calendar, FileText } from "lucide-react";
+import { LayoutDashboard, Calendar, FileText, Wallet } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { requireRole } from "@/lib/auth";
 import { isLocale } from "@/i18n/config";
@@ -29,6 +29,11 @@ export default async function OwnerLayout({
       href: `/${locale}/owner/calendar`,
       label: t("calendar"),
       icon: <Calendar className="h-4 w-4" />,
+    },
+    {
+      href: `/${locale}/owner/payments`,
+      label: t("payments"),
+      icon: <Wallet className="h-4 w-4" />,
     },
     {
       href: `/${locale}/owner/reports`,
