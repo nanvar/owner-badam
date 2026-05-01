@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
   AlertCircle,
@@ -62,6 +63,7 @@ export function ReservationsView({
   items: Item[];
   labels: Record<string, string>;
 }) {
+  const router = useRouter();
   const [filter, setFilter] = useState<"incomplete" | "complete">("incomplete");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Item | null>(null);
@@ -99,6 +101,7 @@ export function ReservationsView({
               startSync(async () => {
                 const r = await syncAllAction();
                 setSyncState(r);
+                if (r.status === "ok") router.refresh();
               })
             }
           >
@@ -238,6 +241,7 @@ export function ReservationsView({
           startDelete(async () => {
             await deleteReservationAction(id);
             setEditing(null);
+            router.refresh();
           })
         }
         deletePending={deletePending}
@@ -261,6 +265,7 @@ function ReservationEditor({
   onDelete: (id: string) => void;
   deletePending: boolean;
 }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState<ReservationState | undefined, FormData>(
     updateReservationAction,
     undefined,
@@ -275,9 +280,10 @@ function ReservationEditor({
 
   useEffect(() => {
     if (state?.status === "ok") {
+      router.refresh();
       onClose();
     }
-  }, [state, onClose]);
+  }, [state, onClose, router]);
 
   if (!reservation) {
     return null;

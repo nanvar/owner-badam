@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import {
   Plus,
   User,
@@ -69,12 +69,18 @@ export function OwnersView({
   const locale = (params?.locale as string) ?? "en";
   const goToOwner = (id: string) => router.push(`/${locale}/admin/owners/${id}`);
 
-  if (createState?.status === "ok" && creatingOpen) {
-    queueMicrotask(() => setCreatingOpen(false));
-  }
-  if (updateState?.status === "ok" && editing) {
-    queueMicrotask(() => setEditing(null));
-  }
+  useEffect(() => {
+    if (createState?.status === "ok" && creatingOpen) {
+      router.refresh();
+      setCreatingOpen(false);
+    }
+  }, [createState, creatingOpen, router]);
+  useEffect(() => {
+    if (updateState?.status === "ok" && editing) {
+      router.refresh();
+      setEditing(null);
+    }
+  }, [updateState, editing, router]);
 
   return (
     <div>
@@ -152,6 +158,7 @@ export function OwnersView({
                                 startBlock(async () => {
                                   await setUserBlockedAction(o.id, !o.blocked);
                                   setPendingBlockId(null);
+                                  router.refresh();
                                 });
                               }}
                               disabled={blockPending && pendingBlockId === o.id}
@@ -318,6 +325,7 @@ export function OwnersView({
                   startDelete(async () => {
                     await deleteOwnerAction(deleting.id);
                     setDeleting(null);
+                    router.refresh();
                   })
                 }
               >

@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, Edit3, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -47,6 +48,7 @@ export function LedgerView({
   expenses: Expense[];
   labels: Record<string, string>;
 }) {
+  const router = useRouter();
   const [propertyFilter, setPropertyFilter] = useState<string>(initialPropertyId);
   const [editingExpense, setEditingExpense] = useState<Expense | null | undefined>(undefined);
   const [deletePending, startDelete] = useTransition();
@@ -137,7 +139,10 @@ export function LedgerView({
                           onEdit={() => setEditingExpense(e)}
                           onDelete={() =>
                             confirm(labels.deleteConfirm) &&
-                            startDelete(() => deleteExpenseAction(e.id))
+                            startDelete(async () => {
+                              await deleteExpenseAction(e.id);
+                              router.refresh();
+                            })
                           }
                           deletePending={deletePending}
                         />
@@ -217,14 +222,18 @@ function ExpenseEditor({
   labels: Record<string, string>;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState<ExpenseState | undefined, FormData>(
     upsertExpenseAction,
     undefined,
   );
 
-  if (state?.status === "ok" && open) {
-    queueMicrotask(onClose);
-  }
+  useEffect(() => {
+    if (state?.status === "ok" && open) {
+      router.refresh();
+      onClose();
+    }
+  }, [state, open, onClose, router]);
 
   return (
     <Sheet

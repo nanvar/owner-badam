@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, Edit3, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -40,6 +41,7 @@ export function CompanyExpensesView({
 }) {
   const [editing, setEditing] = useState<Expense | null | undefined>(undefined);
   const [deletePending, startDelete] = useTransition();
+  const router = useRouter();
 
   return (
     <div>
@@ -126,9 +128,10 @@ export function CompanyExpensesView({
                         <button
                           onClick={() => {
                             if (confirm("Delete this expense?")) {
-                              startDelete(() =>
-                                deleteCompanyExpenseAction(e.id),
-                              );
+                              startDelete(async () => {
+                                await deleteCompanyExpenseAction(e.id);
+                                router.refresh();
+                              });
                             }
                           }}
                           disabled={deletePending}
@@ -166,14 +169,18 @@ function ExpenseEditor({
   expense: Expense | null;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState<
     CompanyExpenseState | undefined,
     FormData
   >(upsertCompanyExpenseAction, undefined);
 
-  if (state?.status === "ok" && open) {
-    queueMicrotask(onClose);
-  }
+  useEffect(() => {
+    if (state?.status === "ok" && open) {
+      router.refresh();
+      onClose();
+    }
+  }, [state, open, onClose, router]);
 
   return (
     <Sheet

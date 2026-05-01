@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   BedDouble,
   Bath,
@@ -91,6 +92,7 @@ export function PropertyDetailView({
   reservations: Reservation[];
   labels: Labels;
 }) {
+  const router = useRouter();
   const [crawlState, setCrawlState] = useState<CrawlState | null>(null);
   const [crawling, startCrawl] = useTransition();
   const [lightbox, setLightbox] = useState<number | null>(null);
@@ -123,6 +125,7 @@ export function PropertyDetailView({
     startCrawl(async () => {
       const r = await crawlAirbnbAction(property.id);
       setCrawlState(r);
+      if (r.status === "ok") router.refresh();
     });
   };
 

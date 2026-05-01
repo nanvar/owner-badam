@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, User, Edit3, Trash2, Ban, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -33,6 +34,7 @@ export function StaffView({
   users: StaffUser[];
   currentUserId: string;
 }) {
+  const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<StaffUser | null>(null);
   const [deleting, setDeleting] = useState<StaffUser | null>(null);
@@ -133,6 +135,7 @@ export function StaffView({
                                 startBlock(async () => {
                                   await setUserBlockedAction(u.id, !u.blocked);
                                   setPendingBlockId(null);
+                                  router.refresh();
                                 });
                               }}
                               disabled={blockPending && pendingBlockId === u.id}
@@ -206,6 +209,7 @@ export function StaffView({
               startDelete(async () => {
                 await deleteStaffAction(deleting.id);
                 setDeleting(null);
+                router.refresh();
               })
             }
           >
@@ -225,14 +229,18 @@ function CreateSheet({
   open: boolean;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState<
     StaffActionState | undefined,
     FormData
   >(createStaffAction, undefined);
 
   useEffect(() => {
-    if (state?.status === "ok") onClose();
-  }, [state, onClose]);
+    if (state?.status === "ok") {
+      router.refresh();
+      onClose();
+    }
+  }, [state, onClose, router]);
 
   return (
     <Sheet open={open} onClose={onClose} title="New staff member">
@@ -295,14 +303,18 @@ function EditSheet({
   user: StaffUser | null;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState<
     StaffActionState | undefined,
     FormData
   >(updateStaffAction, undefined);
 
   useEffect(() => {
-    if (state?.status === "ok") onClose();
-  }, [state, onClose]);
+    if (state?.status === "ok") {
+      router.refresh();
+      onClose();
+    }
+  }, [state, onClose, router]);
 
   return (
     <Sheet open={!!user} onClose={onClose} title="Edit staff member">

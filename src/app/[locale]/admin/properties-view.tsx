@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import {
   Plus,
   RefreshCw,
@@ -88,6 +89,7 @@ export function PropertiesView({
   hideTitle?: boolean;
   expenses?: ExpenseEntry[];
 }) {
+  const router = useRouter();
   const [editing, setEditing] = useState<Property | null | undefined>(undefined);
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const [syncPending, startSync] = useTransition();
@@ -119,6 +121,7 @@ export function PropertiesView({
                     startSync(async () => {
                       const r = await syncAllAction();
                       setSyncState(r);
+                      if (r.status === "ok") router.refresh();
                     })
                   }
                 >
@@ -178,6 +181,7 @@ export function PropertiesView({
               onSync={async () => {
                 const r = await syncOneAction(p.id);
                 setSyncState(r);
+                if (r.status === "ok") router.refresh();
               }}
             />
           ))}
@@ -226,6 +230,7 @@ export function PropertiesView({
               startDelete(async () => {
                 await deletePropertyAction(deleteId);
                 setDeleteId(null);
+                router.refresh();
               })
             }
           >
@@ -382,15 +387,19 @@ function PropertyEditor({
   labels: Labels;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState<PropertyState | undefined, FormData>(
     upsertPropertyAction,
     undefined,
   );
   const isEdit = !!property;
 
-  if (state?.status === "ok" && open) {
-    queueMicrotask(onClose);
-  }
+  useEffect(() => {
+    if (state?.status === "ok" && open) {
+      router.refresh();
+      onClose();
+    }
+  }, [state, open, onClose, router]);
 
   return (
     <Sheet
@@ -606,6 +615,7 @@ function PropertyExpensesDrawer({
   labels: Labels;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [editing, setEditing] = useState<ExpenseEntry | null | undefined>(
     undefined,
   );
@@ -682,7 +692,10 @@ function PropertyExpensesDrawer({
                     disabled={deletePending}
                     onClick={() => {
                       if (!confirm(labels.deleteLedgerConfirm)) return;
-                      startDelete(() => deleteExpenseAction(e.id));
+                      startDelete(async () => {
+                        await deleteExpenseAction(e.id);
+                        router.refresh();
+                      });
                     }}
                     aria-label="Delete"
                     className="rounded-lg p-1 text-[var(--color-muted)] hover:bg-rose-500/10 hover:text-rose-600 disabled:opacity-50"
@@ -722,14 +735,18 @@ function ExpenseEditor({
   labels: Labels;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState<
     ExpenseState | undefined,
     FormData
   >(upsertExpenseAction, undefined);
 
-  if (state?.status === "ok" && open) {
-    queueMicrotask(onClose);
-  }
+  useEffect(() => {
+    if (state?.status === "ok" && open) {
+      router.refresh();
+      onClose();
+    }
+  }, [state, open, onClose, router]);
 
   return (
     <Sheet
