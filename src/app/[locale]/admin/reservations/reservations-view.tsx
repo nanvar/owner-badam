@@ -229,6 +229,7 @@ export function ReservationsView({
       )}
 
       <ReservationEditor
+        key={editing?.id ?? "empty"}
         reservation={editing}
         labels={labels}
         locale={locale}
