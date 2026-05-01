@@ -8,11 +8,7 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: [
-    "node-ical",
-    "mariadb",
-    "@prisma/adapter-mariadb",
-  ],
+  serverExternalPackages: ["mariadb", "@prisma/adapter-mariadb"],
   turbopack: {
     root: projectRoot,
   },
