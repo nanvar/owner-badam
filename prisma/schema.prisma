@@ -13,6 +13,13 @@ enum Role {
   SUPERADMIN
 }
 
+enum DirectBookingStatus {
+  PENDING       // Submitted from the website, awaiting payment
+  PAID          // Payment confirmed (via Strapi)
+  CANCELLED     // Guest or admin cancelled
+  COMPLETED     // Stay finished
+}
+
 enum CompanyExpenseCategory {
   SALARY
   RENT
@@ -74,9 +81,10 @@ model Property {
   updatedAt     DateTime  @updatedAt
   lastSyncedAt  DateTime?
 
-  reservations Reservation[]
-  expenses     Expense[]
-  advances     Advance[]
+  reservations   Reservation[]
+  expenses       Expense[]
+  advances       Advance[]
+  directBookings DirectBooking[]
 
   @@index([ownerId])
 }
@@ -108,6 +116,10 @@ model Reservation {
   rawSummary        String?           @db.Text
   rawDescription    String?           @db.Text
   detailsFilled     Boolean           @default(false)
+  // When true, the booking is in the future / not yet paid. The company
+  // dashboard accounts these separately so management can see realized
+  // revenue vs pipeline. Owner reports ignore this flag.
+  upcoming          Boolean           @default(false)
   syncedAt          DateTime          @default(now())
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
@@ -156,6 +168,39 @@ model Advance {
 
   @@index([propertyId])
   @@index([date])
+}
+
+// Direct bookings come from the public site. Kept separate from `Reservation`
+// (which is populated by the Airbnb iCal sync) so the two channels don't
+// pollute each other. The Strapi payment flow writes here on success.
+model DirectBooking {
+  id              String              @id @default(cuid())
+  propertyId      String
+  property        Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  guestName       String
+  guestEmail      String
+  guestPhone      String?
+  numGuests       Int
+  checkIn         DateTime
+  checkOut        DateTime
+  nights          Int
+  pricePerNight   Float               @default(0)
+  cleaningFee     Float               @default(0)
+  totalPrice      Float               @default(0)
+  currency        String              @default("AED")
+  status          DirectBookingStatus @default(PENDING)
+  // Payment integration — populated by Strapi callback / webhook.
+  paymentRef      String?
+  paymentProvider String?
+  paidAt          DateTime?
+  paidAmount      Float?
+  notes           String?             @db.Text
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([propertyId])
+  @@index([checkIn])
+  @@index([status])
 }
 
 model CompanyExpense {

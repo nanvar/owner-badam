@@ -1,7 +1,14 @@
 import { setRequestLocale } from "next-intl/server";
 import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
-import { Building2, TrendingUp, Wallet, Receipt, Users } from "lucide-react";
+import {
+  Building2,
+  TrendingUp,
+  Wallet,
+  Receipt,
+  Users,
+  Clock,
+} from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { Card, CardBody } from "@/components/ui/card";
@@ -24,6 +31,8 @@ type PropertyAgg = {
   agencyEarnings: number;
   portalCommissions: number;
   ownerPayout: number;
+  upcomingAgency: number;
+  upcomingBookings: number;
 };
 
 type OwnerAgg = {
@@ -48,44 +57,78 @@ export default async function SuperAdminDashboard({
 
   // === Aggregations ===
   // Sum of company-side fields per property using Prisma's groupBy.
-  const propertyAggs = await prisma.reservation.groupBy({
-    by: ["propertyId"],
-    _count: { _all: true },
-    _sum: {
-      totalPrice: true,
-      agencyCommission: true,
-      portalCommission: true,
-      payout: true,
-    },
-  });
+  // Realized (upcoming=false) and pipeline (upcoming=true) are computed
+  // separately so the dashboard can show "money in hand" vs "money expected".
+  const [propertyAggs, upcomingAggs] = await Promise.all([
+    prisma.reservation.groupBy({
+      by: ["propertyId"],
+      where: { upcoming: false },
+      _count: { _all: true },
+      _sum: {
+        totalPrice: true,
+        agencyCommission: true,
+        portalCommission: true,
+        payout: true,
+      },
+    }),
+    prisma.reservation.groupBy({
+      by: ["propertyId"],
+      where: { upcoming: true },
+      _count: { _all: true },
+      _sum: {
+        totalPrice: true,
+        agencyCommission: true,
+        portalCommission: true,
+        payout: true,
+      },
+    }),
+  ]);
+  const upcomingByProp = new Map(
+    upcomingAggs.map((a) => [a.propertyId, a]),
+  );
 
+  const allPropIds = Array.from(
+    new Set([
+      ...propertyAggs.map((a) => a.propertyId),
+      ...upcomingAggs.map((a) => a.propertyId),
+    ]),
+  );
   const properties = await prisma.property.findMany({
-    where: { id: { in: propertyAggs.map((a) => a.propertyId) } },
+    where: { id: { in: allPropIds } },
     include: { owner: { select: { id: true, name: true, email: true } } },
   });
   const propMap = new Map(properties.map((p) => [p.id, p]));
+  const realizedByProp = new Map(
+    propertyAggs.map((a) => [a.propertyId, a]),
+  );
 
-  const propertyTable: PropertyAgg[] = propertyAggs
-    .map((a) => {
-      const p = propMap.get(a.propertyId);
+  const propertyTable: PropertyAgg[] = allPropIds
+    .map((propId) => {
+      const p = propMap.get(propId);
       if (!p) return null;
+      const a = realizedByProp.get(propId);
+      const u = upcomingByProp.get(propId);
       return {
         id: p.id,
         name: p.name,
         color: p.color,
         ownerName: p.owner.name ?? p.owner.email,
-        bookings: a._count._all,
-        totalRevenue: a._sum.totalPrice ?? 0,
-        agencyEarnings: a._sum.agencyCommission ?? 0,
-        portalCommissions: a._sum.portalCommission ?? 0,
-        ownerPayout: a._sum.payout ?? 0,
+        bookings: a?._count._all ?? 0,
+        totalRevenue: a?._sum.totalPrice ?? 0,
+        agencyEarnings: a?._sum.agencyCommission ?? 0,
+        portalCommissions: a?._sum.portalCommission ?? 0,
+        ownerPayout: a?._sum.payout ?? 0,
+        upcomingAgency: u?._sum.agencyCommission ?? 0,
+        upcomingBookings: u?._count._all ?? 0,
       };
     })
     .filter((x): x is PropertyAgg => !!x)
     .sort((a, b) => b.agencyEarnings - a.agencyEarnings);
 
-  // Per-owner aggregates: sum payout via reservations → property → owner
+  // Per-owner aggregates: sum payout via reservations → property → owner.
+  // Upcoming reservations are excluded — they haven't actually been paid out.
   const ownerAggsRaw = await prisma.reservation.findMany({
+    where: { upcoming: false },
     select: {
       payout: true,
       property: {
@@ -133,6 +176,14 @@ export default async function SuperAdminDashboard({
     0,
   );
   const totalBookings = propertyTable.reduce((s, p) => s + p.bookings, 0);
+  const totalUpcomingAgency = propertyTable.reduce(
+    (s, p) => s + p.upcomingAgency,
+    0,
+  );
+  const totalUpcomingBookings = propertyTable.reduce(
+    (s, p) => s + p.upcomingBookings,
+    0,
+  );
   const companyNet = totalAgency - totalCompanyExpenses;
 
   // === Chart data ===
@@ -168,7 +219,7 @@ export default async function SuperAdminDashboard({
   );
   const [monthlyAgencyRows, monthlyExpenseRows] = await Promise.all([
     prisma.reservation.findMany({
-      where: { checkIn: { gte: startUtc } },
+      where: { checkIn: { gte: startUtc }, upcoming: false },
       select: { checkIn: true, agencyCommission: true },
     }),
     prisma.companyExpense.findMany({
@@ -211,13 +262,20 @@ export default async function SuperAdminDashboard({
       />
 
       {/* KPI grid */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiTile
-          label="Company revenue"
+          label="Realized revenue"
           value={formatCurrency(totalAgency, "AED", loc)}
           hint={`from ${totalBookings} bookings`}
           accent="emerald"
           icon={<TrendingUp className="h-4 w-4" />}
+        />
+        <KpiTile
+          label="Upcoming revenue"
+          value={formatCurrency(totalUpcomingAgency, "AED", loc)}
+          hint={`${totalUpcomingBookings} pipeline`}
+          accent="sky"
+          icon={<Clock className="h-4 w-4" />}
         />
         <KpiTile
           label="Company expenses"
@@ -229,7 +287,7 @@ export default async function SuperAdminDashboard({
         <KpiTile
           label="Net profit"
           value={formatCurrency(companyNet, "AED", loc)}
-          hint="revenue − expenses"
+          hint="realized − expenses"
           accent={companyNet >= 0 ? "emerald" : "rose"}
           icon={<Wallet className="h-4 w-4" />}
         />
@@ -275,6 +333,7 @@ export default async function SuperAdminDashboard({
                 <th className="px-4 py-3 text-right font-semibold">
                   Company (agency)
                 </th>
+                <th className="px-4 py-3 text-right font-semibold">Upcoming</th>
                 <th className="px-4 py-3 text-right font-semibold">Portal</th>
                 <th className="px-4 py-3 text-right font-semibold">
                   Owner payout
@@ -285,7 +344,7 @@ export default async function SuperAdminDashboard({
               {propertyTable.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-12 text-center text-sm text-[var(--color-muted)]"
                   >
                     No reservations yet.
@@ -317,6 +376,11 @@ export default async function SuperAdminDashboard({
                     </td>
                     <td className="px-4 py-3 text-right font-bold tabular-nums text-emerald-600">
                       {formatCurrency(p.agencyEarnings, "AED", loc)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-sky-600">
+                      {p.upcomingAgency > 0
+                        ? formatCurrency(p.upcomingAgency, "AED", loc)
+                        : "—"}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-[var(--color-muted)]">
                       {formatCurrency(p.portalCommissions, "AED", loc)}
@@ -396,7 +460,7 @@ function KpiTile({
   label: string;
   value: string;
   hint: string;
-  accent: "emerald" | "rose" | "indigo" | "amber";
+  accent: "emerald" | "rose" | "indigo" | "amber" | "sky";
   icon: React.ReactNode;
 }) {
   const accentMap: Record<typeof accent, string> = {
@@ -404,6 +468,7 @@ function KpiTile({
     rose: "from-rose-500/15 to-rose-500/0 text-rose-600",
     indigo: "from-indigo-500/15 to-indigo-500/0 text-indigo-700",
     amber: "from-amber-500/15 to-amber-500/0 text-amber-700",
+    sky: "from-sky-500/15 to-sky-500/0 text-sky-700",
   };
   return (
     <Card className="overflow-hidden">

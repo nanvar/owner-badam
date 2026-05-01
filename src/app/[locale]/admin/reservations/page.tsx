@@ -13,11 +13,17 @@ export default async function ReservationsAdminPage({
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
 
-  const reservations = await prisma.reservation.findMany({
-    include: { property: { select: { id: true, name: true, color: true } } },
-    orderBy: { checkIn: "desc" },
-    take: 200,
-  });
+  const [reservations, propertyOptions] = await Promise.all([
+    prisma.reservation.findMany({
+      include: { property: { select: { id: true, name: true, color: true } } },
+      orderBy: { checkIn: "desc" },
+      take: 200,
+    }),
+    prisma.property.findMany({
+      select: { id: true, name: true, color: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   const t = await getTranslations({ locale, namespace: "admin" });
   const tCommon = await getTranslations({ locale, namespace: "common" });
@@ -25,6 +31,7 @@ export default async function ReservationsAdminPage({
   return (
     <ReservationsView
       locale={locale as Locale}
+      properties={propertyOptions}
       items={reservations.map((r) => ({
         id: r.id,
         propertyId: r.propertyId,
@@ -48,6 +55,7 @@ export default async function ReservationsAdminPage({
         currency: r.currency,
         notes: r.notes,
         detailsFilled: r.detailsFilled,
+        upcoming: r.upcoming,
         rawSummary: r.rawSummary,
       }))}
       labels={{
@@ -73,6 +81,10 @@ export default async function ReservationsAdminPage({
         cancel: tCommon("cancel"),
         complete: t("complete"),
         incomplete: t("incomplete"),
+        upcoming: t("upcoming"),
+        upcomingHint: t("upcomingHint"),
+        newReservation: t("newReservation"),
+        newReservationHint: t("newReservationHint"),
         fillDetails: t("fillDetails"),
         delete: tCommon("delete"),
         currency: tCommon("currency"),

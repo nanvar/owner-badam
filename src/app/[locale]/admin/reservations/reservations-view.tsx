@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
   AlertCircle,
+  Clock,
   Trash2,
   Phone,
   Mail,
   Search,
   RefreshCw,
   AlertTriangle,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -22,6 +24,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   updateReservationAction,
   deleteReservationAction,
+  createCompanyReservationAction,
   type ReservationState,
 } from "@/app/actions/reservations";
 import { syncAllAction, type SyncState } from "@/app/actions/sync";
@@ -51,30 +54,39 @@ type Item = {
   currency: string;
   notes: string | null;
   detailsFilled: boolean;
+  upcoming: boolean;
   rawSummary: string | null;
 };
 
 export function ReservationsView({
   locale,
   items,
+  properties,
   labels,
 }: {
   locale: Locale;
   items: Item[];
+  properties: { id: string; name: string; color: string }[];
   labels: Record<string, string>;
 }) {
   const router = useRouter();
-  const [filter, setFilter] = useState<"incomplete" | "complete">("incomplete");
+  const [filter, setFilter] = useState<"incomplete" | "complete" | "upcoming">(
+    "incomplete",
+  );
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Item | null>(null);
+  const [creating, setCreating] = useState(false);
   const [deletePending, startDelete] = useTransition();
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const [syncPending, startSync] = useTransition();
 
   const filtered = useMemo(() => {
     return items.filter((i) => {
-      if (filter === "incomplete" && i.detailsFilled) return false;
-      if (filter === "complete" && !i.detailsFilled) return false;
+      if (filter === "upcoming" && !i.upcoming) return false;
+      if (filter === "incomplete" && (i.detailsFilled || i.upcoming))
+        return false;
+      if (filter === "complete" && (!i.detailsFilled || i.upcoming))
+        return false;
       if (search) {
         const q = search.toLowerCase();
         const blob = `${i.guestName ?? ""} ${i.propertyName} ${i.rawSummary ?? ""}`.toLowerCase();
@@ -83,31 +95,44 @@ export function ReservationsView({
       return true;
     });
   }, [items, filter, search]);
-  const incompleteCount = useMemo(
-    () => items.filter((i) => !i.detailsFilled).length,
+  const upcomingCount = useMemo(
+    () => items.filter((i) => i.upcoming).length,
     [items],
   );
-  const completeCount = items.length - incompleteCount;
+  const incompleteCount = useMemo(
+    () => items.filter((i) => !i.detailsFilled && !i.upcoming).length,
+    [items],
+  );
+  const completeCount = useMemo(
+    () => items.filter((i) => i.detailsFilled && !i.upcoming).length,
+    [items],
+  );
 
   return (
     <div>
       <PageHeader
         title={labels.title}
         right={
-          <Button
-            variant="secondary"
-            loading={syncPending}
-            onClick={() =>
-              startSync(async () => {
-                const r = await syncAllAction();
-                setSyncState(r);
-                if (r.status === "ok") router.refresh();
-              })
-            }
-          >
-            <RefreshCw className="h-4 w-4" />
-            {syncPending ? labels.syncing : labels.syncNow}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setCreating(true)}>
+              <Plus className="h-4 w-4" />
+              {labels.newReservation ?? "New reservation"}
+            </Button>
+            <Button
+              variant="secondary"
+              loading={syncPending}
+              onClick={() =>
+                startSync(async () => {
+                  const r = await syncAllAction();
+                  setSyncState(r);
+                  if (r.status === "ok") router.refresh();
+                })
+              }
+            >
+              <RefreshCw className="h-4 w-4" />
+              {syncPending ? labels.syncing : labels.syncNow}
+            </Button>
+          </div>
         }
       />
       {syncState && syncState.status === "ok" && (
@@ -133,7 +158,7 @@ export function ReservationsView({
           />
         </div>
         <div className="ml-auto flex rounded-xl border border-[var(--color-border)] bg-white p-1">
-          {(["incomplete", "complete"] as const).map((f) => (
+          {(["incomplete", "complete", "upcoming"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
@@ -143,7 +168,11 @@ export function ReservationsView({
                   : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
               }`}
             >
-              {f === "incomplete" ? labels.incomplete : labels.complete}
+              {f === "incomplete"
+                ? labels.incomplete
+                : f === "complete"
+                  ? labels.complete
+                  : (labels.upcoming ?? "Upcoming")}
               <span
                 className={`rounded-full px-1.5 text-[10px] font-bold ${
                   filter === f
@@ -151,7 +180,11 @@ export function ReservationsView({
                     : "bg-[var(--color-surface-2)] text-[var(--color-muted)]"
                 }`}
               >
-                {f === "incomplete" ? incompleteCount : completeCount}
+                {f === "incomplete"
+                  ? incompleteCount
+                  : f === "complete"
+                    ? completeCount
+                    : upcomingCount}
               </span>
             </button>
           ))}
@@ -211,7 +244,12 @@ export function ReservationsView({
                       {formatCurrency(r.totalPrice, r.currency || "AED", locale)}
                     </td>
                     <td className="px-4 py-3">
-                      {r.detailsFilled ? (
+                      {r.upcoming ? (
+                        <Badge tone="info">
+                          <Clock className="h-3 w-3" />
+                          {labels.upcoming ?? "Upcoming"}
+                        </Badge>
+                      ) : r.detailsFilled ? (
                         <Badge tone="success">
                           <CheckCircle2 className="h-3 w-3" />
                           {labels.complete}
@@ -246,6 +284,15 @@ export function ReservationsView({
         }
         deletePending={deletePending}
       />
+
+      <CompanyReservationCreator
+        key={creating ? "open" : "closed"}
+        open={creating}
+        properties={properties}
+        labels={labels}
+        locale={locale}
+        onClose={() => setCreating(false)}
+      />
     </div>
   );
 }
@@ -276,6 +323,9 @@ function ReservationEditor({
   );
   const [portalCommission, setPortalCommission] = useState<number>(
     reservation?.portalCommission ?? 0,
+  );
+  const [upcoming, setUpcoming] = useState<boolean>(
+    reservation?.upcoming ?? false,
   );
 
   useEffect(() => {
@@ -309,6 +359,36 @@ function ReservationEditor({
         />
         <input type="hidden" name="payout" value={ownerPayout.toFixed(2)} />
         <input type="hidden" name="currency" value={reservation.currency || "AED"} />
+        <input
+          type="hidden"
+          name="upcoming"
+          value={upcoming ? "true" : "false"}
+        />
+
+        <label
+          className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
+            upcoming
+              ? "border-sky-500/40 bg-sky-500/10"
+              : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={upcoming}
+            onChange={(e) => setUpcoming(e.target.checked)}
+            className="mt-1 h-4 w-4 accent-sky-500"
+          />
+          <div className="flex-1 text-sm">
+            <div className="flex items-center gap-1.5 font-semibold">
+              <Clock className="h-3.5 w-3.5 text-sky-500" />
+              {labels.upcoming ?? "Upcoming"}
+            </div>
+            <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+              {labels.upcomingHint ??
+                "Mark as future / not yet paid. Counted as pipeline (not realized) revenue."}
+            </div>
+          </div>
+        </label>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label={labels.guestName} htmlFor="guestName">
@@ -499,6 +579,324 @@ function ReservationEditor({
               {labels.save}
             </Button>
           </div>
+        </div>
+      </form>
+    </Sheet>
+  );
+}
+
+function CompanyReservationCreator({
+  open,
+  properties,
+  labels,
+  locale,
+  onClose,
+}: {
+  open: boolean;
+  properties: { id: string; name: string; color: string }[];
+  labels: Record<string, string>;
+  locale: Locale;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState<
+    ReservationState | undefined,
+    FormData
+  >(createCompanyReservationAction, undefined);
+  const [propertyId, setPropertyId] = useState<string>(
+    properties[0]?.id ?? "",
+  );
+  const [checkIn, setCheckIn] = useState("");
+  const [checkOut, setCheckOut] = useState("");
+  const [totalPrice, setTotalPrice] = useState<number>(0);
+  const [agencyCommission, setAgencyCommission] = useState<number>(0);
+  const [portalCommission, setPortalCommission] = useState<number>(0);
+  const [upcoming, setUpcoming] = useState(false);
+
+  useEffect(() => {
+    if (state?.status === "ok") {
+      router.refresh();
+      onClose();
+    }
+  }, [state, onClose, router]);
+
+  const nights =
+    checkIn && checkOut
+      ? Math.max(
+          0,
+          Math.round(
+            (new Date(checkOut).getTime() - new Date(checkIn).getTime()) /
+              (1000 * 60 * 60 * 24),
+          ),
+        )
+      : 0;
+  const ownerPayout = Math.max(
+    0,
+    totalPrice - agencyCommission - portalCommission,
+  );
+
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={labels.newReservation ?? "New reservation"}
+      description={
+        labels.newReservationHint ??
+        "Manual reservation for a property without an Airbnb listing."
+      }
+    >
+      <form action={action} className="space-y-4">
+        <input
+          type="hidden"
+          name="upcoming"
+          value={upcoming ? "true" : "false"}
+        />
+
+        <Field label={labels.property ?? "Property"} htmlFor="propertyId">
+          <select
+            id="propertyId"
+            name="propertyId"
+            value={propertyId}
+            onChange={(e) => setPropertyId(e.target.value)}
+            required
+            className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
+          >
+            {properties.length === 0 ? (
+              <option value="">— No properties —</option>
+            ) : (
+              properties.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))
+            )}
+          </select>
+        </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={labels.checkIn} htmlFor="checkIn">
+            <Input
+              id="checkIn"
+              name="checkIn"
+              type="date"
+              value={checkIn}
+              onChange={(e) => setCheckIn(e.target.value)}
+              required
+            />
+          </Field>
+          <Field label={labels.checkOut} htmlFor="checkOut">
+            <Input
+              id="checkOut"
+              name="checkOut"
+              type="date"
+              value={checkOut}
+              onChange={(e) => setCheckOut(e.target.value)}
+              required
+            />
+          </Field>
+        </div>
+        {nights > 0 && (
+          <div className="text-xs text-[var(--color-muted)]">
+            {nights} {nights === 1 ? "night" : "nights"}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={labels.guestName} htmlFor="cr-guestName">
+            <Input
+              id="cr-guestName"
+              name="guestName"
+              placeholder="Full name"
+              required
+            />
+          </Field>
+          <Field label={labels.numGuests} htmlFor="cr-numGuests">
+            <Input
+              id="cr-numGuests"
+              name="numGuests"
+              type="number"
+              min={0}
+              defaultValue=""
+            />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Phone" htmlFor="cr-guestPhone">
+            <div className="relative">
+              <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
+              <Input
+                id="cr-guestPhone"
+                name="guestPhone"
+                className="pl-9"
+                placeholder="+971..."
+              />
+            </div>
+          </Field>
+          <Field label="Email" htmlFor="cr-guestEmail">
+            <div className="relative">
+              <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
+              <Input
+                id="cr-guestEmail"
+                name="guestEmail"
+                className="pl-9"
+                placeholder="guest@..."
+              />
+            </div>
+          </Field>
+        </div>
+
+        <div className="space-y-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4">
+          <Field
+            label={`${labels.totalPrice ?? "Amount"} (${labels.currency})`}
+            htmlFor="cr-totalPrice"
+            hint={labels.amountHint ?? "Gross amount paid by guest"}
+          >
+            <Input
+              id="cr-totalPrice"
+              name="totalPrice"
+              type="number"
+              step="0.01"
+              min="0.01"
+              required
+              value={totalPrice || ""}
+              onChange={(e) => setTotalPrice(parseFloat(e.target.value) || 0)}
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              label={`${labels.agencyCommission ?? "Agency commission"} (${labels.currency})`}
+              htmlFor="cr-agencyCommission"
+            >
+              <Input
+                id="cr-agencyCommission"
+                name="agencyCommission"
+                type="number"
+                step="0.01"
+                min="0"
+                value={agencyCommission || ""}
+                onChange={(e) =>
+                  setAgencyCommission(parseFloat(e.target.value) || 0)
+                }
+              />
+            </Field>
+            <Field
+              label={`${labels.portalCommission ?? "Portal commission"} (${labels.currency})`}
+              htmlFor="cr-portalCommission"
+            >
+              <Input
+                id="cr-portalCommission"
+                name="portalCommission"
+                type="number"
+                step="0.01"
+                min="0"
+                value={portalCommission || ""}
+                onChange={(e) =>
+                  setPortalCommission(parseFloat(e.target.value) || 0)
+                }
+              />
+            </Field>
+          </div>
+          <div className="rounded-xl bg-[var(--color-brand-soft)] px-3 py-2.5">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-[var(--color-brand)]">
+                {labels.payout ?? "Owner payout"}
+              </span>
+              <span className="text-lg font-bold text-[var(--color-brand)]">
+                {formatCurrency(ownerPayout, "AED", locale)}
+              </span>
+            </div>
+          </div>
+          <details className="text-xs">
+            <summary className="cursor-pointer select-none font-medium text-[var(--color-muted)]">
+              {labels.advancedFees ?? "Advanced fees (cleaning, taxes…)"}
+            </summary>
+            <div className="mt-2 grid grid-cols-2 gap-3">
+              <Field
+                label={`${labels.cleaningFee} (${labels.currency})`}
+                htmlFor="cr-cleaningFee"
+              >
+                <Input
+                  id="cr-cleaningFee"
+                  name="cleaningFee"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue=""
+                />
+              </Field>
+              <Field
+                label={`${labels.serviceFee} (${labels.currency})`}
+                htmlFor="cr-serviceFee"
+              >
+                <Input
+                  id="cr-serviceFee"
+                  name="serviceFee"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue=""
+                />
+              </Field>
+              <Field label={`${labels.taxes} (${labels.currency})`} htmlFor="cr-taxes">
+                <Input
+                  id="cr-taxes"
+                  name="taxes"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue=""
+                />
+              </Field>
+            </div>
+          </details>
+        </div>
+
+        <label
+          className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
+            upcoming
+              ? "border-sky-500/40 bg-sky-500/10"
+              : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={upcoming}
+            onChange={(e) => setUpcoming(e.target.checked)}
+            className="mt-1 h-4 w-4 accent-sky-500"
+          />
+          <div className="flex-1 text-sm">
+            <div className="flex items-center gap-1.5 font-semibold">
+              <Clock className="h-3.5 w-3.5 text-sky-500" />
+              {labels.upcoming ?? "Upcoming"}
+            </div>
+            <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+              {labels.upcomingHint}
+            </div>
+          </div>
+        </label>
+
+        <Field label={labels.notes} htmlFor="cr-notes">
+          <Textarea
+            id="cr-notes"
+            name="notes"
+            placeholder="Internal notes about this reservation..."
+          />
+        </Field>
+
+        {state?.status === "error" && (
+          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
+            {state.message}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            {labels.cancel}
+          </Button>
+          <Button type="submit" loading={pending}>
+            {labels.save}
+          </Button>
         </div>
       </form>
     </Sheet>

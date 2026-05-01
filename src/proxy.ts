@@ -5,7 +5,12 @@ import { defaultLocale, locales } from "@/i18n/config";
 const SECRET = process.env.AUTH_SECRET ?? "dev-secret-change-me";
 const KEY = new TextEncoder().encode(SECRET);
 
+// Routes anyone (auth or not) can browse. Anything outside these and not
+// under /admin or /owner falls through with no auth gate, which means the
+// public homepage `/${locale}/` and property pages `/${locale}/property/*`
+// are reachable without a session.
 const PUBLIC_PATHS = new Set(["login"]);
+const PUBLIC_PREFIXES = new Set(["property"]);
 
 function pickLocale(req: NextRequest): string {
   const cookieLocale = req.cookies.get("NEXT_LOCALE")?.value;
@@ -68,6 +73,8 @@ export async function proxy(req: NextRequest) {
   const subPath = segments[1] ?? "";
   const session = await readSessionFromRequest(req);
 
+  // Login: redirect signed-in users to their dashboard (don't show login
+  // form to someone already authenticated).
   if (PUBLIC_PATHS.has(subPath)) {
     if (session) {
       const dest = req.nextUrl.clone();
@@ -77,12 +84,14 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Public homepage `/${locale}` — accessible to everyone (signed in or not).
   if (segments.length === 1) {
-    const dest = req.nextUrl.clone();
-    dest.pathname = session
-      ? `/${locale}/${landingPath(session.role)}`
-      : `/${locale}/login`;
-    return NextResponse.redirect(dest);
+    return NextResponse.next();
+  }
+
+  // Public sub-trees (property pages, etc.) — no auth required.
+  if (PUBLIC_PREFIXES.has(subPath)) {
+    return NextResponse.next();
   }
 
   if (subPath === "admin") {
