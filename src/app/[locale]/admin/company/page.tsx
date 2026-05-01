@@ -2,12 +2,12 @@ import { setRequestLocale } from "next-intl/server";
 import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
 import {
-  Building2,
-  TrendingUp,
   Wallet,
   Receipt,
   Users,
+  TrendingUp,
   Clock,
+  CalendarDays,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
@@ -33,14 +33,6 @@ type PropertyAgg = {
   ownerPayout: number;
   upcomingAgency: number;
   upcomingBookings: number;
-};
-
-type OwnerAgg = {
-  id: string;
-  name: string;
-  email: string;
-  payout: number;
-  bookings: number;
 };
 
 export default async function SuperAdminDashboard({
@@ -125,40 +117,6 @@ export default async function SuperAdminDashboard({
     .filter((x): x is PropertyAgg => !!x)
     .sort((a, b) => b.agencyEarnings - a.agencyEarnings);
 
-  // Per-owner aggregates: sum payout via reservations → property → owner.
-  // Upcoming reservations are excluded — they haven't actually been paid out.
-  const ownerAggsRaw = await prisma.reservation.findMany({
-    where: { upcoming: false },
-    select: {
-      payout: true,
-      property: {
-        select: {
-          owner: { select: { id: true, name: true, email: true } },
-        },
-      },
-    },
-  });
-  const ownersMap = new Map<string, OwnerAgg>();
-  for (const r of ownerAggsRaw) {
-    const o = r.property.owner;
-    const existing = ownersMap.get(o.id);
-    if (existing) {
-      existing.payout += r.payout;
-      existing.bookings += 1;
-    } else {
-      ownersMap.set(o.id, {
-        id: o.id,
-        name: o.name ?? o.email,
-        email: o.email,
-        payout: r.payout,
-        bookings: 1,
-      });
-    }
-  }
-  const ownerTable: OwnerAgg[] = Array.from(ownersMap.values()).sort(
-    (a, b) => b.payout - a.payout,
-  );
-
   // Company expense totals (all-time)
   const companyExpenseAgg = await prisma.companyExpense.aggregate({
     _sum: { amount: true },
@@ -168,22 +126,22 @@ export default async function SuperAdminDashboard({
   const companyExpenseCount = companyExpenseAgg._count._all;
 
   // KPIs
-  const totalRevenue = propertyTable.reduce((s, p) => s + p.totalRevenue, 0);
   const totalAgency = propertyTable.reduce((s, p) => s + p.agencyEarnings, 0);
   const totalPortal = propertyTable.reduce((s, p) => s + p.portalCommissions, 0);
   const totalOwnerPayout = propertyTable.reduce(
     (s, p) => s + p.ownerPayout,
     0,
   );
-  const totalBookings = propertyTable.reduce((s, p) => s + p.bookings, 0);
   const totalUpcomingAgency = propertyTable.reduce(
     (s, p) => s + p.upcomingAgency,
     0,
   );
+  const totalBookings = propertyTable.reduce((s, p) => s + p.bookings, 0);
   const totalUpcomingBookings = propertyTable.reduce(
     (s, p) => s + p.upcomingBookings,
     0,
   );
+  const distinctOwners = new Set(propertyTable.map((p) => p.ownerName)).size;
   const companyNet = totalAgency - totalCompanyExpenses;
 
   // === Chart data ===
@@ -262,16 +220,16 @@ export default async function SuperAdminDashboard({
       />
 
       {/* KPI grid */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
         <KpiTile
-          label="Realized revenue"
+          label="Company revenue"
           value={formatCurrency(totalAgency, "AED", loc)}
-          hint={`from ${totalBookings} bookings`}
+          hint={`portal ${formatCurrency(totalPortal, "AED", loc)}`}
           accent="emerald"
           icon={<TrendingUp className="h-4 w-4" />}
         />
         <KpiTile
-          label="Upcoming revenue"
+          label="Upcoming amount"
           value={formatCurrency(totalUpcomingAgency, "AED", loc)}
           hint={`${totalUpcomingBookings} pipeline`}
           accent="sky"
@@ -285,41 +243,31 @@ export default async function SuperAdminDashboard({
           icon={<Receipt className="h-4 w-4" />}
         />
         <KpiTile
-          label="Net profit"
+          label="Company profit"
           value={formatCurrency(companyNet, "AED", loc)}
-          hint="realized − expenses"
+          hint="revenue − expenses"
           accent={companyNet >= 0 ? "emerald" : "rose"}
           icon={<Wallet className="h-4 w-4" />}
         />
         <KpiTile
           label="Paid to owners"
           value={formatCurrency(totalOwnerPayout, "AED", loc)}
-          hint={`across ${ownerTable.length} owners`}
+          hint={`across ${distinctOwners} owner${distinctOwners === 1 ? "" : "s"}`}
           accent="indigo"
           icon={<Users className="h-4 w-4" />}
         />
         <KpiTile
-          label="Properties"
-          value={String(propertyTable.length)}
-          hint={`portal: ${formatCurrency(totalPortal, "AED", loc)}`}
+          label="Reservations"
+          value={String(totalBookings)}
+          hint={`${propertyTable.length} properties`}
           accent="amber"
-          icon={<Building2 className="h-4 w-4" />}
+          icon={<CalendarDays className="h-4 w-4" />}
         />
       </div>
 
-      {/* Charts */}
-      <div className="mt-6">
-        <DashboardCharts
-          locale={loc}
-          topProperties={topProperties}
-          split={split}
-          monthly={monthly}
-        />
-      </div>
-
-      {/* Property breakdown */}
+      {/* Reporting */}
       <h2 className="mt-8 mb-3 text-base font-bold tracking-tight">
-        By property
+        Reporting
       </h2>
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
@@ -396,56 +344,15 @@ export default async function SuperAdminDashboard({
         </div>
       </Card>
 
-      {/* Owner breakdown */}
-      <h2 className="mt-8 mb-3 text-base font-bold tracking-tight">
-        By owner
-      </h2>
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold">Owner</th>
-                <th className="px-4 py-3 text-left font-semibold">Email</th>
-                <th className="px-4 py-3 text-right font-semibold">Bookings</th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Total paid out
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {ownerTable.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={4}
-                    className="px-4 py-12 text-center text-sm text-[var(--color-muted)]"
-                  >
-                    No owners yet.
-                  </td>
-                </tr>
-              ) : (
-                ownerTable.map((o) => (
-                  <tr
-                    key={o.id}
-                    className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
-                  >
-                    <td className="px-4 py-3 font-semibold">{o.name}</td>
-                    <td className="px-4 py-3 text-[var(--color-muted)]">
-                      {o.email}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {o.bookings}
-                    </td>
-                    <td className="px-4 py-3 text-right font-bold tabular-nums">
-                      {formatCurrency(o.payout, "AED", loc)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      {/* Charts */}
+      <div className="mt-8">
+        <DashboardCharts
+          locale={loc}
+          topProperties={topProperties}
+          split={split}
+          monthly={monthly}
+        />
+      </div>
     </div>
   );
 }
