@@ -25,8 +25,18 @@ export default async function OwnerDetailPage({
       properties: {
         include: {
           _count: { select: { reservations: true } },
+          // Realized only — upcoming bookings are pipeline, they don't
+          // create an obligation toward the owner yet.
           reservations: {
-            select: { totalPrice: true, nights: true, checkIn: true, checkOut: true, currency: true },
+            where: { upcoming: false },
+            select: {
+              totalPrice: true,
+              payout: true,
+              nights: true,
+              checkIn: true,
+              checkOut: true,
+              currency: true,
+            },
           },
         },
         orderBy: { createdAt: "desc" },
@@ -53,9 +63,11 @@ export default async function OwnerDetailPage({
   const tOwner = await getTranslations({ locale, namespace: "owner" });
 
   const totalReservations = owner.properties.reduce((s, p) => s + p._count.reservations, 0);
-  const totalRevenue = owner.properties
+  const accruedPayout = owner.properties
     .flatMap((p) => p.reservations)
-    .reduce((s, r) => s + r.totalPrice, 0);
+    .reduce((s, r) => s + r.payout, 0);
+  const totalPaid = payments.reduce((s, p) => s + p.amount, 0);
+  const ownerBalance = Math.max(0, accruedPayout - totalPaid);
   const totalNights = owner.properties
     .flatMap((p) => p.reservations)
     .reduce((s, r) => s + r.nights, 0);
@@ -108,8 +120,8 @@ export default async function OwnerDetailPage({
           accent="emerald"
         />
         <StatCard
-          label={tOwner("kpiRevenue")}
-          value={formatCurrency(totalRevenue, "AED", loc)}
+          label={tAdmin("ownerBalance")}
+          value={formatCurrency(ownerBalance, "AED", loc)}
           icon={<Coins className="h-4 w-4" />}
           accent="amber"
         />

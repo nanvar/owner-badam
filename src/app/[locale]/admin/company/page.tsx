@@ -1,4 +1,5 @@
 import { setRequestLocale } from "next-intl/server";
+import Link from "next/link";
 import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
 import {
@@ -310,8 +311,13 @@ export default async function SuperAdminDashboard({
                         <span className="font-semibold">{p.name}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-muted)]">
-                      {p.ownerName}
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/${loc}/admin/owners/${p.ownerId}`}
+                        className="text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-brand)] hover:underline"
+                      >
+                        {p.ownerName}
+                      </Link>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {p.bookings}

@@ -5,12 +5,9 @@ import { defaultLocale, locales } from "@/i18n/config";
 const SECRET = process.env.AUTH_SECRET ?? "dev-secret-change-me";
 const KEY = new TextEncoder().encode(SECRET);
 
-// Routes anyone (auth or not) can browse. Anything outside these and not
-// under /admin or /owner falls through with no auth gate, which means the
-// public homepage `/${locale}/` and property pages `/${locale}/property/*`
-// are reachable without a session.
+// Anonymous-only paths. Site root has no public landing — `/[locale]/page.tsx`
+// redirects to login or dashboard based on session.
 const PUBLIC_PATHS = new Set(["login"]);
-const PUBLIC_PREFIXES = new Set(["property"]);
 
 function pickLocale(req: NextRequest): string {
   const cookieLocale = req.cookies.get("NEXT_LOCALE")?.value;
@@ -84,13 +81,9 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Public homepage `/${locale}` — accessible to everyone (signed in or not).
+  // Site root `/${locale}` — let the page server-component decide where to
+  // send the visitor (login when anonymous, dashboard when signed in).
   if (segments.length === 1) {
-    return NextResponse.next();
-  }
-
-  // Public sub-trees (property pages, etc.) — no auth required.
-  if (PUBLIC_PREFIXES.has(subPath)) {
     return NextResponse.next();
   }
 

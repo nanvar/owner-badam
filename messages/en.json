@@ -152,6 +152,7 @@
     "createOwner": "Create owner",
     "editOwner": "Edit owner",
     "ownerEmail": "Email",
+    "ownerBalance": "Owner balance",
     "ownerName": "Full name",
     "ownerPassword": "Password",
     "ownerPhone": "Phone",

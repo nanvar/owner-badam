@@ -152,6 +152,7 @@
     "createOwner": "Создать владельца",
     "editOwner": "Редактировать владельца",
     "ownerEmail": "Email",
+    "ownerBalance": "Остаток к выплате",
     "ownerName": "Полное имя",
     "ownerPassword": "Пароль",
     "ownerPhone": "Телефон",

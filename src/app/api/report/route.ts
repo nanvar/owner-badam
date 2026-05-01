@@ -74,6 +74,9 @@ export async function GET(req: Request) {
       prisma.reservation.findMany({
         where: {
           property: propertyFilter,
+          // Realized only — upcoming reservations are pipeline and don't
+          // belong on the owner's settlement statement.
+          upcoming: false,
           // Any reservation that overlaps the period — its nights are then
           // pro-rated below so each month only sees the slice it owns.
           AND: [
