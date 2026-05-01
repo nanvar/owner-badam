@@ -104,7 +104,7 @@ export async function createOwnerAction(
   _prev: { status: string; message?: string } | undefined,
   formData: FormData,
 ) {
-  await requireRole("ADMIN");
+  await requireRole("SUPERADMIN");
   const parsed = OwnerSchema.safeParse({
     email: formData.get("email"),
     name: formData.get("name"),
@@ -146,7 +146,7 @@ export async function updateOwnerAction(
   _prev: { status: string; message?: string } | undefined,
   formData: FormData,
 ) {
-  await requireRole("ADMIN");
+  await requireRole("SUPERADMIN");
   const parsed = UpdateOwnerSchema.safeParse({
     id: formData.get("id"),
     email: formData.get("email"),
@@ -187,7 +187,7 @@ export async function updateOwnerAction(
 }
 
 export async function deleteOwnerAction(id: string) {
-  const session = await requireRole("ADMIN");
+  const session = await requireRole("SUPERADMIN");
   if (session.userId === id) {
     throw new Error("Cannot delete the currently signed-in user");
   }
@@ -198,7 +198,7 @@ export async function deleteOwnerAction(id: string) {
 }
 
 export async function setUserBlockedAction(id: string, blocked: boolean) {
-  const session = await requireRole("ADMIN");
+  const session = await requireRole("SUPERADMIN");
   if (session.userId === id) {
     throw new Error("Cannot block the currently signed-in user");
   }

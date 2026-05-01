@@ -39,7 +39,9 @@ export async function loginAction(
   }
   const localeRaw = (formData.get("locale") as string) || defaultLocale;
   const locale = isLocale(localeRaw) ? localeRaw : defaultLocale;
-  redirect(`/${locale}/${result.role.toLowerCase()}`);
+  const path =
+    result.role === "SUPERADMIN" ? "admin/company" : result.role.toLowerCase();
+  redirect(`/${locale}/${path}`);
 }
 
 export async function logoutAction() {

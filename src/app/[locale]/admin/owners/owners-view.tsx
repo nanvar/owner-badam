@@ -41,9 +41,11 @@ type OwnerRow = {
 export function OwnersView({
   owners,
   labels,
+  canManage,
 }: {
   owners: OwnerRow[];
   labels: Record<string, string>;
+  canManage: boolean;
 }) {
   const [creatingOpen, setCreatingOpen] = useState(false);
   const [editing, setEditing] = useState<OwnerRow | null>(null);
@@ -79,10 +81,12 @@ export function OwnersView({
       <PageHeader
         title={labels.title}
         right={
-          <Button onClick={() => setCreatingOpen(true)}>
-            <Plus className="h-4 w-4" />
-            {labels.newOwner}
-          </Button>
+          canManage ? (
+            <Button onClick={() => setCreatingOpen(true)}>
+              <Plus className="h-4 w-4" />
+              {labels.newOwner}
+            </Button>
+          ) : undefined
         }
       />
       {owners.length === 0 ? (
@@ -140,44 +144,48 @@ export function OwnersView({
                     </td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => {
-                            setPendingBlockId(o.id);
-                            startBlock(async () => {
-                              await setUserBlockedAction(o.id, !o.blocked);
-                              setPendingBlockId(null);
-                            });
-                          }}
-                          disabled={blockPending && pendingBlockId === o.id}
-                          aria-label={o.blocked ? "Unblock" : "Block"}
-                          title={o.blocked ? "Unblock" : "Block"}
-                          className={cn(
-                            "rounded-lg p-1.5 transition-colors disabled:opacity-50",
-                            o.blocked
-                              ? "text-emerald-600 hover:bg-emerald-500/10"
-                              : "text-[var(--color-muted)] hover:bg-amber-500/10 hover:text-amber-600",
-                          )}
-                        >
-                          {o.blocked ? (
-                            <Unlock className="h-4 w-4" />
-                          ) : (
-                            <Ban className="h-4 w-4" />
-                          )}
-                        </button>
-                        <button
-                          onClick={() => setEditing(o)}
-                          aria-label="Edit"
-                          className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeleting(o)}
-                          aria-label="Delete"
-                          className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-rose-500/10 hover:text-rose-600"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {canManage && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setPendingBlockId(o.id);
+                                startBlock(async () => {
+                                  await setUserBlockedAction(o.id, !o.blocked);
+                                  setPendingBlockId(null);
+                                });
+                              }}
+                              disabled={blockPending && pendingBlockId === o.id}
+                              aria-label={o.blocked ? "Unblock" : "Block"}
+                              title={o.blocked ? "Unblock" : "Block"}
+                              className={cn(
+                                "rounded-lg p-1.5 transition-colors disabled:opacity-50",
+                                o.blocked
+                                  ? "text-emerald-600 hover:bg-emerald-500/10"
+                                  : "text-[var(--color-muted)] hover:bg-amber-500/10 hover:text-amber-600",
+                              )}
+                            >
+                              {o.blocked ? (
+                                <Unlock className="h-4 w-4" />
+                              ) : (
+                                <Ban className="h-4 w-4" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => setEditing(o)}
+                              aria-label="Edit"
+                              className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeleting(o)}
+                              aria-label="Delete"
+                              className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-rose-500/10 hover:text-rose-600"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
                         <ChevronRight className="ml-1 h-4 w-4 text-[var(--color-muted)]" />
                       </div>
                     </td>

@@ -1,5 +1,12 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { ListTree, Users, Settings as SettingsIcon } from "lucide-react";
+import {
+  LayoutDashboard,
+  ListTree,
+  Receipt,
+  Users,
+  ShieldCheck,
+  Settings as SettingsIcon,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { requireRole } from "@/lib/auth";
 import { isLocale } from "@/i18n/config";
@@ -21,7 +28,24 @@ export default async function AdminLayout({
   const tCommon = await getTranslations({ locale, namespace: "common" });
   const settings = await getSettings();
 
+  const isSuperadmin = session.role === "SUPERADMIN";
+
   const nav = [
+    // SUPERADMIN-only top items.
+    ...(isSuperadmin
+      ? [
+          {
+            href: `/${locale}/admin/company`,
+            label: "Company",
+            icon: <LayoutDashboard className="h-4 w-4" />,
+          },
+          {
+            href: `/${locale}/admin/company/expenses`,
+            label: "Company expenses",
+            icon: <Receipt className="h-4 w-4" />,
+          },
+        ]
+      : []),
     {
       href: `/${locale}/admin/reservations`,
       label: t("navReservations"),
@@ -32,6 +56,15 @@ export default async function AdminLayout({
       label: t("navOwners"),
       icon: <Users className="h-4 w-4" />,
     },
+    ...(isSuperadmin
+      ? [
+          {
+            href: `/${locale}/admin/staff`,
+            label: "Staff",
+            icon: <ShieldCheck className="h-4 w-4" />,
+          },
+        ]
+      : []),
     {
       href: `/${locale}/admin/settings`,
       label: tCommon("settings"),

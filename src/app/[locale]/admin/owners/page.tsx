@@ -2,6 +2,7 @@ import { setRequestLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { isLocale } from "@/i18n/config";
 import { notFound } from "next/navigation";
+import { requireRole } from "@/lib/auth";
 import { OwnersView } from "./owners-view";
 
 export default async function OwnersPage({
@@ -12,6 +13,7 @@ export default async function OwnersPage({
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
+  const session = await requireRole("ADMIN");
 
   const owners = await prisma.user.findMany({
     where: { role: "OWNER" },
@@ -34,6 +36,7 @@ export default async function OwnersPage({
 
   return (
     <OwnersView
+      canManage={session.role === "SUPERADMIN"}
       owners={owners.map((o) => ({
         id: o.id,
         name: o.name,

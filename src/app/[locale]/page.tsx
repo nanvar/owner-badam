@@ -11,7 +11,11 @@ export default async function LocaleRootPage({
   if (!isLocale(locale)) notFound();
   const session = await readSession();
   if (session) {
-    redirect(`/${locale}/${session.role.toLowerCase()}`);
+    const path =
+      session.role === "SUPERADMIN"
+        ? "admin/company"
+        : session.role.toLowerCase();
+    redirect(`/${locale}/${path}`);
   }
   redirect(`/${locale}/login`);
 }

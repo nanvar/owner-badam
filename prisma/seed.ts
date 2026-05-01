@@ -59,6 +59,17 @@ async function main() {
     },
   });
 
+  await prisma.user.upsert({
+    where: { email: "manager@demo.com" },
+    update: { password: adminPassword, role: "SUPERADMIN" },
+    create: {
+      email: "manager@demo.com",
+      name: "Demo Manager",
+      password: adminPassword,
+      role: "SUPERADMIN",
+    },
+  });
+
   const owner = await prisma.user.upsert({
     where: { email: "owner@demo.com" },
     update: {

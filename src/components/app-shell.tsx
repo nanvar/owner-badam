@@ -36,7 +36,11 @@ export function AppShell({
   brand,
 }: {
   locale: Locale;
-  user: { name: string | null; email: string; role: "ADMIN" | "OWNER" };
+  user: {
+    name: string | null;
+    email: string;
+    role: "ADMIN" | "OWNER" | "SUPERADMIN";
+  };
   nav: NavItem[];
   children: React.ReactNode;
   variant: "admin" | "owner";
@@ -123,6 +127,25 @@ export function AppShell({
           </nav>
           <div className="flex items-center gap-2 justify-self-end">
             {topRight}
+            <button
+              type="button"
+              onClick={() => setPasswordOpen(true)}
+              className="hidden flex-col text-right text-xs leading-tight transition-colors hover:text-[var(--color-brand)] sm:flex"
+              aria-label="Change password"
+              title="Change password"
+            >
+              <span className="font-semibold">{user.name ?? user.email}</span>
+              <span className="text-[var(--color-muted)]">{user.email}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPasswordOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-muted)] transition-colors hover:border-[var(--color-brand)] hover:bg-[var(--color-brand-soft)] hover:text-[var(--color-brand)]"
+              aria-label="Change password"
+              title="Change password"
+            >
+              <KeyRound className="h-4 w-4" />
+            </button>
             <div className="relative">
               <details className="group">
                 <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]">
@@ -145,25 +168,6 @@ export function AppShell({
                 </div>
               </details>
             </div>
-            <button
-              type="button"
-              onClick={() => setPasswordOpen(true)}
-              className="hidden flex-col text-right text-xs leading-tight transition-colors hover:text-[var(--color-brand)] sm:flex"
-              aria-label="Change password"
-              title="Change password"
-            >
-              <span className="font-semibold">{user.name ?? user.email}</span>
-              <span className="text-[var(--color-muted)]">{user.email}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPasswordOpen(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-muted)] transition-colors hover:border-[var(--color-brand)] hover:bg-[var(--color-brand-soft)] hover:text-[var(--color-brand)]"
-              aria-label="Change password"
-              title="Change password"
-            >
-              <KeyRound className="h-4 w-4" />
-            </button>
             <form action={() => start(() => logoutAction())}>
               <button
                 type="submit"

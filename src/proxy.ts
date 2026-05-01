@@ -20,15 +20,25 @@ function pickLocale(req: NextRequest): string {
   return defaultLocale;
 }
 
+type ProxyRole = "ADMIN" | "OWNER" | "SUPERADMIN";
+
 async function readSessionFromRequest(req: NextRequest) {
   const token = req.cookies.get("pms_session")?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, KEY);
-    return payload as { userId: string; role: "ADMIN" | "OWNER"; locale: string };
+    return payload as { userId: string; role: ProxyRole; locale: string };
   } catch {
     return null;
   }
+}
+
+// Where each role lands when they hit `/${locale}` (root) or login while
+// already authenticated. SUPERADMIN goes to the company dashboard, which
+// lives under /admin so they share the same shell as ADMIN.
+function landingPath(role: ProxyRole): string {
+  if (role === "SUPERADMIN") return "admin/company";
+  return role.toLowerCase();
 }
 
 export async function proxy(req: NextRequest) {
@@ -61,7 +71,7 @@ export async function proxy(req: NextRequest) {
   if (PUBLIC_PATHS.has(subPath)) {
     if (session) {
       const dest = req.nextUrl.clone();
-      dest.pathname = `/${locale}/${session.role.toLowerCase()}`;
+      dest.pathname = `/${locale}/${landingPath(session.role)}`;
       return NextResponse.redirect(dest);
     }
     return NextResponse.next();
@@ -69,7 +79,9 @@ export async function proxy(req: NextRequest) {
 
   if (segments.length === 1) {
     const dest = req.nextUrl.clone();
-    dest.pathname = session ? `/${locale}/${session.role.toLowerCase()}` : `/${locale}/login`;
+    dest.pathname = session
+      ? `/${locale}/${landingPath(session.role)}`
+      : `/${locale}/login`;
     return NextResponse.redirect(dest);
   }
 
@@ -79,9 +91,10 @@ export async function proxy(req: NextRequest) {
       dest.pathname = `/${locale}/login`;
       return NextResponse.redirect(dest);
     }
-    if (session.role !== "ADMIN") {
+    // SUPERADMIN ⊃ ADMIN — both share the /admin shell.
+    if (session.role !== "ADMIN" && session.role !== "SUPERADMIN") {
       const dest = req.nextUrl.clone();
-      dest.pathname = `/${locale}/owner`;
+      dest.pathname = `/${locale}/${landingPath(session.role)}`;
       return NextResponse.redirect(dest);
     }
   }

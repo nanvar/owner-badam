@@ -10,6 +10,18 @@ datasource db {
 enum Role {
   ADMIN
   OWNER
+  SUPERADMIN
+}
+
+enum CompanyExpenseCategory {
+  SALARY
+  RENT
+  MARKETING
+  SOFTWARE
+  TRAVEL
+  TAX
+  UTILITIES
+  OTHER
 }
 
 enum ReservationStatus {
@@ -143,6 +155,18 @@ model Advance {
   updatedAt   DateTime @updatedAt
 
   @@index([propertyId])
+  @@index([date])
+}
+
+model CompanyExpense {
+  id          String                 @id @default(cuid())
+  date        DateTime
+  category    CompanyExpenseCategory
+  description String                 @db.Text
+  amount      Float
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
   @@index([date])
 }
 

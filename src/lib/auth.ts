@@ -95,8 +95,21 @@ export async function requireSession(): Promise<SessionPayload> {
   return session;
 }
 
+// Role hierarchy: SUPERADMIN ⊃ ADMIN. requireRole("ADMIN") accepts both
+// ADMIN and SUPERADMIN so superadmins can use every admin feature without
+// duplicating checks. requireRole("SUPERADMIN") is strict.
 export async function requireRole(role: Role): Promise<SessionPayload> {
   const session = await requireSession();
-  if (session.role !== role) redirect(`/${session.locale || "en"}/${session.role.toLowerCase()}`);
+  const allowed =
+    session.role === role ||
+    (role === "ADMIN" && session.role === "SUPERADMIN");
+  if (!allowed) {
+    redirect(`/${session.locale || "en"}/${landingForRole(session.role)}`);
+  }
   return session;
+}
+
+function landingForRole(role: Role): string {
+  if (role === "SUPERADMIN") return "admin/company";
+  return role.toLowerCase();
 }
