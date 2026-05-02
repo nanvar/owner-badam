@@ -13,6 +13,7 @@ import {
   MessageCircle,
   Info,
   KeyRound,
+  Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet } from "@/components/ui/sheet";
@@ -34,6 +35,7 @@ export function AppShell({
   variant,
   topRight,
   brand,
+  mobileNav = "bottom",
 }: {
   locale: Locale;
   user: {
@@ -45,6 +47,9 @@ export function AppShell({
   children: React.ReactNode;
   variant: "admin" | "owner";
   topRight?: React.ReactNode;
+  // "bottom" — fixed bottom tab bar (works for ≤4 items); "drawer" — left
+  // hamburger that slides in a Sheet (better when there are many items).
+  mobileNav?: "bottom" | "drawer";
   brand?: {
     name: string;
     logoUrl: string | null;
@@ -60,6 +65,7 @@ export function AppShell({
   const [pending, start] = useTransition();
   const [contactOpen, setContactOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Active nav item: prefix-match on the href (so /admin/company/expenses
   // highlights "Company expenses"). When a more-specific sibling also
@@ -102,9 +108,22 @@ export function AppShell({
         }}
       >
         <div className="mx-auto grid max-w-6xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3">
+          {mobileNav === "drawer" && (
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              className="mr-1 flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)] md:hidden"
+              aria-label="Open menu"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+          )}
           <Link
             href={`/${locale}/${variant}`}
-            className="flex items-center gap-2 font-semibold tracking-tight"
+            className={cn(
+              "flex items-center gap-2 font-semibold tracking-tight",
+              mobileNav === "drawer" && "col-start-2 md:col-start-1",
+            )}
           >
             {brand?.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -195,12 +214,18 @@ export function AppShell({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-4 md:pb-10">
+      <main
+        className={cn(
+          "mx-auto w-full max-w-6xl flex-1 px-4 pt-4 md:pb-10",
+          mobileNav === "bottom" ? "pb-24" : "pb-10",
+        )}
+      >
         {children}
       </main>
 
       {brand && hasContacts && <BrandFooter brand={brand} />}
 
+      {mobileNav === "bottom" && (
       <nav
         className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-border)] bg-white md:hidden"
         style={{
@@ -293,6 +318,65 @@ export function AppShell({
           )}
         </div>
       </nav>
+      )}
+
+      {mobileNav === "drawer" && (
+        <Sheet
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          side="right"
+          title="Menu"
+        >
+          <ul className="-mx-1 space-y-1">
+            {nav.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={() => setDrawerOpen(false)}
+                    className={cn(
+                      "flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition-colors",
+                      active
+                        ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
+                        : "text-[var(--color-foreground)] hover:bg-[var(--color-surface-2)]",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "grid h-9 w-9 place-items-center rounded-xl",
+                        active
+                          ? "bg-white/60 text-[var(--color-brand)]"
+                          : "bg-[var(--color-surface-2)] text-[var(--color-muted)]",
+                      )}
+                    >
+                      {item.icon}
+                    </span>
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            })}
+            {brand && hasContacts && (
+              <li>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDrawerOpen(false);
+                    setContactOpen(true);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium text-[var(--color-foreground)] hover:bg-[var(--color-surface-2)]"
+                >
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--color-surface-2)] text-[var(--color-muted)]">
+                    <Info className="h-4 w-4" />
+                  </span>
+                  Contact
+                </button>
+              </li>
+            )}
+          </ul>
+        </Sheet>
+      )}
 
       {brand && hasContacts && (
         <Sheet

@@ -84,6 +84,7 @@ export default async function AdminLayout({
       user={{ name: session.name, email: session.email, role: session.role }}
       nav={nav}
       variant="admin"
+      mobileNav="drawer"
       brand={{
         name: settings.brandName,
         logoUrl: settings.logoUrl,
