@@ -5,6 +5,7 @@ import {
   Receipt,
   Users,
   ShieldCheck,
+  FileText,
   Settings as SettingsIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -55,6 +56,11 @@ export default async function AdminLayout({
       href: `/${locale}/admin/owners`,
       label: t("navOwners"),
       icon: <Users className="h-4 w-4" />,
+    },
+    {
+      href: `/${locale}/admin/reports`,
+      label: tCommon("reports"),
+      icon: <FileText className="h-4 w-4" />,
     },
     ...(isSuperadmin
       ? [

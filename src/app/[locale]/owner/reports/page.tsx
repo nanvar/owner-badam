@@ -1,9 +1,13 @@
-import { setRequestLocale, getTranslations } from "next-intl/server";
-import { isLocale, type Locale } from "@/i18n/config";
+import Link from "next/link";
+import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
+import { FileText } from "lucide-react";
+import { isLocale, type Locale } from "@/i18n/config";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { ReportPropertyPicker } from "./report-property-picker";
+import { Card, CardBody } from "@/components/ui/card";
+import { PageHeader } from "@/components/app-shell";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default async function OwnerReportsPage({
   params,
@@ -14,70 +18,68 @@ export default async function OwnerReportsPage({
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
   const session = await requireRole("OWNER");
+  const loc = locale as Locale;
 
-  const properties = await prisma.property.findMany({
+  const reports = await prisma.ownerReport.findMany({
     where: { ownerId: session.userId },
-    select: {
-      id: true,
-      name: true,
-      address: true,
-      color: true,
-      createdAt: true,
-      _count: { select: { reservations: true } },
+    include: {
+      property: { select: { name: true, color: true } },
+      _count: { select: { reservations: true, expenses: true } },
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: "desc" },
   });
-  const earliestCreatedAt = properties.length
-    ? properties.reduce((m, p) => (p.createdAt < m ? p.createdAt : m), properties[0].createdAt)
-    : null;
-
-  const t = await getTranslations({ locale, namespace: "owner" });
-  const tCommon = await getTranslations({ locale, namespace: "common" });
-  const tAdmin = await getTranslations({ locale, namespace: "admin" });
 
   return (
-    <ReportPropertyPicker
-      locale={locale as Locale}
-      ownerName={session.name ?? session.email}
-      properties={properties.map((p) => ({
-        id: p.id,
-        name: p.name,
-        address: p.address,
-        color: p.color,
-        createdAt: p.createdAt.toISOString(),
-        reservationCount: p._count.reservations,
-      }))}
-      earliestCreatedAt={earliestCreatedAt ? earliestCreatedAt.toISOString() : null}
-      labels={{
-        title: tCommon("reports"),
-        allProperties: t("allProperties"),
-        noProperties: t("noProperties"),
-        reservations: tCommon("reservations"),
-        guest: t("guest"),
-        payout: tAdmin("payout"),
-        loading: tCommon("loading"),
-        noData: tCommon("noData"),
-        pdf: t("downloadPdf"),
-        selectMonth: t("selectMonth"),
-        noMonthsAvailable: t("noMonthsAvailable"),
-        monthlySettlement: t("monthlySettlement"),
-        paymentsByBooking: t("paymentsByBooking"),
-        expensesSection: t("expensesSection"),
-        paymentsOnAccount: t("paymentsOnAccount"),
-        stay: t("stay"),
-        agency: t("agency"),
-        portal: t("portal"),
-        toOwner: t("toOwner"),
-        subtotal: t("subtotal"),
-        totalIncome: t("totalIncome"),
-        totalDeductions: t("totalDeductions"),
-        settlementTotal: t("settlementTotal"),
-        amount: t("amount"),
-        date: t("date"),
-        type: t("type"),
-        description: t("description"),
-        concept: t("concept"),
-      }}
-    />
+    <div>
+      <PageHeader title="Reports" />
+      {reports.length === 0 ? (
+        <Card>
+          <CardBody className="py-16 text-center text-sm text-[var(--color-muted)]">
+            No reports yet. Your manager will share settlement reports here as
+            they're prepared.
+          </CardBody>
+        </Card>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {reports.map((r) => (
+            <Link
+              key={r.id}
+              href={`/${loc}/owner/reports/${r.id}`}
+              className="group"
+            >
+              <Card className="overflow-hidden transition-shadow group-hover:shadow-lg">
+                <CardBody>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="grid h-10 w-10 place-items-center rounded-2xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
+                    >
+                      <FileText className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-base font-bold tracking-tight">
+                        {r.name}
+                      </div>
+                      <div className="truncate text-xs text-[var(--color-muted)]">
+                        {r.property.name} ·{" "}
+                        {formatDate(r.createdAt.toISOString(), loc)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex items-baseline justify-between gap-3">
+                    <div className="text-xs text-[var(--color-muted)]">
+                      {r._count.reservations} reservations ·{" "}
+                      {r._count.expenses} expenses
+                    </div>
+                    <div className="text-lg font-bold tabular-nums text-emerald-700">
+                      {formatCurrency(r.netPayout, "AED", loc)}
+                    </div>
+                  </div>
+                </CardBody>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

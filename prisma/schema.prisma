@@ -58,6 +58,8 @@ model User {
   receivedPayments OwnerPayment[] @relation("OwnerPaymentRecipient")
   // Audit trail: payments this user (as admin) recorded for someone else.
   recordedPayments OwnerPayment[] @relation("OwnerPaymentRecorder")
+  ownerReports     OwnerReport[]  @relation("OwnerReportRecipient")
+  createdReports   OwnerReport[]  @relation("OwnerReportCreator")
 }
 
 model Property {
@@ -90,6 +92,7 @@ model Property {
   expenses       Expense[]
   advances       Advance[]
   directBookings DirectBooking[]
+  ownerReports   OwnerReport[]
 
   @@index([ownerId])
 }
@@ -125,6 +128,10 @@ model Reservation {
   // dashboard accounts these separately so management can see realized
   // revenue vs pipeline. Owner reports ignore this flag.
   upcoming          Boolean           @default(false)
+  // Once a reservation is bundled into an owner report it's "closed" and
+  // no longer appears in the report builder's pickable list.
+  reportId          String?
+  report            OwnerReport?      @relation(fields: [reportId], references: [id], onDelete: SetNull)
   syncedAt          DateTime          @default(now())
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
@@ -133,6 +140,7 @@ model Reservation {
   @@index([propertyId])
   @@index([checkIn])
   @@index([checkOut])
+  @@index([reportId])
 }
 
 enum ExpenseType {
@@ -154,11 +162,14 @@ model Expense {
   type        ExpenseType
   description String      @db.Text
   amount      Float       // positive — represented as a deduction in reports
+  reportId    String?
+  report      OwnerReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
   @@index([propertyId])
   @@index([date])
+  @@index([reportId])
 }
 
 model Advance {
@@ -218,6 +229,34 @@ model CompanyExpense {
   updatedAt   DateTime               @updatedAt
 
   @@index([date])
+}
+
+// A curated bundle of one property's reservations + expenses, prepared by
+// admin for an owner. Once an item belongs to a report it's "closed" and
+// no longer offered when building future reports.
+model OwnerReport {
+  id            String   @id @default(cuid())
+  ownerId       String
+  owner         User     @relation("OwnerReportRecipient", fields: [ownerId], references: [id], onDelete: Cascade)
+  propertyId    String
+  property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  name          String   // e.g. "March 2026"
+  notes         String?  @db.Text
+  // Snapshots of the totals at creation time — kept on the row so the
+  // report stays stable even if items are later edited.
+  totalIncome   Float    @default(0)
+  totalExpenses Float    @default(0)
+  netPayout     Float    @default(0)
+  createdById   String?
+  createdBy     User?    @relation("OwnerReportCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  reservations  Reservation[]
+  expenses      Expense[]
+
+  @@index([ownerId])
+  @@index([propertyId])
 }
 
 // Cash settlements paid to an owner. The dashboard sums these as
