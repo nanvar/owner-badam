@@ -133,9 +133,21 @@ export async function createOwnerReportAction(
   return { status: "ok", reportId: report.id };
 }
 
-// Delete a report, releasing its items back into the picker.
+// Delete a report, releasing its items back into the picker. The DB-level
+// ON DELETE SET NULL already nulls reservation.reportId / expense.reportId,
+// but we do it explicitly inside a transaction so the behaviour is obvious
+// at the application layer too.
 export async function deleteOwnerReportAction(id: string) {
   await requireRole("ADMIN");
-  // SetNull on the FK takes care of releasing reservations/expenses.
-  await prisma.ownerReport.delete({ where: { id } });
+  await prisma.$transaction([
+    prisma.reservation.updateMany({
+      where: { reportId: id },
+      data: { reportId: null },
+    }),
+    prisma.expense.updateMany({
+      where: { reportId: id },
+      data: { reportId: null },
+    }),
+    prisma.ownerReport.delete({ where: { id } }),
+  ]);
 }

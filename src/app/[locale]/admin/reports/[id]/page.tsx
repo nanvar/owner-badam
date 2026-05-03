@@ -144,7 +144,11 @@ export default async function AdminReportDetailPage({
         right={
           <div className="flex items-center gap-2">
             <ReportPdfButton data={pdfData} locale={loc} />
-            <DeleteReportButton id={report.id} locale={loc} />
+            <DeleteReportButton
+              id={report.id}
+              name={report.name}
+              locale={loc}
+            />
           </div>
         }
       />
