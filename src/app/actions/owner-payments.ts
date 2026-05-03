@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
+import { pushToOwner } from "@/lib/push";
 
 const OwnerPaymentSchema = z.object({
   ownerId: z.string().min(1),
@@ -53,6 +54,13 @@ export async function createOwnerPaymentAction(
       recordedById: session.userId,
     },
   });
+  // Best-effort push — fire-and-forget so a notification outage never
+  // blocks the bookkeeping action.
+  pushToOwner(v.ownerId, {
+    title: "Payment received",
+    body: `${v.amount.toLocaleString("en-GB", { style: "currency", currency: "AED", maximumFractionDigits: 2 })} recorded${v.reference ? ` · ${v.reference}` : ""}`,
+    data: { type: "payment" },
+  }).catch(() => {});
   return { status: "ok" };
 }
 

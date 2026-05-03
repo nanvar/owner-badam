@@ -60,6 +60,7 @@ model User {
   recordedPayments OwnerPayment[] @relation("OwnerPaymentRecorder")
   ownerReports     OwnerReport[]  @relation("OwnerReportRecipient")
   createdReports   OwnerReport[]  @relation("OwnerReportCreator")
+  devices          OwnerDevice[]
 }
 
 model Property {
@@ -279,6 +280,21 @@ model OwnerPayment {
 
   @@index([ownerId])
   @@index([date])
+}
+
+// Push-notification device tokens for the owner mobile app. One owner
+// can have several devices; the same Expo push token never repeats so
+// it's the unique key — re-registrations bump `updatedAt`.
+model OwnerDevice {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String?  // ios / android (best-effort, app reports it)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model AppSettings {

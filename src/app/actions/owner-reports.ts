@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
+import { pushToOwner } from "@/lib/push";
 
 const CreateReportSchema = z.object({
   propertyId: z.string().min(1),
@@ -129,6 +130,12 @@ export async function createOwnerReportAction(
     }
     return created;
   });
+
+  pushToOwner(property.ownerId, {
+    title: "New report ready",
+    body: `${v.name} · ${netPayout.toLocaleString("en-GB", { style: "currency", currency: "AED", maximumFractionDigits: 2 })} net`,
+    data: { type: "report", reportId: report.id },
+  }).catch(() => {});
 
   return { status: "ok", reportId: report.id };
 }
