@@ -109,7 +109,7 @@ export function OwnersView({
           No owners yet — click <strong className="ml-1 text-[var(--color-foreground)]">{labels.newOwner}</strong>.
         </Card>
       ) : (
-        <Card className="overflow-hidden">
+        <Card className="overflow-visible">
           <div>
             <table className="grid-table w-full table-fixed text-sm">
               <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
