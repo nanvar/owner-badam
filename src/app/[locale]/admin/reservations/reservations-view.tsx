@@ -1,6 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  Fragment,
+  useActionState,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
@@ -81,7 +88,7 @@ export function ReservationsView({
   const [syncPending, startSync] = useTransition();
 
   const filtered = useMemo(() => {
-    return items.filter((i) => {
+    const list = items.filter((i) => {
       if (filter === "upcoming" && !i.upcoming) return false;
       if (filter === "incomplete" && (i.detailsFilled || i.upcoming))
         return false;
@@ -94,7 +101,31 @@ export function ReservationsView({
       }
       return true;
     });
+    // Stable bucket sort: live (currently ongoing) on top, neither in the
+    // middle, done (already checked out) at the bottom — so admins see
+    // the freshest activity first.
+    const now = Date.now();
+    const bucket = (i: (typeof items)[number]) => {
+      if (i.upcoming) return 1;
+      const ci = new Date(i.checkIn).getTime();
+      const co = new Date(i.checkOut).getTime();
+      if (ci <= now && co > now) return 0; // live
+      if (co <= now) return 2; // done
+      return 1;
+    };
+    return list
+      .map((i, idx) => ({ i, idx, b: bucket(i) }))
+      .sort((a, b) => a.b - b.b || a.idx - b.idx)
+      .map(({ i }) => i);
   }, [items, filter, search]);
+  const firstDoneIndex = useMemo(() => {
+    const now = Date.now();
+    return filtered.findIndex((i) => {
+      if (i.upcoming) return false;
+      const co = new Date(i.checkOut).getTime();
+      return co <= now;
+    });
+  }, [filtered]);
   const upcomingCount = useMemo(
     () => items.filter((i) => i.upcoming).length,
     [items],
@@ -214,12 +245,17 @@ export function ReservationsView({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r) => (
-                  <tr
-                    key={r.id}
-                    onClick={() => setEditing(r)}
-                    className="cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
-                  >
+                {filtered.map((r, idx) => (
+                  <Fragment key={r.id}>
+                    {idx > 0 && idx === firstDoneIndex && (
+                      <tr aria-hidden>
+                        <td colSpan={8} className="h-6 border-x-0 border-b-0" />
+                      </tr>
+                    )}
+                    <tr
+                      onClick={() => setEditing(r)}
+                      className="cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
+                    >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span
@@ -288,7 +324,8 @@ export function ReservationsView({
                         })()}
                       </div>
                     </td>
-                  </tr>
+                    </tr>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

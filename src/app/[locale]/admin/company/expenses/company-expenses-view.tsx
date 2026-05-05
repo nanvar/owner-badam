@@ -448,43 +448,59 @@ function DateFilter({
         e.preventDefault();
         onApply(f, t);
       }}
-      className="mb-3 flex flex-wrap items-center gap-2"
+      className="mb-4 rounded-2xl border-2 border-[var(--color-border)] bg-white p-4 shadow-sm"
     >
-      <span className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-white px-2">
-        <Calendar className="h-3.5 w-3.5 text-[var(--color-muted)]" />
-        <input
-          type="date"
-          value={f}
-          onChange={(e) => setF(e.target.value)}
-          aria-label="From"
-          className="h-9 bg-transparent pl-1 text-sm font-medium focus:outline-none"
-        />
-        <span className="px-1 text-xs text-[var(--color-muted)]">→</span>
-        <input
-          type="date"
-          value={t}
-          onChange={(e) => setT(e.target.value)}
-          aria-label="To"
-          className="h-9 bg-transparent pl-1 pr-2 text-sm font-medium focus:outline-none"
-        />
-      </span>
-      <Button type="submit" size="sm" variant="secondary">
-        Apply
-      </Button>
-      {hasActive && (
-        <button
-          type="button"
-          onClick={() => {
-            setF("");
-            setT("");
-            onApply("", "");
-          }}
-          className="inline-flex h-9 items-center gap-1 rounded-lg px-2 text-xs font-medium text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]"
-        >
-          <X className="h-3.5 w-3.5" />
-          Clear
-        </button>
-      )}
+      <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[var(--color-muted)]">
+        <Calendar className="h-3.5 w-3.5" />
+        Date filter
+      </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="block flex-1 min-w-[180px]">
+          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+            From
+          </span>
+          <span className="flex h-10 items-center rounded-xl border-2 border-[var(--color-border)] bg-white px-3 transition-colors focus-within:border-[var(--color-brand)] focus-within:ring-[3px] focus-within:ring-[var(--color-brand)]/20 hover:border-[var(--color-border-strong,#cbd5d3)]">
+            <input
+              type="date"
+              value={f}
+              onChange={(e) => setF(e.target.value)}
+              aria-label="From"
+              className="h-full w-full bg-transparent text-sm font-medium focus:outline-none"
+            />
+          </span>
+        </label>
+        <label className="block flex-1 min-w-[180px]">
+          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+            To
+          </span>
+          <span className="flex h-10 items-center rounded-xl border-2 border-[var(--color-border)] bg-white px-3 transition-colors focus-within:border-[var(--color-brand)] focus-within:ring-[3px] focus-within:ring-[var(--color-brand)]/20 hover:border-[var(--color-border-strong,#cbd5d3)]">
+            <input
+              type="date"
+              value={t}
+              onChange={(e) => setT(e.target.value)}
+              aria-label="To"
+              className="h-full w-full bg-transparent text-sm font-medium focus:outline-none"
+            />
+          </span>
+        </label>
+        <div className="flex items-end gap-2">
+          <Button type="submit">Apply</Button>
+          {hasActive && (
+            <button
+              type="button"
+              onClick={() => {
+                setF("");
+                setT("");
+                onApply("", "");
+              }}
+              className="inline-flex h-10 items-center gap-1 rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium text-[var(--color-muted)] transition-colors hover:border-[var(--color-brand)] hover:text-[var(--color-foreground)]"
+            >
+              <X className="h-3.5 w-3.5" />
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
     </form>
   );
 }
