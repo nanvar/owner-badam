@@ -263,8 +263,10 @@ export default async function SuperAdminDashboard({
     <div>
       <PageHeader title="Dashboard" />
 
-      {/* KPI grid */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+      {/* KPI grid — auto-rows-fr forces every row to the tallest row's
+          height; *:h-full lets each Card fill that height so the dashboard
+          reads as a uniform 6-card grid. */}
+      <div className="grid auto-rows-fr grid-cols-1 gap-3 *:h-full sm:grid-cols-2 md:grid-cols-3">
         <CompanyRevenueTile
           locale={loc}
           revenue={totalAgency + totalCompanyExtraProfit}
