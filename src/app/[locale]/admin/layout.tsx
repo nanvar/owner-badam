@@ -37,7 +37,7 @@ export default async function AdminLayout({
       ? [
           {
             href: `/${locale}/admin/company`,
-            label: "Company",
+            label: "Dashboard",
             icon: <LayoutDashboard className="h-4 w-4" />,
           },
           {
