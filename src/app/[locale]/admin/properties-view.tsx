@@ -503,98 +503,117 @@ function PropertyTable({
 }) {
   return (
     <Card className="overflow-visible">
-      <table className="w-full table-fixed text-sm">
+      <table className="grid-table w-full text-sm">
         <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
           <tr>
             <th className="px-3 py-3 text-left font-semibold">
               {labels.name ?? "Name"}
             </th>
-            <th className="w-16 px-2 py-3 text-right font-semibold">
-              {labels.reservations ?? "Res."}
+            <th className="w-32 px-3 py-3 text-right font-semibold">
+              <span className="inline-flex items-center gap-1.5">
+                <CalendarIcon className="h-3.5 w-3.5" />
+                {labels.reservations ?? "Reservations"}
+              </span>
             </th>
             {showExpenseColumn && (
-              <th className="w-28 px-2 py-3 text-right font-semibold">
-                {labels.expenses ?? "Expenses"}
+              <th className="w-36 px-3 py-3 text-right font-semibold">
+                <span className="inline-flex items-center gap-1.5">
+                  <Receipt className="h-3.5 w-3.5" />
+                  {labels.expenses ?? "Expenses"}
+                </span>
               </th>
             )}
             {showPaymentsColumn && (
-              <th className="w-28 px-2 py-3 text-right font-semibold">
-                {labels.paid ?? "Paid"}
+              <th className="w-36 px-3 py-3 text-right font-semibold">
+                <span className="inline-flex items-center gap-1.5">
+                  <Wallet className="h-3.5 w-3.5" />
+                  {labels.paid ?? "Paid"}
+                </span>
               </th>
             )}
-            <th className="w-10 px-1 py-3" />
+            <th className="w-12 px-1 py-3" />
           </tr>
         </thead>
-          <tbody>
-            {properties.map((p) => {
-              const expenses = showExpenseColumn
-                ? expensesByProperty[p.id] ?? []
-                : [];
-              const payments = showPaymentsColumn
-                ? paymentsByProperty[p.id] ?? []
-                : [];
-              const expenseTotal = expenses.reduce((s, e) => s + e.amount, 0);
-              const paymentTotal = payments.reduce((s, e) => s + e.amount, 0);
-              const detailHref = `/${locale}/admin/owners/${p.ownerId}/properties/${p.id}`;
-              return (
-                <tr
-                  key={p.id}
-                  className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
-                >
-                  <td className="px-4 py-3">
-                    <Link
-                      href={detailHref}
-                      className="group flex items-center gap-3"
-                    >
-                      <span
-                        className="h-8 w-1 shrink-0 rounded-full"
-                        style={{ background: p.color }}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-1 truncate font-semibold tracking-tight group-hover:text-[var(--color-brand)]">
-                          {p.name}
-                          <ChevronRight className="h-3.5 w-3.5 text-[var(--color-muted)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--color-brand)]" />
-                        </span>
-                        {p.address && (
-                          <span className="block truncate text-xs text-[var(--color-muted)]">
-                            {p.address}
-                          </span>
-                        )}
-                      </span>
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {p.reservationCount}
-                  </td>
-                  {showExpenseColumn && (
-                    <td className="px-4 py-3 text-right tabular-nums text-rose-600">
-                      {expenses.length === 0
-                        ? "—"
-                        : formatCurrency(expenseTotal, "AED", locale)}
-                    </td>
-                  )}
-                  {showPaymentsColumn && (
-                    <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
-                      {payments.length === 0
-                        ? "—"
-                        : formatCurrency(paymentTotal, "AED", locale)}
-                    </td>
-                  )}
-                  <td className="px-2 py-3 text-right">
-                    <RowMenu
-                      labels={labels}
-                      detailHref={detailHref}
-                      expensesCount={expenses.length}
-                      paymentsCount={payments.length}
-                      showExpenses={showExpenseColumn}
-                      showPayments={showPaymentsColumn}
-                      onShowExpenses={() => onShowExpenses(p)}
-                      onRecordPayment={() => onRecordPayment(p)}
-                      onEdit={() => onEdit(p)}
-                      onDelete={() => onDelete(p.id)}
+        <tbody>
+          {properties.map((p) => {
+            const expenses = showExpenseColumn
+              ? expensesByProperty[p.id] ?? []
+              : [];
+            const payments = showPaymentsColumn
+              ? paymentsByProperty[p.id] ?? []
+              : [];
+            const expenseTotal = expenses.reduce((s, e) => s + e.amount, 0);
+            const paymentTotal = payments.reduce((s, e) => s + e.amount, 0);
+            const detailHref = `/${locale}/admin/owners/${p.ownerId}/properties/${p.id}`;
+            return (
+              <tr
+                key={p.id}
+                className="hover:bg-[var(--color-surface-2)]/60"
+              >
+                <td className="px-3 py-3">
+                  <Link
+                    href={detailHref}
+                    className="group flex items-center gap-3"
+                  >
+                    <span
+                      className="h-9 w-1 shrink-0 rounded-full"
+                      style={{ background: p.color }}
                     />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1 truncate font-semibold tracking-tight group-hover:text-[var(--color-brand)]">
+                        {p.name}
+                        <ChevronRight className="h-3.5 w-3.5 text-[var(--color-muted)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--color-brand)]" />
+                      </span>
+                      {p.address && (
+                        <span className="block truncate text-xs text-[var(--color-muted)]">
+                          {p.address}
+                        </span>
+                      )}
+                    </span>
+                  </Link>
+                </td>
+                <td className="px-3 py-3 text-right tabular-nums">
+                  <span className="inline-flex min-w-[2rem] items-center justify-center rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-xs font-semibold text-[var(--color-foreground)]">
+                    {p.reservationCount}
+                  </span>
+                </td>
+                {showExpenseColumn && (
+                  <td className="px-3 py-3 text-right tabular-nums">
+                    {expenses.length === 0 ? (
+                      <span className="text-[var(--color-muted)]">—</span>
+                    ) : (
+                      <span className="font-semibold text-rose-600">
+                        {formatCurrency(expenseTotal, "AED", locale)}
+                      </span>
+                    )}
                   </td>
-                </tr>
+                )}
+                {showPaymentsColumn && (
+                  <td className="px-3 py-3 text-right tabular-nums">
+                    {payments.length === 0 ? (
+                      <span className="text-[var(--color-muted)]">—</span>
+                    ) : (
+                      <span className="font-semibold text-emerald-700">
+                        {formatCurrency(paymentTotal, "AED", locale)}
+                      </span>
+                    )}
+                  </td>
+                )}
+                <td className="px-1 py-3 text-right">
+                  <RowMenu
+                    labels={labels}
+                    detailHref={detailHref}
+                    expensesCount={expenses.length}
+                    paymentsCount={payments.length}
+                    showExpenses={showExpenseColumn}
+                    showPayments={showPaymentsColumn}
+                    onShowExpenses={() => onShowExpenses(p)}
+                    onRecordPayment={() => onRecordPayment(p)}
+                    onEdit={() => onEdit(p)}
+                    onDelete={() => onDelete(p.id)}
+                  />
+                </td>
+              </tr>
               );
             })}
         </tbody>

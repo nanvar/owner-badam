@@ -129,7 +129,7 @@ export default async function OwnerDetailPage({
           accent="emerald"
         />
         <StatCard
-          label={tAdmin("ownerBalance")}
+          label="Owner payout"
           value={formatCurrency(ownerBalance, "AED", loc)}
           icon={<Coins className="h-4 w-4" />}
           accent="amber"

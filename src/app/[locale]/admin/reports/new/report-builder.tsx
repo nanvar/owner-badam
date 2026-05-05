@@ -171,26 +171,17 @@ export function ReportBuilder({
 
       <Card>
         <CardBody>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span
-                className="h-10 w-1.5 rounded-full"
-                style={{ background: selected.color }}
-              />
-              <div>
-                <div className="font-semibold">{selected.name}</div>
-                <div className="text-xs text-[var(--color-muted)]">
-                  {selected.ownerName}
-                </div>
+          <div className="flex items-center gap-3">
+            <span
+              className="h-10 w-1.5 rounded-full"
+              style={{ background: selected.color }}
+            />
+            <div>
+              <div className="font-semibold">{selected.name}</div>
+              <div className="text-xs text-[var(--color-muted)]">
+                {selected.ownerName}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => router.push(`/${locale}/admin/reports/new`)}
-              className="text-sm text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-brand)] hover:underline"
-            >
-              Change property
-            </button>
           </div>
         </CardBody>
       </Card>
@@ -263,7 +254,7 @@ export function ReportBuilder({
         ) : (
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="grid-table w-full text-sm">
                 <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
                   <tr>
                     <th className="px-4 py-3 text-left">
@@ -338,7 +329,7 @@ export function ReportBuilder({
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="grid-table w-full text-sm">
               <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
                 <tr>
                   <th className="px-4 py-3 text-left">

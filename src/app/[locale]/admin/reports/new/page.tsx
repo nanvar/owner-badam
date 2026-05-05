@@ -1,12 +1,11 @@
 import { setRequestLocale } from "next-intl/server";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { isLocale, type Locale } from "@/i18n/config";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { PageHeader } from "@/components/app-shell";
 import { ReportBuilder } from "./report-builder";
+import { BackButton } from "./back-button";
 
 export default async function NewReportPage({
   params,
@@ -88,13 +87,7 @@ export default async function NewReportPage({
 
   return (
     <div>
-      <Link
-        href={`/${loc}/admin/reports`}
-        className="mb-3 inline-flex items-center gap-1 text-sm text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to reports
-      </Link>
+      <BackButton fallbackHref={`/${loc}/admin/owners`} />
       <PageHeader title="New report" />
       <ReportBuilder
         locale={loc}

@@ -125,7 +125,7 @@ export function CompanyFinancesView({
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="grid-table w-full text-sm">
               <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
                 <tr>
                   <th className="px-4 py-3 text-left font-semibold">Date</th>

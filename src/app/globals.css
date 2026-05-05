@@ -206,6 +206,29 @@ textarea {
 }
 .pulse-ring { animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 
+/* Bordered "grid" tables — every cell carries a border so the table reads
+   as a true grid. Apply via `class="grid-table"` on a <table>. */
+.grid-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.grid-table th,
+.grid-table td {
+  border-bottom: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+}
+.grid-table th:first-child,
+.grid-table td:first-child {
+  border-left: 1px solid var(--color-border);
+}
+.grid-table thead th {
+  border-top: 1px solid var(--color-border);
+}
+.grid-table tbody tr:last-child td,
+.grid-table tfoot tr:last-child td {
+  /* Card already provides the outer rounded border; avoid double-line. */
+}
+
 /* respect users who prefer no motion */
 @media (prefers-reduced-motion: reduce) {
   *,

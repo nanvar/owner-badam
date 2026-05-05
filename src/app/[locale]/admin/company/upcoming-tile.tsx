@@ -73,7 +73,7 @@ export function UpcomingTile({
           </div>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-[var(--color-border)]">
-            <table className="w-full text-sm">
+            <table className="grid-table w-full text-sm">
               <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
                 <tr>
                   <th className="px-3 py-2.5 text-left font-semibold">
