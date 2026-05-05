@@ -7,6 +7,8 @@ import {
   ShieldCheck,
   FileText,
   Settings as SettingsIcon,
+  Building2,
+  BarChart3,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { requireRole } from "@/lib/auth";
@@ -41,9 +43,24 @@ export default async function AdminLayout({
             icon: <LayoutDashboard className="h-4 w-4" />,
           },
           {
+            // Parent landing of the dropdown — clicking the parent on
+            // desktop opens the menu, but href still points somewhere
+            // sensible for non-JS navigation.
             href: `/${locale}/admin/company/expenses`,
-            label: "Company finances",
-            icon: <Receipt className="h-4 w-4" />,
+            label: "Company",
+            icon: <Building2 className="h-4 w-4" />,
+            children: [
+              {
+                href: `/${locale}/admin/company/expenses`,
+                label: "Finances",
+                icon: <Receipt className="h-4 w-4" />,
+              },
+              {
+                href: `/${locale}/admin/company/reporting`,
+                label: "Reporting",
+                icon: <BarChart3 className="h-4 w-4" />,
+              },
+            ],
           },
         ]
       : []),

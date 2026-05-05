@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { motion } from "motion/react";
 import {
   LogOut,
@@ -14,6 +14,7 @@ import {
   Info,
   KeyRound,
   Menu,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet } from "@/components/ui/sheet";
@@ -25,6 +26,9 @@ type NavItem = {
   href: string;
   label: string;
   icon: React.ReactNode;
+  // When set, the item renders as a dropdown menu on desktop and as a
+  // grouped section in the mobile drawer. Bottom nav ignores children.
+  children?: NavItem[];
 };
 
 export function AppShell({
@@ -72,11 +76,14 @@ export function AppShell({
   // matches (e.g. /admin/company is the parent of /admin/company/expenses),
   // the parent yields to the child so only one item lights up.
   const rootHref = `/${locale}/${variant}`;
+  // Flatten nav (parents + children) so the active-detection prefix scan
+  // can pick the most specific match across the whole menu.
+  const flatNav: NavItem[] = nav.flatMap((n) => [n, ...(n.children ?? [])]);
   const isActive = (href: string) => {
     if (href === rootHref) return pathname === href;
     const selfMatch = pathname === href || pathname.startsWith(href + "/");
     if (!selfMatch) return false;
-    const moreSpecific = nav.some(
+    const moreSpecific = flatNav.some(
       (other) =>
         other.href !== href &&
         other.href.startsWith(href + "/") &&
@@ -84,6 +91,9 @@ export function AppShell({
     );
     return !moreSpecific;
   };
+  const isGroupActive = (item: NavItem) =>
+    isActive(item.href) ||
+    (item.children?.some((c) => isActive(c.href)) ?? false);
 
   const hasContacts = !!(
     brand &&
@@ -139,23 +149,29 @@ export function AppShell({
             )}
           </Link>
           <nav className="hidden items-center justify-center gap-1 md:flex">
-            {nav.map((item) => {
-              const active = isActive(item.href);
-              return (
+            {nav.map((item) =>
+              item.children?.length ? (
+                <NavDropdown
+                  key={item.href}
+                  item={item}
+                  isActive={isActive}
+                  isGroupActive={isGroupActive}
+                />
+              ) : (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={cn(
                     "rounded-xl px-3 py-2 text-sm font-medium transition-colors",
-                    active
+                    isActive(item.href)
                       ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
                       : "text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]",
                   )}
                 >
                   {item.label}
                 </Link>
-              );
-            })}
+              ),
+            )}
           </nav>
           <div className="flex items-center gap-2 justify-self-end">
             {topRight}
@@ -354,6 +370,30 @@ export function AppShell({
                     </span>
                     {item.label}
                   </Link>
+                  {item.children?.length ? (
+                    <ul className="ml-12 mt-1 space-y-1">
+                      {item.children.map((child) => {
+                        const childActive = isActive(child.href);
+                        return (
+                          <li key={child.href}>
+                            <Link
+                              href={child.href}
+                              onClick={() => setDrawerOpen(false)}
+                              className={cn(
+                                "flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+                                childActive
+                                  ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
+                                  : "text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]",
+                              )}
+                            >
+                              {child.icon}
+                              {child.label}
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : null}
                 </li>
               );
             })}
@@ -399,6 +439,84 @@ export function AppShell({
       >
         <ChangePasswordForm onDone={() => setPasswordOpen(false)} />
       </Sheet>
+    </div>
+  );
+}
+
+function NavDropdown({
+  item,
+  isActive,
+  isGroupActive,
+}: {
+  item: NavItem;
+  isActive: (href: string) => boolean;
+  isGroupActive: (item: NavItem) => boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const active = isGroupActive(item);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+          active
+            ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
+            : "text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]",
+        )}
+      >
+        {item.label}
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      {open && (
+        <div className="absolute left-1/2 top-full z-30 mt-1 w-56 -translate-x-1/2 origin-top overflow-hidden rounded-xl border border-[var(--color-border)] bg-white py-1 shadow-lg shadow-black/10 ring-1 ring-black/5 animate-fade-in">
+          {item.children!.map((child) => {
+            const childActive = isActive(child.href);
+            return (
+              <Link
+                key={child.href}
+                href={child.href}
+                onClick={() => setOpen(false)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 text-sm font-medium transition-colors",
+                  childActive
+                    ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
+                    : "text-[var(--color-foreground)] hover:bg-[var(--color-surface-2)]",
+                )}
+              >
+                <span className="text-[var(--color-muted)]">{child.icon}</span>
+                {child.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

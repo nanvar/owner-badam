@@ -70,30 +70,15 @@ export function ReservationsView({
   labels: Record<string, string>;
 }) {
   const router = useRouter();
-  type Filter =
-    | "incomplete"
-    | "complete"
-    | "upcoming"
-    | "live"
-    | "done";
-  const [filter, setFilter] = useState<Filter>("incomplete");
+  const [filter, setFilter] = useState<"incomplete" | "complete" | "upcoming">(
+    "incomplete",
+  );
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Item | null>(null);
   const [creating, setCreating] = useState(false);
   const [deletePending, startDelete] = useTransition();
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const [syncPending, startSync] = useTransition();
-
-  const now = Date.now();
-  const isLive = (i: Item) => {
-    const ci = new Date(i.checkIn).getTime();
-    const co = new Date(i.checkOut).getTime();
-    return !i.upcoming && ci <= now && co > now;
-  };
-  const isDone = (i: Item) => {
-    const co = new Date(i.checkOut).getTime();
-    return !i.upcoming && co <= now;
-  };
 
   const filtered = useMemo(() => {
     return items.filter((i) => {
@@ -102,8 +87,6 @@ export function ReservationsView({
         return false;
       if (filter === "complete" && (!i.detailsFilled || i.upcoming))
         return false;
-      if (filter === "live" && !isLive(i)) return false;
-      if (filter === "done" && !isDone(i)) return false;
       if (search) {
         const q = search.toLowerCase();
         const blob = `${i.guestName ?? ""} ${i.propertyName} ${i.rawSummary ?? ""}`.toLowerCase();
@@ -111,7 +94,6 @@ export function ReservationsView({
       }
       return true;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, filter, search]);
   const upcomingCount = useMemo(
     () => items.filter((i) => i.upcoming).length,
@@ -125,8 +107,6 @@ export function ReservationsView({
     () => items.filter((i) => i.detailsFilled && !i.upcoming).length,
     [items],
   );
-  const liveCount = useMemo(() => items.filter(isLive).length, [items, now]);
-  const doneCount = useMemo(() => items.filter(isDone).length, [items, now]);
 
   return (
     <div>
@@ -177,65 +157,37 @@ export function ReservationsView({
             className="pl-9"
           />
         </div>
-        <div className="ml-auto flex flex-wrap rounded-xl border border-[var(--color-border)] bg-white p-1">
-          {(
-            ["incomplete", "complete", "upcoming", "live", "done"] as const
-          ).map((f) => {
-            const count =
-              f === "incomplete"
-                ? incompleteCount
-                : f === "complete"
-                  ? completeCount
-                  : f === "upcoming"
-                    ? upcomingCount
-                    : f === "live"
-                      ? liveCount
-                      : doneCount;
-            const label =
-              f === "incomplete"
+        <div className="ml-auto flex rounded-xl border border-[var(--color-border)] bg-white p-1">
+          {(["incomplete", "complete", "upcoming"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+                filter === f
+                  ? "bg-[var(--color-brand)] text-white"
+                  : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+              }`}
+            >
+              {f === "incomplete"
                 ? labels.incomplete
                 : f === "complete"
                   ? labels.complete
-                  : f === "upcoming"
-                    ? (labels.upcoming ?? "Upcoming")
-                    : f === "live"
-                      ? "Live"
-                      : "Done";
-            const activeClass =
-              f === "live"
-                ? "bg-rose-500 text-white"
-                : "bg-[var(--color-brand)] text-white";
-            return (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+                  : (labels.upcoming ?? "Upcoming")}
+              <span
+                className={`rounded-full px-1.5 text-[10px] font-bold ${
                   filter === f
-                    ? activeClass
-                    : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+                    ? "bg-white/25 text-white"
+                    : "bg-[var(--color-surface-2)] text-[var(--color-muted)]"
                 }`}
               >
-                {f === "live" && (
-                  <span className="relative grid h-2 w-2 place-items-center">
-                    <span className="absolute inset-0 animate-ping rounded-full bg-rose-500/60" />
-                    <span
-                      className={`relative h-2 w-2 rounded-full ${filter === "live" ? "bg-white" : "bg-rose-500"}`}
-                    />
-                  </span>
-                )}
-                {label}
-                <span
-                  className={`rounded-full px-1.5 text-[10px] font-bold ${
-                    filter === f
-                      ? "bg-white/25 text-white"
-                      : "bg-[var(--color-surface-2)] text-[var(--color-muted)]"
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
+                {f === "incomplete"
+                  ? incompleteCount
+                  : f === "complete"
+                    ? completeCount
+                    : upcomingCount}
+              </span>
+            </button>
+          ))}
         </div>
       </div>
 
@@ -292,22 +244,49 @@ export function ReservationsView({
                       {formatCurrency(r.totalPrice, r.currency || "AED", locale)}
                     </td>
                     <td className="px-4 py-3">
-                      {r.upcoming ? (
-                        <Badge tone="info">
-                          <Clock className="h-3 w-3" />
-                          {labels.upcoming ?? "Upcoming"}
-                        </Badge>
-                      ) : r.detailsFilled ? (
-                        <Badge tone="success">
-                          <CheckCircle2 className="h-3 w-3" />
-                          {labels.complete}
-                        </Badge>
-                      ) : (
-                        <Badge tone="warning">
-                          <AlertCircle className="h-3 w-3" />
-                          {labels.incomplete}
-                        </Badge>
-                      )}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {r.upcoming ? (
+                          <Badge tone="info">
+                            <Clock className="h-3 w-3" />
+                            {labels.upcoming ?? "Upcoming"}
+                          </Badge>
+                        ) : r.detailsFilled ? (
+                          <Badge tone="success">
+                            <CheckCircle2 className="h-3 w-3" />
+                            {labels.complete}
+                          </Badge>
+                        ) : (
+                          <Badge tone="warning">
+                            <AlertCircle className="h-3 w-3" />
+                            {labels.incomplete}
+                          </Badge>
+                        )}
+                        {(() => {
+                          if (r.upcoming) return null;
+                          const now = Date.now();
+                          const ci = new Date(r.checkIn).getTime();
+                          const co = new Date(r.checkOut).getTime();
+                          if (ci <= now && co > now) {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-600">
+                                <span className="relative grid h-2 w-2 place-items-center">
+                                  <span className="absolute inset-0 animate-ping rounded-full bg-rose-500/60" />
+                                  <span className="relative h-2 w-2 rounded-full bg-rose-500" />
+                                </span>
+                                Live
+                              </span>
+                            );
+                          }
+                          if (co <= now) {
+                            return (
+                              <span className="inline-flex items-center rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                                Done
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
                     </td>
                   </tr>
                 ))}

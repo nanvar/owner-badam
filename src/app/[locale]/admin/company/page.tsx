@@ -330,7 +330,7 @@ export default async function SuperAdminDashboard({
                 <th className="px-4 py-3 text-left font-semibold">Property</th>
                 <th className="px-4 py-3 text-left font-semibold">Owner</th>
                 <th className="px-4 py-3 text-right font-semibold">
-                  Owner balance
+                  Owner payout
                 </th>
               </tr>
             </thead>
