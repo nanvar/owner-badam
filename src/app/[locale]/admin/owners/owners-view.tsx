@@ -1,16 +1,25 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import {
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import {
   Plus,
   User,
   Building2,
   Edit3,
   Trash2,
-  ChevronRight,
   Ban,
   Unlock,
+  MoreHorizontal,
+  ExternalLink,
+  FileText,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -68,7 +77,6 @@ export function OwnersView({
   const router = useRouter();
   const params = useParams();
   const locale = (params?.locale as string) ?? "en";
-  const goToOwner = (id: string) => router.push(`/${locale}/admin/owners/${id}`);
 
   useEffect(() => {
     if (createState?.status === "ok" && creatingOpen) {
@@ -119,8 +127,7 @@ export function OwnersView({
                 {owners.map((o) => (
                   <tr
                     key={o.id}
-                    onClick={() => goToOwner(o.id)}
-                    className="cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
+                    className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
@@ -149,53 +156,24 @@ export function OwnersView({
                     <td className="px-4 py-3 text-right font-semibold">
                       {o.propertyCount}
                     </td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1">
-                        {canManage && (
-                          <>
-                            <button
-                              onClick={() => {
-                                setPendingBlockId(o.id);
-                                startBlock(async () => {
-                                  await setUserBlockedAction(o.id, !o.blocked);
-                                  setPendingBlockId(null);
-                                  router.refresh();
-                                });
-                              }}
-                              disabled={blockPending && pendingBlockId === o.id}
-                              aria-label={o.blocked ? "Unblock" : "Block"}
-                              title={o.blocked ? "Unblock" : "Block"}
-                              className={cn(
-                                "rounded-lg p-1.5 transition-colors disabled:opacity-50",
-                                o.blocked
-                                  ? "text-emerald-600 hover:bg-emerald-500/10"
-                                  : "text-[var(--color-muted)] hover:bg-amber-500/10 hover:text-amber-600",
-                              )}
-                            >
-                              {o.blocked ? (
-                                <Unlock className="h-4 w-4" />
-                              ) : (
-                                <Ban className="h-4 w-4" />
-                              )}
-                            </button>
-                            <button
-                              onClick={() => setEditing(o)}
-                              aria-label="Edit"
-                              className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]"
-                            >
-                              <Edit3 className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => setDeleting(o)}
-                              aria-label="Delete"
-                              className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-rose-500/10 hover:text-rose-600"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </>
-                        )}
-                        <ChevronRight className="ml-1 h-4 w-4 text-[var(--color-muted)]" />
-                      </div>
+                    <td className="px-4 py-3 text-right">
+                      <RowMenu
+                        owner={o}
+                        canManage={canManage}
+                        viewHref={`/${locale}/admin/owners/${o.id}`}
+                        reportsHref={`/${locale}/admin/owners/${o.id}/reports`}
+                        blockPending={blockPending && pendingBlockId === o.id}
+                        onEdit={() => setEditing(o)}
+                        onDelete={() => setDeleting(o)}
+                        onToggleBlock={() => {
+                          setPendingBlockId(o.id);
+                          startBlock(async () => {
+                            await setUserBlockedAction(o.id, !o.blocked);
+                            setPendingBlockId(null);
+                            router.refresh();
+                          });
+                        }}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -337,6 +315,145 @@ export function OwnersView({
           </>
         )}
       </Sheet>
+    </div>
+  );
+}
+
+function RowMenu({
+  owner,
+  canManage,
+  viewHref,
+  reportsHref,
+  blockPending,
+  onEdit,
+  onDelete,
+  onToggleBlock,
+}: {
+  owner: OwnerRow;
+  canManage: boolean;
+  viewHref: string;
+  reportsHref: string;
+  blockPending: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+  onToggleBlock: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const close = () => setOpen(false);
+
+  return (
+    <div ref={ref} className="relative inline-block text-left">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Actions"
+        className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]"
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-1 w-56 origin-top-right overflow-hidden rounded-xl border border-[var(--color-border)] bg-white py-1 shadow-lg shadow-black/10 ring-1 ring-black/5 animate-fade-in">
+          <Link
+            href={viewHref}
+            onClick={close}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--color-foreground)] transition-colors hover:bg-[var(--color-surface-2)]"
+          >
+            <span className="shrink-0 text-[var(--color-muted)]">
+              <ExternalLink className="h-4 w-4" />
+            </span>
+            <span className="flex-1">View owner</span>
+          </Link>
+          <Link
+            href={reportsHref}
+            onClick={close}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--color-foreground)] transition-colors hover:bg-[var(--color-surface-2)]"
+          >
+            <span className="shrink-0 text-[var(--color-muted)]">
+              <FileText className="h-4 w-4" />
+            </span>
+            <span className="flex-1">Reports</span>
+          </Link>
+          {canManage && (
+            <>
+              <div className="my-1 h-px bg-[var(--color-border)]" />
+              <button
+                type="button"
+                onClick={() => {
+                  close();
+                  onEdit();
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--color-foreground)] transition-colors hover:bg-[var(--color-surface-2)]"
+              >
+                <span className="shrink-0 text-[var(--color-muted)]">
+                  <Edit3 className="h-4 w-4" />
+                </span>
+                <span className="flex-1">Edit</span>
+              </button>
+              <button
+                type="button"
+                disabled={blockPending}
+                onClick={() => {
+                  close();
+                  onToggleBlock();
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--color-foreground)] transition-colors hover:bg-[var(--color-surface-2)] disabled:opacity-50"
+              >
+                <span
+                  className={cn(
+                    "shrink-0",
+                    owner.blocked
+                      ? "text-emerald-600"
+                      : "text-[var(--color-muted)]",
+                  )}
+                >
+                  {owner.blocked ? (
+                    <Unlock className="h-4 w-4" />
+                  ) : (
+                    <Ban className="h-4 w-4" />
+                  )}
+                </span>
+                <span className="flex-1">
+                  {owner.blocked ? "Unblock" : "Block"}
+                </span>
+              </button>
+              <div className="my-1 h-px bg-[var(--color-border)]" />
+              <button
+                type="button"
+                onClick={() => {
+                  close();
+                  onDelete();
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-600 transition-colors hover:bg-rose-500/10"
+              >
+                <span className="shrink-0">
+                  <Trash2 className="h-4 w-4" />
+                </span>
+                <span className="flex-1">Delete</span>
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
