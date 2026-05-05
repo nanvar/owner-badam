@@ -1,8 +1,27 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import {
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Edit3, Trash2, Receipt, TrendingUp } from "lucide-react";
+import {
+  Plus,
+  Edit3,
+  Trash2,
+  Receipt,
+  TrendingUp,
+  Wallet,
+  Calendar,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle2,
+  RotateCcw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Field, Textarea } from "@/components/ui/input";
@@ -12,6 +31,8 @@ import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import {
   upsertCompanyExpenseAction,
   deleteCompanyExpenseAction,
+  refundDepositAction,
+  unrefundDepositAction,
   type CompanyExpenseState,
 } from "@/app/actions/company-expenses";
 import {
@@ -22,7 +43,7 @@ import {
 } from "@/lib/company-expense-types";
 import type { Locale } from "@/i18n/config";
 
-export type Kind = "EXPENSE" | "PROFIT";
+export type Kind = "EXPENSE" | "PROFIT" | "DEPOSIT";
 
 export type Entry = {
   id: string;
@@ -34,60 +55,122 @@ export type Entry = {
   propertyColor: string | null;
   description: string;
   amount: number;
+  refundedAt: string | null;
+  refundedAmount: number | null;
 };
 
 type PropertyOption = { id: string; name: string; color: string };
 
 export function CompanyFinancesView({
   locale,
+  tab,
+  from,
+  to,
+  page,
+  totalPages,
+  counts,
+  activeDepositsTotal,
+  activeDepositsCount,
   entries,
   properties,
 }: {
   locale: Locale;
+  tab: Kind;
+  from: string;
+  to: string;
+  page: number;
+  totalPages: number;
+  counts: Record<Kind, number>;
+  activeDepositsTotal: number;
+  activeDepositsCount: number;
   entries: Entry[];
   properties: PropertyOption[];
 }) {
-  const [tab, setTab] = useState<Kind>("EXPENSE");
-  // Separate editor state per kind so opening a profit modal can never inherit
-  // an expense's data and vice versa.
+  const router = useRouter();
   const [editingExpense, setEditingExpense] = useState<Entry | null | undefined>(
     undefined,
   );
   const [editingProfit, setEditingProfit] = useState<Entry | null | undefined>(
     undefined,
   );
+  const [editingDeposit, setEditingDeposit] = useState<Entry | null | undefined>(
+    undefined,
+  );
+  const [refunding, setRefunding] = useState<Entry | null>(null);
   const [deletePending, startDelete] = useTransition();
-  const router = useRouter();
+  const [unrefundPending, startUnrefund] = useTransition();
+  const [, startNav] = useTransition();
 
-  const expenses = entries.filter((e) => e.kind === "EXPENSE");
-  const profits = entries.filter((e) => e.kind === "PROFIT");
-  const visible = tab === "EXPENSE" ? expenses : profits;
+  const goTo = (next: Partial<{ tab: Kind; from: string; to: string; page: number }>) => {
+    const params = new URLSearchParams();
+    const t = next.tab ?? tab;
+    if (t !== "EXPENSE") params.set("tab", t);
+    const f = next.from ?? from;
+    const e = next.to ?? to;
+    if (f) params.set("from", f);
+    if (e) params.set("to", e);
+    const p = next.page ?? 1;
+    if (p > 1) params.set("page", String(p));
+    const qs = params.toString();
+    startNav(() => {
+      router.push(`/${locale}/admin/company/expenses${qs ? `?${qs}` : ""}`);
+    });
+  };
+
+  const handleAdd = () => {
+    if (tab === "EXPENSE") setEditingExpense(null);
+    else if (tab === "PROFIT") setEditingProfit(null);
+    else setEditingDeposit(null);
+  };
 
   return (
     <div>
       <PageHeader title="Company finances" />
 
+      {/* Active deposits summary so admins can see at a glance how much is
+          still being held on behalf of guests. */}
+      {activeDepositsCount > 0 && (
+        <div className="mb-4 flex items-center justify-between rounded-2xl border border-sky-500/30 bg-sky-500/5 px-5 py-4">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-sky-700">
+              Active deposits held
+            </div>
+            <div className="mt-0.5 text-xs text-sky-700/70">
+              {activeDepositsCount} active
+            </div>
+          </div>
+          <div className="text-2xl font-bold tabular-nums text-sky-700">
+            {formatCurrency(activeDepositsTotal, "AED", locale)}
+          </div>
+        </div>
+      )}
+
+      {/* Tabs + add */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="flex rounded-xl border border-[var(--color-border)] bg-white p-1">
-          {(["EXPENSE", "PROFIT"] as const).map((k) => (
+          {(["EXPENSE", "PROFIT", "DEPOSIT"] as const).map((k) => (
             <button
               key={k}
-              onClick={() => setTab(k)}
+              onClick={() => goTo({ tab: k, page: 1 })}
               className={cn(
                 "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
                 tab === k
                   ? k === "EXPENSE"
                     ? "bg-rose-500 text-white"
-                    : "bg-emerald-600 text-white"
+                    : k === "PROFIT"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-sky-600 text-white"
                   : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]",
               )}
             >
               {k === "EXPENSE" ? (
                 <Receipt className="h-3.5 w-3.5" />
-              ) : (
+              ) : k === "PROFIT" ? (
                 <TrendingUp className="h-3.5 w-3.5" />
+              ) : (
+                <Wallet className="h-3.5 w-3.5" />
               )}
-              {k === "EXPENSE" ? "Expenses" : "Profit"}
+              {k === "EXPENSE" ? "Expenses" : k === "PROFIT" ? "Profit" : "Deposit"}
               <span
                 className={cn(
                   "rounded-full px-1.5 text-[10px] font-bold",
@@ -96,34 +179,36 @@ export function CompanyFinancesView({
                     : "bg-[var(--color-surface-2)] text-[var(--color-muted)]",
                 )}
               >
-                {k === "EXPENSE" ? expenses.length : profits.length}
+                {counts[k]}
               </span>
             </button>
           ))}
         </div>
-        <Button
-          className="ml-auto"
-          onClick={() =>
-            tab === "EXPENSE"
-              ? setEditingExpense(null)
-              : setEditingProfit(null)
-          }
-        >
+        <Button className="ml-auto" onClick={handleAdd}>
           <Plus className="h-4 w-4" />
-          {tab === "EXPENSE" ? "Add expense" : "Add profit"}
+          {tab === "EXPENSE"
+            ? "Add expense"
+            : tab === "PROFIT"
+              ? "Add profit"
+              : "Add deposit"}
         </Button>
       </div>
 
-      {visible.length === 0 ? (
+      {/* Date filter */}
+      <DateFilter
+        from={from}
+        to={to}
+        onApply={(f, t) => goTo({ from: f, to: t, page: 1 })}
+      />
+
+      {entries.length === 0 ? (
         <Card className="grid place-items-center px-6 py-16 text-center">
           <p className="text-sm text-[var(--color-muted)]">
-            {tab === "EXPENSE"
-              ? "No expenses recorded yet."
-              : "No profit recorded yet."}
+            No entries in this period.
           </p>
         </Card>
       ) : (
-        <Card className="overflow-hidden">
+        <Card className="overflow-visible">
           <div className="overflow-x-auto">
             <table className="grid-table w-full text-sm">
               <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
@@ -136,14 +221,17 @@ export function CompanyFinancesView({
                     Description
                   </th>
                   <th className="px-4 py-3 text-right font-semibold">Amount</th>
-                  <th className="px-4 py-3"></th>
+                  {tab === "DEPOSIT" && (
+                    <th className="px-4 py-3 text-left font-semibold">Status</th>
+                  )}
+                  <th className="w-32 px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody>
-                {visible.map((e) => (
+                {entries.map((e) => (
                   <tr
                     key={e.id}
-                    className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
+                    className="hover:bg-[var(--color-surface-2)]/60"
                   >
                     <td className="px-4 py-3 whitespace-nowrap">
                       {formatDate(e.date, locale)}
@@ -172,28 +260,79 @@ export function CompanyFinancesView({
                         "—"
                       )}
                     </td>
-                    <td className="px-4 py-3 max-w-[360px] truncate">
-                      {e.description}
+                    <td className="max-w-[360px] truncate px-4 py-3">
+                      {e.description || (
+                        <span className="text-[var(--color-muted)]">—</span>
+                      )}
                     </td>
                     <td
                       className={cn(
-                        "px-4 py-3 text-right tabular-nums font-semibold",
+                        "px-4 py-3 text-right font-semibold tabular-nums",
                         e.kind === "EXPENSE"
                           ? "text-rose-600"
-                          : "text-emerald-700",
+                          : e.kind === "PROFIT"
+                            ? "text-emerald-700"
+                            : "text-sky-700",
                       )}
                     >
-                      {e.kind === "EXPENSE" ? "− " : "+ "}
+                      {e.kind === "EXPENSE"
+                        ? "− "
+                        : e.kind === "PROFIT"
+                          ? "+ "
+                          : ""}
                       {formatCurrency(e.amount, "AED", locale)}
                     </td>
-                    <td className="px-4 py-3">
+                    {tab === "DEPOSIT" && (
+                      <td className="px-4 py-3">
+                        {e.refundedAt ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Refunded
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-700">
+                            Held
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    <td className="px-2 py-3">
                       <div className="flex items-center justify-end gap-1">
+                        {tab === "DEPOSIT" && !e.refundedAt && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => setRefunding(e)}
+                          >
+                            Payout
+                          </Button>
+                        )}
+                        {tab === "DEPOSIT" && e.refundedAt && (
+                          <button
+                            disabled={unrefundPending}
+                            onClick={() => {
+                              if (
+                                !confirm("Undo refund? Mark deposit as held again.")
+                              )
+                                return;
+                              startUnrefund(async () => {
+                                await unrefundDepositAction(e.id);
+                                router.refresh();
+                              });
+                            }}
+                            aria-label="Undo refund"
+                            title="Undo refund"
+                            className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)] disabled:opacity-50"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </button>
+                        )}
                         <button
-                          onClick={() =>
-                            e.kind === "EXPENSE"
-                              ? setEditingExpense(e)
-                              : setEditingProfit(e)
-                          }
+                          onClick={() => {
+                            if (e.kind === "EXPENSE") setEditingExpense(e);
+                            else if (e.kind === "PROFIT") setEditingProfit(e);
+                            else setEditingDeposit(e);
+                          }}
                           aria-label="Edit"
                           className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]"
                         >
@@ -224,6 +363,31 @@ export function CompanyFinancesView({
         </Card>
       )}
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-3 flex items-center justify-end gap-2 text-sm">
+          <button
+            disabled={page <= 1}
+            onClick={() => goTo({ page: page - 1 })}
+            className="inline-flex h-9 items-center gap-1 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-medium disabled:opacity-40 hover:bg-[var(--color-surface-2)]"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Prev
+          </button>
+          <span className="text-xs text-[var(--color-muted)]">
+            Page {page} / {totalPages}
+          </span>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => goTo({ page: page + 1 })}
+            className="inline-flex h-9 items-center gap-1 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-medium disabled:opacity-40 hover:bg-[var(--color-surface-2)]"
+          >
+            Next
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       <ExpenseEditor
         key={
           editingExpense === undefined
@@ -245,7 +409,83 @@ export function CompanyFinancesView({
         properties={properties}
         onClose={() => setEditingProfit(undefined)}
       />
+      <DepositEditor
+        key={
+          editingDeposit === undefined
+            ? "dep-closed"
+            : editingDeposit?.id ?? "dep-new"
+        }
+        open={editingDeposit !== undefined}
+        entry={editingDeposit ?? null}
+        properties={properties}
+        onClose={() => setEditingDeposit(undefined)}
+      />
+      <RefundModal
+        key={refunding?.id ?? "refund-closed"}
+        deposit={refunding}
+        locale={locale}
+        onClose={() => setRefunding(null)}
+      />
     </div>
+  );
+}
+
+function DateFilter({
+  from,
+  to,
+  onApply,
+}: {
+  from: string;
+  to: string;
+  onApply: (from: string, to: string) => void;
+}) {
+  const [f, setF] = useState(from);
+  const [t, setT] = useState(to);
+  const hasActive = !!(from || to);
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onApply(f, t);
+      }}
+      className="mb-3 flex flex-wrap items-center gap-2"
+    >
+      <span className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-white px-2">
+        <Calendar className="h-3.5 w-3.5 text-[var(--color-muted)]" />
+        <input
+          type="date"
+          value={f}
+          onChange={(e) => setF(e.target.value)}
+          aria-label="From"
+          className="h-9 bg-transparent pl-1 text-sm font-medium focus:outline-none"
+        />
+        <span className="px-1 text-xs text-[var(--color-muted)]">→</span>
+        <input
+          type="date"
+          value={t}
+          onChange={(e) => setT(e.target.value)}
+          aria-label="To"
+          className="h-9 bg-transparent pl-1 pr-2 text-sm font-medium focus:outline-none"
+        />
+      </span>
+      <Button type="submit" size="sm" variant="secondary">
+        Apply
+      </Button>
+      {hasActive && (
+        <button
+          type="button"
+          onClick={() => {
+            setF("");
+            setT("");
+            onApply("", "");
+          }}
+          className="inline-flex h-9 items-center gap-1 rounded-lg px-2 text-xs font-medium text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]"
+        >
+          <X className="h-3.5 w-3.5" />
+          Clear
+        </button>
+      )}
+    </form>
   );
 }
 
@@ -458,6 +698,200 @@ function ProfitEditor({
           </Button>
         </div>
       </form>
+    </Sheet>
+  );
+}
+
+function DepositEditor({
+  open,
+  entry,
+  properties,
+  onClose,
+}: {
+  open: boolean;
+  entry: Entry | null;
+  properties: PropertyOption[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState<
+    CompanyExpenseState | undefined,
+    FormData
+  >(upsertCompanyExpenseAction, undefined);
+
+  useEffect(() => {
+    if (state?.status === "ok" && open) {
+      router.refresh();
+      onClose();
+    }
+  }, [state, open, onClose, router]);
+
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={entry ? "Edit deposit" : "Add deposit"}
+    >
+      <form action={action} className="space-y-4">
+        {entry && <input type="hidden" name="id" value={entry.id} />}
+        <input type="hidden" name="kind" value="DEPOSIT" />
+        <Field label="Property" htmlFor="dep-property">
+          <select
+            id="dep-property"
+            name="propertyId"
+            required
+            defaultValue={entry?.propertyId ?? ""}
+            className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
+          >
+            <option value="" disabled>
+              Select a property…
+            </option>
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Date" htmlFor="dep-date">
+            <Input
+              id="dep-date"
+              name="date"
+              type="date"
+              required
+              defaultValue={
+                entry?.date
+                  ? entry.date.slice(0, 10)
+                  : new Date().toISOString().slice(0, 10)
+              }
+            />
+          </Field>
+          <Field label="Amount (AED)" htmlFor="dep-amount">
+            <Input
+              id="dep-amount"
+              name="amount"
+              type="number"
+              step="0.01"
+              min="0.01"
+              required
+              defaultValue={entry?.amount || ""}
+            />
+          </Field>
+        </div>
+        <Field
+          label="Description"
+          htmlFor="dep-description"
+          hint="Optional — note what the deposit is for"
+        >
+          <Textarea
+            id="dep-description"
+            name="description"
+            defaultValue={entry?.description ?? ""}
+            placeholder="Guest XYZ — security deposit"
+          />
+        </Field>
+        {state?.status === "error" && (
+          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
+            {state.message}
+          </div>
+        )}
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={pending}>
+            Save
+          </Button>
+        </div>
+      </form>
+    </Sheet>
+  );
+}
+
+function RefundModal({
+  deposit,
+  locale,
+  onClose,
+}: {
+  deposit: Entry | null;
+  locale: Locale;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState<
+    CompanyExpenseState | undefined,
+    FormData
+  >(refundDepositAction, undefined);
+  const ranOnceRef = useRef(false);
+
+  useEffect(() => {
+    if (state?.status === "ok" && !ranOnceRef.current) {
+      ranOnceRef.current = true;
+      router.refresh();
+      onClose();
+    }
+  }, [state, onClose, router]);
+
+  return (
+    <Sheet
+      open={!!deposit}
+      onClose={onClose}
+      title="Refund deposit"
+      description={
+        deposit
+          ? `${deposit.propertyName ?? "—"} · ${formatCurrency(deposit.amount, "AED", locale)} held since ${formatDate(deposit.date, locale)}`
+          : undefined
+      }
+    >
+      {deposit && (
+        <form action={action} className="space-y-4">
+          <input type="hidden" name="id" value={deposit.id} />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Refund date" htmlFor="rf-date">
+              <Input
+                id="rf-date"
+                name="refundedAt"
+                type="date"
+                required
+                defaultValue={new Date().toISOString().slice(0, 10)}
+              />
+            </Field>
+            <Field
+              label="Refund amount (AED)"
+              htmlFor="rf-amount"
+              hint={
+                deposit.amount
+                  ? `Held: ${formatCurrency(deposit.amount, "AED", locale)}`
+                  : undefined
+              }
+            >
+              <Input
+                id="rf-amount"
+                name="refundedAmount"
+                type="number"
+                step="0.01"
+                min="0"
+                required
+                defaultValue={deposit.amount}
+              />
+            </Field>
+          </div>
+          {state?.status === "error" && (
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
+              {state.message}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={pending}>
+              Confirm refund
+            </Button>
+          </div>
+        </form>
+      )}
     </Sheet>
   );
 }

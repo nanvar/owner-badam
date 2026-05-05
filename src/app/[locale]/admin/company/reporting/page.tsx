@@ -110,49 +110,50 @@ export default async function ReportingPage({
   );
 
   // Per property:
-  // - Owner profit  = payout − unit expense   (what the owner nets)
+  // - Unit revenue   = totalPrice (gross paid by guests)
+  // - Unit expense   = property expenses (DEWA, gas, cleaning…)
   // - Company profit = agency commission + extra company-profit entries
-  // - Owner payout  = the same as owner profit (i.e. what we owe them)
-  // The dashboard separately tracks how much of that has been paid; here
-  // we focus on what's been earned in the period.
+  // - Owner payout   = what the owner actually nets in the period:
+  //                    revenue − expense − company profit
   const rows = properties
     .map((p) => {
       const r = reservationByProp.get(p.id);
       const unitExpense = expenseByProp.get(p.id) ?? 0;
-      const totalPrice = r?._sum.totalPrice ?? 0;
-      const payout = r?._sum.payout ?? 0;
+      const unitRevenue = r?._sum.totalPrice ?? 0;
       const agency = r?._sum.agencyCommission ?? 0;
       const extra = profitByProp.get(p.id) ?? 0;
-      const ownerProfit = Math.max(0, payout - unitExpense);
       const companyProfit = agency + extra;
+      const ownerPayout = Math.max(
+        0,
+        unitRevenue - unitExpense - companyProfit,
+      );
       return {
         id: p.id,
         name: p.name,
         color: p.color,
         ownerId: p.owner.id,
         ownerName: p.owner.name ?? p.owner.email,
-        totalPrice,
+        unitRevenue,
         unitExpense,
-        ownerProfit,
         companyProfit,
-        ownerPayout: ownerProfit,
+        ownerPayout,
       };
     })
     .filter(
       (r) =>
-        r.totalPrice > 0 ||
+        r.unitRevenue > 0 ||
         r.unitExpense > 0 ||
         r.companyProfit > 0,
     );
 
   const totals = rows.reduce(
     (acc, r) => ({
-      ownerProfit: acc.ownerProfit + r.ownerProfit,
-      companyProfit: acc.companyProfit + r.companyProfit,
+      unitRevenue: acc.unitRevenue + r.unitRevenue,
       unitExpense: acc.unitExpense + r.unitExpense,
+      companyProfit: acc.companyProfit + r.companyProfit,
       ownerPayout: acc.ownerPayout + r.ownerPayout,
     }),
-    { ownerProfit: 0, companyProfit: 0, unitExpense: 0, ownerPayout: 0 },
+    { unitRevenue: 0, unitExpense: 0, companyProfit: 0, ownerPayout: 0 },
   );
 
   const basePath = `/${loc}/admin/company/reporting`;
@@ -180,13 +181,13 @@ export default async function ReportingPage({
                 <th className="px-4 py-3 text-left font-semibold">Property</th>
                 <th className="px-4 py-3 text-left font-semibold">Owner</th>
                 <th className="px-4 py-3 text-right font-semibold">
-                  Owner profit
+                  Unit revenue
+                </th>
+                <th className="px-4 py-3 text-right font-semibold">
+                  Unit expense
                 </th>
                 <th className="px-4 py-3 text-right font-semibold">
                   Company profit
-                </th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Unit expenses
                 </th>
                 <th className="px-4 py-3 text-right font-semibold">
                   Owner payout
@@ -227,15 +228,15 @@ export default async function ReportingPage({
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
-                      {formatCurrency(r.ownerProfit, "AED", loc)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
-                      {formatCurrency(r.companyProfit, "AED", loc)}
+                      {formatCurrency(r.unitRevenue, "AED", loc)}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-rose-600">
                       {r.unitExpense > 0
                         ? `− ${formatCurrency(r.unitExpense, "AED", loc)}`
                         : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
+                      {formatCurrency(r.companyProfit, "AED", loc)}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums font-bold">
                       {formatCurrency(r.ownerPayout, "AED", loc)}
@@ -245,24 +246,24 @@ export default async function ReportingPage({
               )}
             </tbody>
             {rows.length > 0 && (
-              <tfoot className="bg-[var(--color-surface-2)]/60 text-sm">
+              <tfoot className="bg-[var(--color-surface-2)]/60">
                 <tr className="border-t border-[var(--color-border)]">
                   <td
                     colSpan={2}
-                    className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]"
+                    className="px-4 py-4 text-sm font-bold uppercase tracking-wider"
                   >
                     Total
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-bold">
-                    {formatCurrency(totals.ownerProfit, "AED", loc)}
+                  <td className="px-4 py-4 text-right tabular-nums text-base font-bold">
+                    {formatCurrency(totals.unitRevenue, "AED", loc)}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-bold text-emerald-700">
-                    {formatCurrency(totals.companyProfit, "AED", loc)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-bold text-rose-600">
+                  <td className="px-4 py-4 text-right tabular-nums text-base font-bold text-rose-600">
                     {formatCurrency(totals.unitExpense, "AED", loc)}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-bold">
+                  <td className="px-4 py-4 text-right tabular-nums text-base font-bold text-emerald-700">
+                    {formatCurrency(totals.companyProfit, "AED", loc)}
+                  </td>
+                  <td className="px-4 py-4 text-right tabular-nums text-base font-bold">
                     {formatCurrency(totals.ownerPayout, "AED", loc)}
                   </td>
                 </tr>

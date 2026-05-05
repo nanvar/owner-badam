@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE `CompanyExpense` ADD COLUMN `refundedAmount` DOUBLE NULL,
+    ADD COLUMN `refundedAt` DATETIME(3) NULL,
+    MODIFY `kind` ENUM('EXPENSE', 'PROFIT', 'DEPOSIT') NOT NULL DEFAULT 'EXPENSE';

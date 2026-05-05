@@ -225,25 +225,33 @@ model DirectBooking {
 enum CompanyTransactionKind {
   EXPENSE
   PROFIT
+  // DEPOSIT entries are pure log rows — they don't feed dashboard / report
+  // totals. Each can later be marked refunded, at which point
+  // `refundedAt` / `refundedAmount` are populated.
+  DEPOSIT
 }
 
-// CompanyExpense holds both expense and (per-property) profit entries — the
-// `kind` discriminator picks between them. PROFIT entries reference a
-// property; EXPENSE entries use a category. The two share a date+amount
-// shape so the dashboard can net them in one query.
+// CompanyExpense holds expense, per-property profit, and per-property
+// deposit log entries — the `kind` discriminator picks between them.
+// PROFIT/DEPOSIT entries reference a property; EXPENSE entries use a
+// category. They share a date+amount shape so the dashboard can net them.
 model CompanyExpense {
-  id          String                  @id @default(cuid())
-  kind        CompanyTransactionKind  @default(EXPENSE)
-  // EXPENSE only — null for PROFIT entries
-  category    CompanyExpenseCategory?
-  // PROFIT only — null for EXPENSE entries
-  propertyId  String?
-  property    Property?               @relation(fields: [propertyId], references: [id], onDelete: SetNull)
-  date        DateTime
-  description String                  @db.Text
-  amount      Float
-  createdAt   DateTime                @default(now())
-  updatedAt   DateTime                @updatedAt
+  id              String                  @id @default(cuid())
+  kind            CompanyTransactionKind  @default(EXPENSE)
+  // EXPENSE only — null for PROFIT/DEPOSIT entries
+  category        CompanyExpenseCategory?
+  // PROFIT/DEPOSIT only — null for EXPENSE entries
+  propertyId      String?
+  property        Property?               @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  date            DateTime
+  description     String                  @db.Text
+  amount          Float
+  // DEPOSIT-only refund metadata. When refundedAt is null the deposit is
+  // still held; populated values mean the company has paid it back.
+  refundedAt      DateTime?
+  refundedAmount  Float?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
 
   @@index([date])
   @@index([kind])

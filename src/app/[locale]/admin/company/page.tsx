@@ -182,16 +182,26 @@ export default async function SuperAdminDashboard({
   // Company expense + profit totals (filtered). Stored together in
   // CompanyExpense with a `kind` discriminator. Net = profit − expenses
   // and feeds the company net-profit KPI.
-  const companyEntryAggs = await prisma.companyExpense.groupBy({
-    by: ["kind"],
-    _sum: { amount: true },
-    _count: { _all: true },
-  });
+  const [companyEntryAggs, activeDeposits] = await Promise.all([
+    prisma.companyExpense.groupBy({
+      by: ["kind"],
+      where: { kind: { in: ["EXPENSE", "PROFIT"] } },
+      _sum: { amount: true },
+      _count: { _all: true },
+    }),
+    prisma.companyExpense.aggregate({
+      where: { kind: "DEPOSIT", refundedAt: null },
+      _sum: { amount: true },
+      _count: { _all: true },
+    }),
+  ]);
   const expenseRow = companyEntryAggs.find((r) => r.kind === "EXPENSE");
   const profitRow = companyEntryAggs.find((r) => r.kind === "PROFIT");
   const totalCompanyExpenses = expenseRow?._sum.amount ?? 0;
   const companyExpenseCount = expenseRow?._count._all ?? 0;
   const totalCompanyExtraProfit = profitRow?._sum.amount ?? 0;
+  const totalActiveDeposits = activeDeposits._sum.amount ?? 0;
+  const activeDepositsCount = activeDeposits._count._all;
 
   // Outstanding owner debt = realized payout − property expenses − payments
   // already made. Per-property payments come from `paymentsToOwner` (incl.
@@ -255,12 +265,14 @@ export default async function SuperAdminDashboard({
 
       {/* KPI grid */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
-        <KpiTile
-          label="Company revenue"
-          value={formatCurrency(totalAgency, "AED", loc)}
-          hint={`portal ${formatCurrency(totalPortal, "AED", loc)}`}
-          accent="emerald"
-          icon={<TrendingUp className="h-4 w-4" />}
+        <CompanyPnlTile
+          locale={loc}
+          revenue={totalAgency + totalCompanyExtraProfit}
+          agency={totalAgency}
+          extraProfit={totalCompanyExtraProfit}
+          expenses={totalCompanyExpenses}
+          expenseCount={companyExpenseCount}
+          net={companyNet}
         />
         <UpcomingTile
           locale={loc}
@@ -279,21 +291,14 @@ export default async function SuperAdminDashboard({
           }))}
         />
         <KpiTile
-          label="Company expenses"
-          value={formatCurrency(totalCompanyExpenses, "AED", loc)}
-          hint={`${companyExpenseCount} entries`}
-          accent="rose"
-          icon={<Receipt className="h-4 w-4" />}
-        />
-        <KpiTile
-          label="Company profit"
-          value={formatCurrency(companyNet, "AED", loc)}
+          label="Active deposits"
+          value={formatCurrency(totalActiveDeposits, "AED", loc)}
           hint={
-            totalCompanyExtraProfit > 0
-              ? "agency + profit − expenses"
-              : "agency − expenses"
+            activeDepositsCount === 0
+              ? "none held"
+              : `${activeDepositsCount} held — pending refund`
           }
-          accent={companyNet >= 0 ? "emerald" : "rose"}
+          accent="sky"
           icon={<Wallet className="h-4 w-4" />}
         />
         <KpiTile
@@ -329,6 +334,9 @@ export default async function SuperAdminDashboard({
               <tr>
                 <th className="px-4 py-3 text-left font-semibold">Property</th>
                 <th className="px-4 py-3 text-left font-semibold">Owner</th>
+                <th className="w-32 px-4 py-3 text-right font-semibold">
+                  Reservations
+                </th>
                 <th className="px-4 py-3 text-right font-semibold">
                   Owner payout
                 </th>
@@ -338,7 +346,7 @@ export default async function SuperAdminDashboard({
               {debtTable.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={3}
+                    colSpan={4}
                     className="px-4 py-12 text-center text-sm text-[var(--color-muted)]"
                   >
                     All settled — no outstanding balances.
@@ -367,6 +375,11 @@ export default async function SuperAdminDashboard({
                         {p.ownerName}
                       </Link>
                     </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      <span className="inline-flex min-w-[2rem] items-center justify-center rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-xs font-semibold">
+                        {p.bookings}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-right tabular-nums font-bold text-amber-700">
                       {formatCurrency(p.ownerDebt, "AED", loc)}
                     </td>
@@ -375,15 +388,18 @@ export default async function SuperAdminDashboard({
               )}
             </tbody>
             {debtTable.length > 0 && (
-              <tfoot className="bg-[var(--color-surface-2)]/60 text-sm">
+              <tfoot className="bg-[var(--color-surface-2)]/60">
                 <tr className="border-t border-[var(--color-border)]">
                   <td
                     colSpan={2}
-                    className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]"
+                    className="px-4 py-4 text-sm font-bold uppercase tracking-wider"
                   >
                     Total
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-bold text-amber-700">
+                  <td className="px-4 py-4 text-right tabular-nums text-base font-bold">
+                    {debtTable.reduce((s, p) => s + p.bookings, 0)}
+                  </td>
+                  <td className="px-4 py-4 text-right tabular-nums text-base font-bold text-amber-700">
                     {formatCurrency(totalOwnerOutstanding, "AED", loc)}
                   </td>
                 </tr>
@@ -432,5 +448,106 @@ function KpiTile({
         <div className="mt-0.5 text-[11px] text-[var(--color-muted)]">{hint}</div>
       </CardBody>
     </Card>
+  );
+}
+
+// Combined revenue + profit + expense tile so admins read the company P&L
+// at a glance without scanning three separate cards.
+function CompanyPnlTile({
+  locale,
+  revenue,
+  agency,
+  extraProfit,
+  expenses,
+  expenseCount,
+  net,
+}: {
+  locale: Locale;
+  revenue: number;
+  agency: number;
+  extraProfit: number;
+  expenses: number;
+  expenseCount: number;
+  net: number;
+}) {
+  const positive = net >= 0;
+  return (
+    <Card className="overflow-hidden">
+      <CardBody
+        className={`bg-gradient-to-br ${positive ? "from-emerald-500/15 to-emerald-500/0 text-emerald-700" : "from-rose-500/15 to-rose-500/0 text-rose-600"}`}
+      >
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80">
+            Company P&amp;L
+          </div>
+          <div className="opacity-80">
+            <Wallet className="h-4 w-4" />
+          </div>
+        </div>
+        <div className="mt-1.5 text-xl font-bold tabular-nums text-[var(--color-foreground)]">
+          {formatCurrency(net, "AED", locale)}
+        </div>
+        <div className="mt-0.5 text-[11px] text-[var(--color-muted)]">
+          net profit
+        </div>
+        <div className="mt-3 space-y-1.5 border-t border-black/5 pt-2">
+          <PnlRow
+            icon={<TrendingUp className="h-3 w-3" />}
+            label="Revenue"
+            value={formatCurrency(revenue, "AED", locale)}
+            hint={
+              extraProfit > 0
+                ? `agency ${formatCurrency(agency, "AED", locale)} + profit ${formatCurrency(extraProfit, "AED", locale)}`
+                : "agency commission"
+            }
+            tone="emerald"
+          />
+          <PnlRow
+            icon={<Receipt className="h-3 w-3" />}
+            label="Expenses"
+            value={`− ${formatCurrency(expenses, "AED", locale)}`}
+            hint={`${expenseCount} ${expenseCount === 1 ? "entry" : "entries"}`}
+            tone="rose"
+          />
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function PnlRow({
+  icon,
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  hint: string;
+  tone: "emerald" | "rose";
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-xs">
+      <div className="flex items-center gap-1.5">
+        <span
+          className={
+            tone === "emerald" ? "text-emerald-700" : "text-rose-600"
+          }
+        >
+          {icon}
+        </span>
+        <span className="font-medium text-[var(--color-foreground)]">
+          {label}
+        </span>
+        <span className="text-[10px] text-[var(--color-muted)]">{hint}</span>
+      </div>
+      <span
+        className={`tabular-nums font-semibold ${tone === "emerald" ? "text-emerald-700" : "text-rose-600"}`}
+      >
+        {value}
+      </span>
+    </div>
   );
 }

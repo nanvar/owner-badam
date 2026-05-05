@@ -5,13 +5,13 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { COMPANY_EXPENSE_CATEGORIES } from "@/lib/company-expense-types";
 
-// Single discriminated schema covers both EXPENSE (with category, no
-// property) and PROFIT (with property, no category). Anything caller-side
-// that submits the wrong combination falls into the refine error.
+// Discriminated schema covers EXPENSE (with category, no property),
+// PROFIT (with property + description), and DEPOSIT (with property + amount;
+// description optional, lifecycle tracked via refund fields).
 const Schema = z
   .object({
     id: z.string().optional(),
-    kind: z.enum(["EXPENSE", "PROFIT"]).default("EXPENSE"),
+    kind: z.enum(["EXPENSE", "PROFIT", "DEPOSIT"]).default("EXPENSE"),
     propertyId: z.string().optional().or(z.literal("")),
     date: z.string().min(1),
     category: z
@@ -28,13 +28,13 @@ const Schema = z
         : !!v.propertyId && v.propertyId.length > 0,
     {
       message:
-        "Expenses need a category, profit entries need a property.",
+        "Expenses need a category, profit/deposit entries need a property.",
       path: ["kind"],
     },
   )
   // Description is required only when the entry needs a free-text label:
-  // EXPENSE with category OTHER, or PROFIT (which has no category to
-  // describe what the income is for).
+  // EXPENSE with category OTHER, or PROFIT (description explains it).
+  // DEPOSIT description is optional.
   .refine(
     (v) => {
       const needs =
@@ -99,4 +99,51 @@ export async function upsertCompanyExpenseAction(
 export async function deleteCompanyExpenseAction(id: string) {
   await requireRole("SUPERADMIN");
   await prisma.companyExpense.delete({ where: { id } });
+}
+
+// Mark a DEPOSIT as paid back. Stores the refund amount + date so the
+// timeline is auditable.
+const RefundSchema = z.object({
+  id: z.string().min(1),
+  refundedAt: z.string().min(1),
+  refundedAmount: z.coerce.number().nonnegative(),
+});
+
+export async function refundDepositAction(
+  _prev: CompanyExpenseState | undefined,
+  formData: FormData,
+): Promise<CompanyExpenseState> {
+  await requireRole("SUPERADMIN");
+  const parsed = RefundSchema.safeParse({
+    id: formData.get("id"),
+    refundedAt: formData.get("refundedAt"),
+    refundedAmount: formData.get("refundedAmount") || 0,
+  });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: parsed.error.issues[0]?.message ?? "Invalid input",
+    };
+  }
+  const v = parsed.data;
+  const refundedAt = new Date(v.refundedAt);
+  if (Number.isNaN(refundedAt.getTime())) {
+    return { status: "error", message: "Invalid date" };
+  }
+  await prisma.companyExpense.update({
+    where: { id: v.id },
+    data: {
+      refundedAt,
+      refundedAmount: v.refundedAmount,
+    },
+  });
+  return { status: "ok" };
+}
+
+export async function unrefundDepositAction(id: string) {
+  await requireRole("SUPERADMIN");
+  await prisma.companyExpense.update({
+    where: { id },
+    data: { refundedAt: null, refundedAmount: null },
+  });
 }
