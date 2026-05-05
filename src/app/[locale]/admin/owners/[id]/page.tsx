@@ -68,8 +68,15 @@ export default async function OwnerDetailPage({
   const accruedPayout = owner.properties
     .flatMap((p) => p.reservations)
     .reduce((s, r) => s + r.payout, 0);
+  // Property expenses (DEWA, gas, cleaning…) are deducted from the owner's
+  // payout — they don't belong to the company. Balance reflects what's
+  // actually still owed after expenses + already-paid settlements.
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0);
-  const ownerBalance = Math.max(0, accruedPayout - totalPaid);
+  const ownerBalance = Math.max(
+    0,
+    accruedPayout - totalExpenses - totalPaid,
+  );
   const totalNights = owner.properties
     .flatMap((p) => p.reservations)
     .reduce((s, r) => s + r.nights, 0);

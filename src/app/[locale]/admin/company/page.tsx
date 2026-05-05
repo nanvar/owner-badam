@@ -1,6 +1,7 @@
 import { setRequestLocale } from "next-intl/server";
 import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import {
   Wallet,
   Receipt,
@@ -12,8 +13,9 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { UpcomingTile } from "./upcoming-tile";
+import { ReportingFilter } from "./reporting-filter";
 
 type PropertyAgg = {
   id: string;
@@ -26,6 +28,10 @@ type PropertyAgg = {
   agencyEarnings: number;
   portalCommissions: number;
   ownerPayout: number;
+  propertyExpenses: number;
+  ownerNet: number;
+  paymentsToOwner: number;
+  companyExtraProfit: number;
   upcomingBookings: number;
   upcomingRevenue: number;
   upcomingAgency: number;
@@ -35,8 +41,14 @@ type PropertyAgg = {
 
 export default async function SuperAdminDashboard({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{
+    ownerId?: string;
+    from?: string;
+    to?: string;
+  }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
@@ -44,15 +56,55 @@ export default async function SuperAdminDashboard({
   await requireRole("SUPERADMIN");
 
   const loc = locale as Locale;
+  const sp = await searchParams;
+  const filterOwnerId = sp.ownerId || "";
+  const fromStr = sp.from || "";
+  const toStr = sp.to || "";
+  const fromDate = fromStr ? new Date(fromStr) : null;
+  const toDate = toStr ? new Date(toStr) : null;
+  // Inclusive end-of-day for the upper bound so a date like "2026-05-05"
+  // captures everything that happened that day.
+  const toEndOfDay =
+    toDate && !Number.isNaN(toDate.getTime())
+      ? new Date(toDate.getTime() + 24 * 60 * 60 * 1000 - 1)
+      : null;
+  const reservationDateFilter =
+    fromDate && toEndOfDay
+      ? { checkIn: { gte: fromDate, lte: toEndOfDay } }
+      : fromDate
+        ? { checkIn: { gte: fromDate } }
+        : toEndOfDay
+          ? { checkIn: { lte: toEndOfDay } }
+          : {};
+  const dateFilter =
+    fromDate && toEndOfDay
+      ? { date: { gte: fromDate, lte: toEndOfDay } }
+      : fromDate
+        ? { date: { gte: fromDate } }
+        : toEndOfDay
+          ? { date: { lte: toEndOfDay } }
+          : {};
+  const propertyOwnerFilter = filterOwnerId
+    ? { property: { ownerId: filterOwnerId } }
+    : {};
+  const propertyOwnerIdFilter = filterOwnerId ? { ownerId: filterOwnerId } : {};
 
   // === Aggregations ===
-  // Sum of company-side fields per property using Prisma's groupBy.
-  // Realized (upcoming=false) and pipeline (upcoming=true) are computed
-  // separately so the dashboard can show "money in hand" vs "money expected".
-  const [propertyAggs, upcomingAggs] = await Promise.all([
+  // Per-property: realized + upcoming reservation sums, property expenses,
+  // owner payments (per-property only — null-property settlements are
+  // pro-rated separately at owner level), and company-side extra profit.
+  const [
+    propertyAggs,
+    upcomingAggs,
+    expenseAggs,
+    paymentAggs,
+    companyProfitAggs,
+    properties,
+    ownersList,
+  ] = await Promise.all([
     prisma.reservation.groupBy({
       by: ["propertyId"],
-      where: { upcoming: false },
+      where: { upcoming: false, ...reservationDateFilter, ...propertyOwnerFilter },
       _count: { _all: true },
       _sum: {
         totalPrice: true,
@@ -63,7 +115,7 @@ export default async function SuperAdminDashboard({
     }),
     prisma.reservation.groupBy({
       by: ["propertyId"],
-      where: { upcoming: true },
+      where: { upcoming: true, ...reservationDateFilter, ...propertyOwnerFilter },
       _count: { _all: true },
       _sum: {
         totalPrice: true,
@@ -71,59 +123,123 @@ export default async function SuperAdminDashboard({
         portalCommission: true,
         payout: true,
       },
+    }),
+    prisma.expense.groupBy({
+      by: ["propertyId"],
+      where: { ...dateFilter, ...propertyOwnerFilter },
+      _sum: { amount: true },
+    }),
+    prisma.ownerPayment.groupBy({
+      by: ["propertyId"],
+      where: {
+        ...dateFilter,
+        ...(filterOwnerId ? { ownerId: filterOwnerId } : {}),
+      },
+      _sum: { amount: true },
+    }),
+    prisma.companyExpense.groupBy({
+      by: ["propertyId"],
+      where: { kind: "PROFIT", ...dateFilter, ...propertyOwnerFilter },
+      _sum: { amount: true },
+    }),
+    prisma.property.findMany({
+      where: propertyOwnerIdFilter,
+      include: { owner: { select: { id: true, name: true, email: true } } },
+    }),
+    prisma.user.findMany({
+      where: { role: "OWNER" },
+      select: { id: true, name: true, email: true },
+      orderBy: [{ name: "asc" }, { email: "asc" }],
     }),
   ]);
-  const upcomingByProp = new Map(
-    upcomingAggs.map((a) => [a.propertyId, a]),
-  );
 
-  const allPropIds = Array.from(
-    new Set([
-      ...propertyAggs.map((a) => a.propertyId),
-      ...upcomingAggs.map((a) => a.propertyId),
-    ]),
+  const realizedByProp = new Map(propertyAggs.map((a) => [a.propertyId, a]));
+  const upcomingByProp = new Map(upcomingAggs.map((a) => [a.propertyId, a]));
+  const expenseByProp = new Map(
+    expenseAggs.map((a) => [a.propertyId, a._sum.amount ?? 0]),
   );
-  const properties = await prisma.property.findMany({
-    where: { id: { in: allPropIds } },
-    include: { owner: { select: { id: true, name: true, email: true } } },
+  const profitByProp = new Map(
+    companyProfitAggs.map((a) => [a.propertyId ?? "", a._sum.amount ?? 0]),
+  );
+  // Per-property owner payments (with explicit propertyId set on the row).
+  const directPaymentsByProp = new Map(
+    paymentAggs
+      .filter((a) => !!a.propertyId)
+      .map((a) => [a.propertyId as string, a._sum.amount ?? 0]),
+  );
+  // Cross-property settlements: those with propertyId = null — sum per
+  // owner so we can pro-rate them across that owner's properties below.
+  const crossOwnerPayments = await prisma.ownerPayment.groupBy({
+    by: ["ownerId"],
+    where: {
+      propertyId: null,
+      ...dateFilter,
+      ...(filterOwnerId ? { ownerId: filterOwnerId } : {}),
+    },
+    _sum: { amount: true },
   });
-  const propMap = new Map(properties.map((p) => [p.id, p]));
-  const realizedByProp = new Map(
-    propertyAggs.map((a) => [a.propertyId, a]),
+  const crossPaymentsByOwner = new Map(
+    crossOwnerPayments.map((r) => [r.ownerId, r._sum.amount ?? 0]),
   );
 
-  const propertyTable: PropertyAgg[] = allPropIds
-    .map((propId) => {
-      const p = propMap.get(propId);
-      if (!p) return null;
-      const a = realizedByProp.get(propId);
-      const u = upcomingByProp.get(propId);
-      return {
-        id: p.id,
-        name: p.name,
-        color: p.color,
-        ownerId: p.owner.id,
-        ownerName: p.owner.name ?? p.owner.email,
-        bookings: a?._count._all ?? 0,
-        totalRevenue: a?._sum.totalPrice ?? 0,
-        agencyEarnings: a?._sum.agencyCommission ?? 0,
-        portalCommissions: a?._sum.portalCommission ?? 0,
-        ownerPayout: a?._sum.payout ?? 0,
-        upcomingBookings: u?._count._all ?? 0,
-        upcomingRevenue: u?._sum.totalPrice ?? 0,
-        upcomingAgency: u?._sum.agencyCommission ?? 0,
-        upcomingPortal: u?._sum.portalCommission ?? 0,
-        upcomingPayout: u?._sum.payout ?? 0,
-      };
+  // Build the per-property base table (all of the owner's properties show
+  // up, even ones with no activity in the period — easier to spot zeros).
+  const baseTable = properties.map((p) => {
+    const a = realizedByProp.get(p.id);
+    const u = upcomingByProp.get(p.id);
+    const expenses = expenseByProp.get(p.id) ?? 0;
+    const payout = a?._sum.payout ?? 0;
+    const ownerNet = Math.max(0, payout - expenses);
+    return {
+      id: p.id,
+      name: p.name,
+      color: p.color,
+      ownerId: p.owner.id,
+      ownerName: p.owner.name ?? p.owner.email,
+      bookings: a?._count._all ?? 0,
+      totalRevenue: a?._sum.totalPrice ?? 0,
+      agencyEarnings: a?._sum.agencyCommission ?? 0,
+      portalCommissions: a?._sum.portalCommission ?? 0,
+      ownerPayout: payout,
+      propertyExpenses: expenses,
+      ownerNet,
+      paymentsToOwner: directPaymentsByProp.get(p.id) ?? 0,
+      companyExtraProfit: profitByProp.get(p.id) ?? 0,
+      upcomingBookings: u?._count._all ?? 0,
+      upcomingRevenue: u?._sum.totalPrice ?? 0,
+      upcomingAgency: u?._sum.agencyCommission ?? 0,
+      upcomingPortal: u?._sum.portalCommission ?? 0,
+      upcomingPayout: u?._sum.payout ?? 0,
+    } satisfies PropertyAgg;
+  });
+
+  // Allocate cross-property payments pro-rata against ownerNet so an
+  // umbrella settlement still reduces each property's debt fairly.
+  const ownerNetTotalsForCross = new Map<string, number>();
+  for (const p of baseTable) {
+    ownerNetTotalsForCross.set(
+      p.ownerId,
+      (ownerNetTotalsForCross.get(p.ownerId) ?? 0) + p.ownerNet,
+    );
+  }
+  const propertyTable: PropertyAgg[] = baseTable
+    .map((p) => {
+      const ownerNetTotal = ownerNetTotalsForCross.get(p.ownerId) ?? 0;
+      const cross = crossPaymentsByOwner.get(p.ownerId) ?? 0;
+      const share =
+        ownerNetTotal > 0 && cross > 0
+          ? (p.ownerNet / ownerNetTotal) * cross
+          : 0;
+      return { ...p, paymentsToOwner: p.paymentsToOwner + share };
     })
-    .filter((x): x is PropertyAgg => !!x)
     .sort((a, b) => b.agencyEarnings - a.agencyEarnings);
 
-  // Company expense + profit totals (all-time). Stored together in
+  // Company expense + profit totals (filtered). Stored together in
   // CompanyExpense with a `kind` discriminator. Net = profit − expenses
   // and feeds the company net-profit KPI.
   const companyEntryAggs = await prisma.companyExpense.groupBy({
     by: ["kind"],
+    where: { ...dateFilter, ...propertyOwnerFilter },
     _sum: { amount: true },
     _count: { _all: true },
   });
@@ -133,45 +249,21 @@ export default async function SuperAdminDashboard({
   const companyExpenseCount = expenseRow?._count._all ?? 0;
   const totalCompanyExtraProfit = profitRow?._sum.amount ?? 0;
 
-  // Outstanding payout per owner = accrued (realized) − recorded payments.
-  // Properties belonging to a fully-paid owner drop off the reporting list,
-  // and the Owners amount card sums the remaining balance only.
-  const ownerPaymentSums = await prisma.ownerPayment.groupBy({
-    by: ["ownerId"],
-    _sum: { amount: true },
-  });
-  const paidByOwner = new Map(
-    ownerPaymentSums.map((row) => [row.ownerId, row._sum.amount ?? 0]),
-  );
-  const accruedByOwner = new Map<string, number>();
-  for (const p of propertyTable) {
-    accruedByOwner.set(
-      p.ownerId,
-      (accruedByOwner.get(p.ownerId) ?? 0) + p.ownerPayout,
-    );
-  }
-  // remainingFactor = how much of each property's payout is still owed
-  // (1 = nothing paid yet, 0 = fully paid). Pro-rata across an owner's props.
-  const remainingFactorByOwner = new Map<string, number>();
-  for (const [ownerId, accrued] of accruedByOwner) {
-    const paid = paidByOwner.get(ownerId) ?? 0;
-    if (accrued <= 0) {
-      remainingFactorByOwner.set(ownerId, 0);
-    } else {
-      const remaining = Math.max(0, accrued - paid);
-      remainingFactorByOwner.set(ownerId, remaining / accrued);
-    }
-  }
-  // Filtered table for the Reporting section: only owners with money still
-  // owed. Each property's "Owner payout" reflects its share of the
-  // outstanding balance.
+  // Outstanding owner debt = realized payout − property expenses − payments
+  // already made. Per-property payments come from `paymentsToOwner` (incl.
+  // pro-rated cross-property settlements computed earlier).
   const reportingTable = propertyTable
-    .map((p) => {
-      const factor = remainingFactorByOwner.get(p.ownerId) ?? 0;
-      return { ...p, ownerPayoutOutstanding: p.ownerPayout * factor };
-    })
-    .filter((p) => p.ownerPayoutOutstanding > 0.005);
-
+    .map((p) => ({
+      ...p,
+      ownerDebt: Math.max(0, p.ownerNet - p.paymentsToOwner),
+    }))
+    .filter(
+      (p) =>
+        p.bookings > 0 ||
+        p.propertyExpenses > 0 ||
+        p.paymentsToOwner > 0 ||
+        p.companyExtraProfit > 0,
+    );
 
   // Active reservations: today falls inside checkIn..checkOut. Both counts
   // exclude pipeline (upcoming) — they are pure realized metrics.
@@ -187,32 +279,6 @@ export default async function SuperAdminDashboard({
     }),
   ]);
 
-  // Reservations for the Reporting table — split into "live" (currently
-  // ongoing) and "completed" (already checked out). Future / not-yet-started
-  // reservations don't appear here; they live on the dedicated Upcoming tile.
-  const liveReservations = await prisma.reservation.findMany({
-    where: {
-      upcoming: false,
-      checkIn: { lte: today },
-      checkOut: { gt: today },
-    },
-    include: {
-      property: { select: { id: true, name: true, color: true } },
-    },
-    orderBy: { checkOut: "asc" },
-  });
-  const completedReservations = await prisma.reservation.findMany({
-    where: {
-      upcoming: false,
-      checkOut: { lte: today },
-    },
-    include: {
-      property: { select: { id: true, name: true, color: true } },
-    },
-    orderBy: { checkOut: "desc" },
-    take: 50,
-  });
-
   // KPIs
   const totalAgency = propertyTable.reduce((s, p) => s + p.agencyEarnings, 0);
   const totalPortal = propertyTable.reduce((s, p) => s + p.portalCommissions, 0);
@@ -224,14 +290,21 @@ export default async function SuperAdminDashboard({
     (s, p) => s + p.upcomingBookings,
     0,
   );
-  // Owners amount tile shows outstanding balance only (accrued − paid).
-  // distinctOwners counts only those still owed money — fully-paid owners
-  // disappear from this view.
+  // Owners amount tile = sum of per-property outstanding debt (which already
+  // accounts for property expenses and any owner-payments made).
   const totalOwnerOutstanding = reportingTable.reduce(
-    (s, p) => s + p.ownerPayoutOutstanding,
+    (s, p) => s + p.ownerDebt,
     0,
   );
-  const distinctOwners = new Set(reportingTable.map((p) => p.ownerId)).size;
+  const distinctOwners = new Set(
+    reportingTable.filter((p) => p.ownerDebt > 0.005).map((p) => p.ownerId),
+  ).size;
+  const totalPropertyExpenses = propertyTable.reduce(
+    (s, p) => s + p.propertyExpenses,
+    0,
+  );
+  const filterActive = !!(filterOwnerId || fromStr || toStr);
+  const basePath = `/${loc}/admin/company`;
   // Profit and revenue tiles use realized only. Upcoming is split out
   // into its own tile (clickable for the per-property breakdown).
   const companyNet =
@@ -307,132 +380,159 @@ export default async function SuperAdminDashboard({
       {/* Reporting */}
       <h2 className="mt-8 mb-3 flex items-center gap-2 text-base font-bold tracking-tight">
         Reporting
-        {liveReservations.length > 0 && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-600">
-            <span className="relative grid h-2 w-2 place-items-center">
-              <span className="absolute inset-0 animate-ping rounded-full bg-rose-500/60" />
-              <span className="relative h-2 w-2 rounded-full bg-rose-500" />
-            </span>
-            {liveReservations.length} live
+        {filterActive && (
+          <span className="rounded-full bg-[var(--color-brand-soft)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--color-brand)]">
+            filtered
           </span>
         )}
       </h2>
+
+      <ReportingFilter
+        owners={ownersList.map((o) => ({
+          id: o.id,
+          name: o.name ?? o.email,
+        }))}
+        ownerId={filterOwnerId}
+        from={fromStr}
+        to={toStr}
+        basePath={basePath}
+      />
+
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold">Status</th>
                 <th className="px-4 py-3 text-left font-semibold">Property</th>
-                <th className="px-4 py-3 text-left font-semibold">Guest</th>
-                <th className="px-4 py-3 text-left font-semibold">Check-in</th>
-                <th className="px-4 py-3 text-left font-semibold">Check-out</th>
-                <th className="px-4 py-3 text-right font-semibold">Nights</th>
+                <th className="px-4 py-3 text-left font-semibold">Owner</th>
                 <th className="px-4 py-3 text-right font-semibold">
-                  Owner payout
+                  Owner revenue
                 </th>
-                <th className="px-4 py-3 text-right font-semibold">Company</th>
+                <th className="px-4 py-3 text-right font-semibold">
+                  Expenses
+                </th>
+                <th className="px-4 py-3 text-right font-semibold">
+                  Owner profit
+                </th>
+                <th className="px-4 py-3 text-right font-semibold">
+                  Company revenue
+                </th>
+                <th className="px-4 py-3 text-right font-semibold">
+                  Company profit
+                </th>
+                <th className="px-4 py-3 text-right font-semibold">
+                  Owner debt
+                </th>
               </tr>
             </thead>
             <tbody>
-              {liveReservations.length === 0 && completedReservations.length === 0 ? (
+              {reportingTable.length === 0 ? (
                 <tr>
                   <td
                     colSpan={8}
                     className="px-4 py-12 text-center text-sm text-[var(--color-muted)]"
                   >
-                    No reservations yet.
+                    No activity in this period.
                   </td>
                 </tr>
               ) : (
-                <>
-                  {liveReservations.map((r) => (
-                    <tr
-                      key={r.id}
-                      className="border-t border-[var(--color-border)] bg-rose-500/5 hover:bg-rose-500/10"
-                    >
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-600">
-                          <span className="relative grid h-2 w-2 place-items-center">
-                            <span className="absolute inset-0 animate-ping rounded-full bg-rose-500/60" />
-                            <span className="relative h-2 w-2 rounded-full bg-rose-500" />
+                reportingTable.map((p) => (
+                  <tr
+                    key={p.id}
+                    className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-5 w-1 shrink-0 rounded-full"
+                          style={{ background: p.color }}
+                        />
+                        <span className="font-semibold">{p.name}</span>
+                        {p.bookings > 0 && (
+                          <span className="rounded-full bg-[var(--color-surface-2)] px-1.5 text-[10px] font-bold text-[var(--color-muted)]">
+                            {p.bookings}
                           </span>
-                          Live
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="h-5 w-1 shrink-0 rounded-full"
-                            style={{ background: r.property.color }}
-                          />
-                          <span className="font-semibold">{r.property.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">{r.guestName ?? "—"}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {formatDate(r.checkIn.toISOString(), loc)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {formatDate(r.checkOut.toISOString(), loc)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {r.nights}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {formatCurrency(r.payout, "AED", loc)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold tabular-nums text-emerald-600">
-                        {formatCurrency(r.agencyCommission, "AED", loc)}
-                      </td>
-                    </tr>
-                  ))}
-                  {liveReservations.length > 0 &&
-                    completedReservations.length > 0 && (
-                      <tr>
-                        <td colSpan={8} className="h-8" />
-                      </tr>
-                    )}
-                  {completedReservations.map((r) => (
-                    <tr
-                      key={r.id}
-                      className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/${loc}/admin/owners/${p.ownerId}`}
+                        className="text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-brand)] hover:underline"
+                      >
+                        {p.ownerName}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {formatCurrency(p.ownerPayout, "AED", loc)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-rose-600">
+                      {p.propertyExpenses > 0
+                        ? `− ${formatCurrency(p.propertyExpenses, "AED", loc)}`
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold">
+                      {formatCurrency(p.ownerNet, "AED", loc)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
+                      {formatCurrency(p.agencyEarnings, "AED", loc)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
+                      {p.companyExtraProfit > 0
+                        ? formatCurrency(p.companyExtraProfit, "AED", loc)
+                        : "—"}
+                    </td>
+                    <td
+                      className={
+                        "px-4 py-3 text-right tabular-nums font-bold " +
+                        (p.ownerDebt > 0.005
+                          ? "text-amber-700"
+                          : "text-emerald-700")
+                      }
                     >
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
-                          Done
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="h-5 w-1 shrink-0 rounded-full"
-                            style={{ background: r.property.color }}
-                          />
-                          <span className="font-medium">{r.property.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">{r.guestName ?? "—"}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-[var(--color-muted)]">
-                        {formatDate(r.checkIn.toISOString(), loc)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-[var(--color-muted)]">
-                        {formatDate(r.checkOut.toISOString(), loc)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {r.nights}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {formatCurrency(r.payout, "AED", loc)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
-                        {formatCurrency(r.agencyCommission, "AED", loc)}
-                      </td>
-                    </tr>
-                  ))}
-                </>
+                      {p.ownerDebt > 0.005
+                        ? formatCurrency(p.ownerDebt, "AED", loc)
+                        : "✓"}
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
+            {reportingTable.length > 0 && (
+              <tfoot className="bg-[var(--color-surface-2)]/60 text-sm">
+                <tr className="border-t border-[var(--color-border)]">
+                  <td colSpan={2} className="px-4 py-3 font-bold uppercase tracking-wider text-[10px] text-[var(--color-muted)]">
+                    Total
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums font-bold">
+                    {formatCurrency(
+                      reportingTable.reduce((s, p) => s + p.ownerPayout, 0),
+                      "AED",
+                      loc,
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums font-bold text-rose-600">
+                    {formatCurrency(totalPropertyExpenses, "AED", loc)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums font-bold">
+                    {formatCurrency(
+                      reportingTable.reduce((s, p) => s + p.ownerNet, 0),
+                      "AED",
+                      loc,
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums font-bold text-emerald-700">
+                    {formatCurrency(totalAgency, "AED", loc)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums font-bold text-emerald-700">
+                    {formatCurrency(totalCompanyExtraProfit, "AED", loc)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums font-bold text-amber-700">
+                    {formatCurrency(totalOwnerOutstanding, "AED", loc)}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </Card>
