@@ -211,6 +211,7 @@ export default async function OwnerDetailPage({
             deleteLedgerConfirm: tAdmin("deleteLedgerConfirm"),
             recordPayment: tAdmin("recordPayment"),
             payments: tAdmin("payments"),
+            showProperty: tAdmin("showProperty"),
             paid: tAdmin("paid"),
             totalPaid: tAdmin("totalPaid"),
             noPayments: tAdmin("noPayments"),

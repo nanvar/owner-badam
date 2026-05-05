@@ -168,6 +168,7 @@
     "deleteOwnerConfirm": "Delete this owner? Their properties and reservations will also be removed.",
     "recordPayment": "Record payment",
     "payments": "Payments",
+    "showProperty": "Show property",
     "paid": "Paid",
     "totalPaid": "Total paid",
     "noPayments": "No payments recorded yet.",

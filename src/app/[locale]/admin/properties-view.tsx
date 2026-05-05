@@ -17,6 +17,7 @@ import {
   X,
   Wallet,
   MoreHorizontal,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -582,6 +583,7 @@ function PropertyTable({
                   <td className="px-2 py-3 text-right">
                     <RowMenu
                       labels={labels}
+                      detailHref={detailHref}
                       expensesCount={expenses.length}
                       paymentsCount={payments.length}
                       showExpenses={showExpenseColumn}
@@ -603,6 +605,7 @@ function PropertyTable({
 
 function RowMenu({
   labels,
+  detailHref,
   expensesCount,
   paymentsCount,
   showExpenses,
@@ -613,6 +616,7 @@ function RowMenu({
   onDelete,
 }: {
   labels: Labels;
+  detailHref: string;
   expensesCount: number;
   paymentsCount: number;
   showExpenses: boolean;
@@ -656,6 +660,19 @@ function RowMenu({
       </button>
       {open && (
         <div className="absolute right-0 top-full z-20 mt-1 w-56 origin-top-right overflow-hidden rounded-xl border border-[var(--color-border)] bg-white py-1 shadow-lg shadow-black/10 ring-1 ring-black/5 animate-fade-in">
+          <Link
+            href={detailHref}
+            onClick={close}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--color-foreground)] transition-colors hover:bg-[var(--color-surface-2)]"
+          >
+            <span className="shrink-0 text-[var(--color-muted)]">
+              <ExternalLink className="h-4 w-4" />
+            </span>
+            <span className="flex-1">
+              {labels.showProperty ?? "Show property"}
+            </span>
+          </Link>
+          <div className="my-1 h-px bg-[var(--color-border)]" />
           {showExpenses && (
             <MenuItem
               icon={<Receipt className="h-4 w-4" />}
