@@ -270,8 +270,6 @@ export default async function SuperAdminDashboard({
         <CompanyRevenueTile
           locale={loc}
           revenue={totalAgency + totalCompanyExtraProfit}
-          agency={totalAgency}
-          extraProfit={totalCompanyExtraProfit}
           net={companyNet}
         />
         <UpcomingTile
@@ -293,36 +291,24 @@ export default async function SuperAdminDashboard({
         <KpiTile
           label="Company expenses"
           value={formatCurrency(totalCompanyExpenses, "AED", loc)}
-          hint={`${companyExpenseCount} entries`}
           accent="rose"
           icon={<Receipt className="h-4 w-4" />}
         />
         <KpiTile
           label="Active deposits"
           value={formatCurrency(totalActiveDeposits, "AED", loc)}
-          hint={
-            activeDepositsCount === 0
-              ? "none held"
-              : `${activeDepositsCount} held — pending refund`
-          }
           accent="sky"
           icon={<Wallet className="h-4 w-4" />}
         />
         <KpiTile
           label="Owners amount"
           value={formatCurrency(totalOwnerOutstanding, "AED", loc)}
-          hint={
-            distinctOwners === 0
-              ? "all settled"
-              : `outstanding for ${distinctOwners} owner${distinctOwners === 1 ? "" : "s"}`
-          }
           accent="indigo"
           icon={<Users className="h-4 w-4" />}
         />
         <KpiTile
           label="Reservations"
           value={`${allReservationsCount} / ${activeReservationsCount}`}
-          hint="all / active today"
           accent="amber"
           icon={<CalendarDays className="h-4 w-4" />}
         />
@@ -423,13 +409,11 @@ export default async function SuperAdminDashboard({
 function KpiTile({
   label,
   value,
-  hint,
   accent,
   icon,
 }: {
   label: string;
   value: string;
-  hint: string;
   accent: "emerald" | "rose" | "indigo" | "amber" | "sky";
   icon: React.ReactNode;
 }) {
@@ -441,69 +425,65 @@ function KpiTile({
     sky: "from-sky-500/15 to-sky-500/0 text-sky-700",
   };
   return (
-    <Card className="overflow-hidden">
-      <CardBody className={`bg-gradient-to-br ${accentMap[accent]}`}>
+    <Card className="h-full overflow-hidden">
+      <CardBody
+        className={`flex h-full flex-col bg-gradient-to-br ${accentMap[accent]}`}
+      >
         <div className="flex items-center justify-between">
           <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80">
             {label}
           </div>
           <div className="opacity-80">{icon}</div>
         </div>
-        <div className="mt-1.5 text-xl font-bold tabular-nums text-[var(--color-foreground)]">
+        <div className="mt-auto pt-3 text-2xl font-bold tabular-nums text-[var(--color-foreground)]">
           {value}
         </div>
-        <div className="mt-0.5 text-[11px] text-[var(--color-muted)]">{hint}</div>
       </CardBody>
     </Card>
   );
 }
 
-// Revenue + net profit in one tile. Expenses keep their own card so the
-// dashboard still shows a true 6-card grid.
+// Revenue + net profit in one tile, no descriptions — same height shell as
+// every other card so the 6-card grid stays uniform.
 function CompanyRevenueTile({
   locale,
   revenue,
-  agency,
-  extraProfit,
   net,
 }: {
   locale: Locale;
   revenue: number;
-  agency: number;
-  extraProfit: number;
   net: number;
 }) {
   return (
-    <Card className="overflow-hidden">
-      <CardBody className="bg-gradient-to-br from-emerald-500/15 to-emerald-500/0 text-emerald-700">
+    <Card className="h-full overflow-hidden">
+      <CardBody className="flex h-full flex-col bg-gradient-to-br from-emerald-500/15 to-emerald-500/0 text-emerald-700">
         <div className="flex items-center justify-between">
           <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80">
-            Company revenue
+            Revenue / Profit
           </div>
           <div className="opacity-80">
             <TrendingUp className="h-4 w-4" />
           </div>
         </div>
-        <div className="mt-1.5 text-xl font-bold tabular-nums text-[var(--color-foreground)]">
-          {formatCurrency(revenue, "AED", locale)}
-        </div>
-        <div className="mt-0.5 text-[11px] text-[var(--color-muted)]">
-          {extraProfit > 0
-            ? `agency ${formatCurrency(agency, "AED", locale)} + profit ${formatCurrency(extraProfit, "AED", locale)}`
-            : "agency commission"}
-        </div>
-        <div className="mt-3 flex items-center justify-between gap-3 border-t border-black/5 pt-2 text-xs">
-          <div className="flex items-center gap-1.5">
-            <Wallet className="h-3 w-3 text-[var(--color-muted)]" />
-            <span className="font-medium text-[var(--color-foreground)]">
-              Net profit
-            </span>
+        <div className="mt-auto grid grid-cols-2 gap-3 pt-3">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
+              Revenue
+            </div>
+            <div className="text-xl font-bold tabular-nums text-[var(--color-foreground)]">
+              {formatCurrency(revenue, "AED", locale)}
+            </div>
           </div>
-          <span
-            className={`tabular-nums font-bold ${net >= 0 ? "text-emerald-700" : "text-rose-600"}`}
-          >
-            {formatCurrency(net, "AED", locale)}
-          </span>
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
+              Profit
+            </div>
+            <div
+              className={`text-xl font-bold tabular-nums ${net >= 0 ? "text-emerald-700" : "text-rose-600"}`}
+            >
+              {formatCurrency(net, "AED", locale)}
+            </div>
+          </div>
         </div>
       </CardBody>
     </Card>

@@ -38,10 +38,10 @@ export function UpcomingTile({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-left transition-transform hover:-translate-y-0.5"
+        className="block h-full text-left transition-transform hover:-translate-y-0.5"
       >
-        <Card className="overflow-hidden ring-1 ring-transparent transition-shadow hover:ring-sky-300/60 hover:shadow-lg hover:shadow-sky-500/10">
-          <CardBody className="bg-gradient-to-br from-sky-500/15 to-sky-500/0 text-sky-700">
+        <Card className="h-full overflow-hidden ring-1 ring-transparent transition-shadow hover:ring-sky-300/60 hover:shadow-lg hover:shadow-sky-500/10">
+          <CardBody className="flex h-full flex-col bg-gradient-to-br from-sky-500/15 to-sky-500/0 text-sky-700">
             <div className="flex items-center justify-between">
               <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80">
                 Upcoming amount
@@ -50,11 +50,8 @@ export function UpcomingTile({
                 <Clock className="h-4 w-4" />
               </div>
             </div>
-            <div className="mt-1.5 text-xl font-bold tabular-nums text-[var(--color-foreground)]">
+            <div className="mt-auto pt-3 text-2xl font-bold tabular-nums text-[var(--color-foreground)]">
               {formatCurrency(totalAmount, "AED", locale)}
-            </div>
-            <div className="mt-0.5 text-[11px] text-[var(--color-muted)]">
-              {totalBookings} pipeline · click for details
             </div>
           </CardBody>
         </Card>
