@@ -10,8 +10,6 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import {
-  CheckCircle2,
-  AlertCircle,
   Clock,
   Trash2,
   Phone,
@@ -281,20 +279,10 @@ export function ReservationsView({
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        {r.upcoming ? (
+                        {r.upcoming && (
                           <Badge tone="info">
                             <Clock className="h-3 w-3" />
                             {labels.upcoming ?? "Upcoming"}
-                          </Badge>
-                        ) : r.detailsFilled ? (
-                          <Badge tone="success">
-                            <CheckCircle2 className="h-3 w-3" />
-                            {labels.complete}
-                          </Badge>
-                        ) : (
-                          <Badge tone="warning">
-                            <AlertCircle className="h-3 w-3" />
-                            {labels.incomplete}
                           </Badge>
                         )}
                         {(() => {

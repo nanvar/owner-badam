@@ -384,13 +384,10 @@ export default async function SuperAdminDashboard({
               <tfoot className="bg-[var(--color-surface-2)]/60">
                 <tr className="border-t border-[var(--color-border)]">
                   <td
-                    colSpan={2}
+                    colSpan={3}
                     className="px-4 py-4 text-sm font-bold uppercase tracking-wider"
                   >
                     Total
-                  </td>
-                  <td className="px-4 py-4 text-right tabular-nums text-base font-bold">
-                    {debtTable.reduce((s, p) => s + p.bookings, 0)}
                   </td>
                   <td className="px-4 py-4 text-right tabular-nums text-base font-bold text-amber-700">
                     {formatCurrency(totalOwnerOutstanding, "AED", loc)}
