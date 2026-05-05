@@ -306,11 +306,15 @@ export default async function SuperAdminDashboard({
           accent="indigo"
           icon={<Users className="h-4 w-4" />}
         />
-        <KpiTile
+        <DualValueTile
           label="Reservations"
-          value={`${allReservationsCount} / ${activeReservationsCount}`}
-          accent="amber"
           icon={<CalendarDays className="h-4 w-4" />}
+          accent="amber"
+          left={{ label: "All", value: String(allReservationsCount) }}
+          right={{
+            label: "Active",
+            value: String(activeReservationsCount),
+          }}
         />
       </div>
 
@@ -440,8 +444,8 @@ function KpiTile({
   );
 }
 
-// Revenue + net profit in one tile, no descriptions — same height shell as
-// every other card so the 6-card grid stays uniform.
+// Revenue + net profit in one tile — labelled halves split by a vertical
+// divider so each amount is clearly identifiable.
 function CompanyRevenueTile({
   locale,
   revenue,
@@ -452,33 +456,80 @@ function CompanyRevenueTile({
   net: number;
 }) {
   return (
+    <DualValueTile
+      label="Revenue / Profit"
+      icon={<TrendingUp className="h-4 w-4" />}
+      accent="emerald"
+      left={{ label: "Revenue", value: formatCurrency(revenue, "AED", locale) }}
+      right={{
+        label: "Profit",
+        value: formatCurrency(net, "AED", locale),
+        tone: net >= 0 ? "emerald" : "rose",
+      }}
+    />
+  );
+}
+
+// Shared tile shape for any card that shows two labelled values side by side.
+// A vertical divider separates the halves so the eye doesn't mash them
+// together. Same height shell as KpiTile keeps the 6-card grid uniform.
+function DualValueTile({
+  label,
+  icon,
+  accent,
+  left,
+  right,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  accent: "emerald" | "rose" | "indigo" | "amber" | "sky";
+  left: { label: string; value: string; tone?: "emerald" | "rose" };
+  right: { label: string; value: string; tone?: "emerald" | "rose" };
+}) {
+  const accentMap: Record<typeof accent, string> = {
+    emerald: "from-emerald-500/15 to-emerald-500/0 text-emerald-700",
+    rose: "from-rose-500/15 to-rose-500/0 text-rose-600",
+    indigo: "from-indigo-500/15 to-indigo-500/0 text-indigo-700",
+    amber: "from-amber-500/15 to-amber-500/0 text-amber-700",
+    sky: "from-sky-500/15 to-sky-500/0 text-sky-700",
+  };
+  const toneClass = (tone?: "emerald" | "rose") =>
+    tone === "emerald"
+      ? "text-emerald-700"
+      : tone === "rose"
+        ? "text-rose-600"
+        : "text-[var(--color-foreground)]";
+  return (
     <Card className="h-full overflow-hidden">
-      <CardBody className="flex h-full flex-col bg-gradient-to-br from-emerald-500/15 to-emerald-500/0 text-emerald-700">
+      <CardBody
+        className={`flex h-full flex-col bg-gradient-to-br ${accentMap[accent]}`}
+      >
         <div className="flex items-center justify-between">
           <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80">
-            Revenue / Profit
+            {label}
           </div>
-          <div className="opacity-80">
-            <TrendingUp className="h-4 w-4" />
-          </div>
+          <div className="opacity-80">{icon}</div>
         </div>
-        <div className="mt-auto grid grid-cols-2 gap-3 pt-3">
+        <div className="mt-auto grid grid-cols-[1fr_1px_1fr] items-end gap-3 pt-3">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
-              Revenue
-            </div>
-            <div className="text-xl font-bold tabular-nums text-[var(--color-foreground)]">
-              {formatCurrency(revenue, "AED", locale)}
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
-              Profit
+              {left.label}
             </div>
             <div
-              className={`text-xl font-bold tabular-nums ${net >= 0 ? "text-emerald-700" : "text-rose-600"}`}
+              className={`text-2xl font-bold tabular-nums ${toneClass(left.tone)}`}
             >
-              {formatCurrency(net, "AED", locale)}
+              {left.value}
+            </div>
+          </div>
+          <span className="h-10 w-px self-center bg-current opacity-15" />
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
+              {right.label}
+            </div>
+            <div
+              className={`text-2xl font-bold tabular-nums ${toneClass(right.tone)}`}
+            >
+              {right.value}
             </div>
           </div>
         </div>
