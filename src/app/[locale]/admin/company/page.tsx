@@ -15,7 +15,6 @@ import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
 import { formatCurrency } from "@/lib/utils";
 import { UpcomingTile } from "./upcoming-tile";
-import { ReportingFilter } from "./reporting-filter";
 
 type PropertyAgg = {
   id: string;
@@ -41,14 +40,8 @@ type PropertyAgg = {
 
 export default async function SuperAdminDashboard({
   params,
-  searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{
-    ownerId?: string;
-    from?: string;
-    to?: string;
-  }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
@@ -56,38 +49,6 @@ export default async function SuperAdminDashboard({
   await requireRole("SUPERADMIN");
 
   const loc = locale as Locale;
-  const sp = await searchParams;
-  const filterOwnerId = sp.ownerId || "";
-  const fromStr = sp.from || "";
-  const toStr = sp.to || "";
-  const fromDate = fromStr ? new Date(fromStr) : null;
-  const toDate = toStr ? new Date(toStr) : null;
-  // Inclusive end-of-day for the upper bound so a date like "2026-05-05"
-  // captures everything that happened that day.
-  const toEndOfDay =
-    toDate && !Number.isNaN(toDate.getTime())
-      ? new Date(toDate.getTime() + 24 * 60 * 60 * 1000 - 1)
-      : null;
-  const reservationDateFilter =
-    fromDate && toEndOfDay
-      ? { checkIn: { gte: fromDate, lte: toEndOfDay } }
-      : fromDate
-        ? { checkIn: { gte: fromDate } }
-        : toEndOfDay
-          ? { checkIn: { lte: toEndOfDay } }
-          : {};
-  const dateFilter =
-    fromDate && toEndOfDay
-      ? { date: { gte: fromDate, lte: toEndOfDay } }
-      : fromDate
-        ? { date: { gte: fromDate } }
-        : toEndOfDay
-          ? { date: { lte: toEndOfDay } }
-          : {};
-  const propertyOwnerFilter = filterOwnerId
-    ? { property: { ownerId: filterOwnerId } }
-    : {};
-  const propertyOwnerIdFilter = filterOwnerId ? { ownerId: filterOwnerId } : {};
 
   // === Aggregations ===
   // Per-property: realized + upcoming reservation sums, property expenses,
@@ -100,11 +61,10 @@ export default async function SuperAdminDashboard({
     paymentAggs,
     companyProfitAggs,
     properties,
-    ownersList,
   ] = await Promise.all([
     prisma.reservation.groupBy({
       by: ["propertyId"],
-      where: { upcoming: false, ...reservationDateFilter, ...propertyOwnerFilter },
+      where: { upcoming: false },
       _count: { _all: true },
       _sum: {
         totalPrice: true,
@@ -115,7 +75,7 @@ export default async function SuperAdminDashboard({
     }),
     prisma.reservation.groupBy({
       by: ["propertyId"],
-      where: { upcoming: true, ...reservationDateFilter, ...propertyOwnerFilter },
+      where: { upcoming: true },
       _count: { _all: true },
       _sum: {
         totalPrice: true,
@@ -126,30 +86,19 @@ export default async function SuperAdminDashboard({
     }),
     prisma.expense.groupBy({
       by: ["propertyId"],
-      where: { ...dateFilter, ...propertyOwnerFilter },
       _sum: { amount: true },
     }),
     prisma.ownerPayment.groupBy({
       by: ["propertyId"],
-      where: {
-        ...dateFilter,
-        ...(filterOwnerId ? { ownerId: filterOwnerId } : {}),
-      },
       _sum: { amount: true },
     }),
     prisma.companyExpense.groupBy({
       by: ["propertyId"],
-      where: { kind: "PROFIT", ...dateFilter, ...propertyOwnerFilter },
+      where: { kind: "PROFIT" },
       _sum: { amount: true },
     }),
     prisma.property.findMany({
-      where: propertyOwnerIdFilter,
       include: { owner: { select: { id: true, name: true, email: true } } },
-    }),
-    prisma.user.findMany({
-      where: { role: "OWNER" },
-      select: { id: true, name: true, email: true },
-      orderBy: [{ name: "asc" }, { email: "asc" }],
     }),
   ]);
 
@@ -171,11 +120,7 @@ export default async function SuperAdminDashboard({
   // owner so we can pro-rate them across that owner's properties below.
   const crossOwnerPayments = await prisma.ownerPayment.groupBy({
     by: ["ownerId"],
-    where: {
-      propertyId: null,
-      ...dateFilter,
-      ...(filterOwnerId ? { ownerId: filterOwnerId } : {}),
-    },
+    where: { propertyId: null },
     _sum: { amount: true },
   });
   const crossPaymentsByOwner = new Map(
@@ -239,7 +184,6 @@ export default async function SuperAdminDashboard({
   // and feeds the company net-profit KPI.
   const companyEntryAggs = await prisma.companyExpense.groupBy({
     by: ["kind"],
-    where: { ...dateFilter, ...propertyOwnerFilter },
     _sum: { amount: true },
     _count: { _all: true },
   });
@@ -290,21 +234,16 @@ export default async function SuperAdminDashboard({
     (s, p) => s + p.upcomingBookings,
     0,
   );
-  // Owners amount tile = sum of per-property outstanding debt (which already
-  // accounts for property expenses and any owner-payments made).
-  const totalOwnerOutstanding = reportingTable.reduce(
+  // Outstanding-only view: drop properties whose ownerDebt is zero so the
+  // table only ever lists what the company actually still owes.
+  const debtTable = reportingTable
+    .filter((p) => p.ownerDebt > 0.005)
+    .sort((a, b) => b.ownerDebt - a.ownerDebt);
+  const totalOwnerOutstanding = debtTable.reduce(
     (s, p) => s + p.ownerDebt,
     0,
   );
-  const distinctOwners = new Set(
-    reportingTable.filter((p) => p.ownerDebt > 0.005).map((p) => p.ownerId),
-  ).size;
-  const totalPropertyExpenses = propertyTable.reduce(
-    (s, p) => s + p.propertyExpenses,
-    0,
-  );
-  const filterActive = !!(filterOwnerId || fromStr || toStr);
-  const basePath = `/${loc}/admin/company`;
+  const distinctOwners = new Set(debtTable.map((p) => p.ownerId)).size;
   // Profit and revenue tiles use realized only. Upcoming is split out
   // into its own tile (clickable for the per-property breakdown).
   const companyNet =
@@ -377,27 +316,12 @@ export default async function SuperAdminDashboard({
         />
       </div>
 
-      {/* Reporting */}
-      <h2 className="mt-8 mb-3 flex items-center gap-2 text-base font-bold tracking-tight">
-        Reporting
-        {filterActive && (
-          <span className="rounded-full bg-[var(--color-brand-soft)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--color-brand)]">
-            filtered
-          </span>
-        )}
+      {/* Outstanding owner debts — only properties where the company still
+          owes the owner money. If a property is settled it falls off the
+          list, so what's on screen is exactly the open balance. */}
+      <h2 className="mt-8 mb-3 text-base font-bold tracking-tight">
+        Outstanding to owners
       </h2>
-
-      <ReportingFilter
-        owners={ownersList.map((o) => ({
-          id: o.id,
-          name: o.name ?? o.email,
-        }))}
-        ownerId={filterOwnerId}
-        from={fromStr}
-        to={toStr}
-        basePath={basePath}
-      />
-
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -406,37 +330,22 @@ export default async function SuperAdminDashboard({
                 <th className="px-4 py-3 text-left font-semibold">Property</th>
                 <th className="px-4 py-3 text-left font-semibold">Owner</th>
                 <th className="px-4 py-3 text-right font-semibold">
-                  Owner revenue
-                </th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Expenses
-                </th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Owner profit
-                </th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Company revenue
-                </th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Company profit
-                </th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Owner debt
+                  Owner balance
                 </th>
               </tr>
             </thead>
             <tbody>
-              {reportingTable.length === 0 ? (
+              {debtTable.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={3}
                     className="px-4 py-12 text-center text-sm text-[var(--color-muted)]"
                   >
-                    No activity in this period.
+                    All settled — no outstanding balances.
                   </td>
                 </tr>
               ) : (
-                reportingTable.map((p) => (
+                debtTable.map((p) => (
                   <tr
                     key={p.id}
                     className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
@@ -448,11 +357,6 @@ export default async function SuperAdminDashboard({
                           style={{ background: p.color }}
                         />
                         <span className="font-semibold">{p.name}</span>
-                        {p.bookings > 0 && (
-                          <span className="rounded-full bg-[var(--color-surface-2)] px-1.5 text-[10px] font-bold text-[var(--color-muted)]">
-                            {p.bookings}
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -463,69 +367,21 @@ export default async function SuperAdminDashboard({
                         {p.ownerName}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {formatCurrency(p.ownerPayout, "AED", loc)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-rose-600">
-                      {p.propertyExpenses > 0
-                        ? `− ${formatCurrency(p.propertyExpenses, "AED", loc)}`
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold">
-                      {formatCurrency(p.ownerNet, "AED", loc)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
-                      {formatCurrency(p.agencyEarnings, "AED", loc)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
-                      {p.companyExtraProfit > 0
-                        ? formatCurrency(p.companyExtraProfit, "AED", loc)
-                        : "—"}
-                    </td>
-                    <td
-                      className={
-                        "px-4 py-3 text-right tabular-nums font-bold " +
-                        (p.ownerDebt > 0.005
-                          ? "text-amber-700"
-                          : "text-emerald-700")
-                      }
-                    >
-                      {p.ownerDebt > 0.005
-                        ? formatCurrency(p.ownerDebt, "AED", loc)
-                        : "✓"}
+                    <td className="px-4 py-3 text-right tabular-nums font-bold text-amber-700">
+                      {formatCurrency(p.ownerDebt, "AED", loc)}
                     </td>
                   </tr>
                 ))
               )}
             </tbody>
-            {reportingTable.length > 0 && (
+            {debtTable.length > 0 && (
               <tfoot className="bg-[var(--color-surface-2)]/60 text-sm">
                 <tr className="border-t border-[var(--color-border)]">
-                  <td colSpan={2} className="px-4 py-3 font-bold uppercase tracking-wider text-[10px] text-[var(--color-muted)]">
+                  <td
+                    colSpan={2}
+                    className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]"
+                  >
                     Total
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-bold">
-                    {formatCurrency(
-                      reportingTable.reduce((s, p) => s + p.ownerPayout, 0),
-                      "AED",
-                      loc,
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-bold text-rose-600">
-                    {formatCurrency(totalPropertyExpenses, "AED", loc)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-bold">
-                    {formatCurrency(
-                      reportingTable.reduce((s, p) => s + p.ownerNet, 0),
-                      "AED",
-                      loc,
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-bold text-emerald-700">
-                    {formatCurrency(totalAgency, "AED", loc)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-bold text-emerald-700">
-                    {formatCurrency(totalCompanyExtraProfit, "AED", loc)}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums font-bold text-amber-700">
                     {formatCurrency(totalOwnerOutstanding, "AED", loc)}
