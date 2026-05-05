@@ -94,6 +94,7 @@ model Property {
   advances       Advance[]
   directBookings DirectBooking[]
   ownerPayments  OwnerPayment[]
+  companyEntries CompanyExpense[]
   ownerReports   OwnerReport[]
 
   @@index([ownerId])
@@ -221,16 +222,32 @@ model DirectBooking {
   @@index([status])
 }
 
+enum CompanyTransactionKind {
+  EXPENSE
+  PROFIT
+}
+
+// CompanyExpense holds both expense and (per-property) profit entries — the
+// `kind` discriminator picks between them. PROFIT entries reference a
+// property; EXPENSE entries use a category. The two share a date+amount
+// shape so the dashboard can net them in one query.
 model CompanyExpense {
-  id          String                 @id @default(cuid())
+  id          String                  @id @default(cuid())
+  kind        CompanyTransactionKind  @default(EXPENSE)
+  // EXPENSE only — null for PROFIT entries
+  category    CompanyExpenseCategory?
+  // PROFIT only — null for EXPENSE entries
+  propertyId  String?
+  property    Property?               @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   date        DateTime
-  category    CompanyExpenseCategory
-  description String                 @db.Text
+  description String                  @db.Text
   amount      Float
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
 
   @@index([date])
+  @@index([kind])
+  @@index([propertyId])
 }
 
 // A curated bundle of one property's reservations + expenses, prepared by

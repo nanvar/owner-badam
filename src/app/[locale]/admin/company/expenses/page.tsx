@@ -3,9 +3,9 @@ import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { CompanyExpensesView } from "./company-expenses-view";
+import { CompanyFinancesView } from "./company-expenses-view";
 
-export default async function SuperAdminExpensesPage({
+export default async function SuperAdminFinancesPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
@@ -15,23 +15,35 @@ export default async function SuperAdminExpensesPage({
   setRequestLocale(locale);
   await requireRole("SUPERADMIN");
 
-  const expenses = await prisma.companyExpense.findMany({
-    orderBy: { date: "desc" },
-    take: 500,
-  });
-  const total = expenses.reduce((s, e) => s + e.amount, 0);
+  const [entries, properties] = await Promise.all([
+    prisma.companyExpense.findMany({
+      include: {
+        property: { select: { id: true, name: true, color: true } },
+      },
+      orderBy: { date: "desc" },
+      take: 500,
+    }),
+    prisma.property.findMany({
+      select: { id: true, name: true, color: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   return (
-    <CompanyExpensesView
+    <CompanyFinancesView
       locale={locale as Locale}
-      expenses={expenses.map((e) => ({
+      properties={properties}
+      entries={entries.map((e) => ({
         id: e.id,
+        kind: e.kind,
         date: e.date.toISOString(),
         category: e.category,
+        propertyId: e.propertyId,
+        propertyName: e.property?.name ?? null,
+        propertyColor: e.property?.color ?? null,
         description: e.description,
         amount: e.amount,
       }))}
-      total={total}
     />
   );
 }

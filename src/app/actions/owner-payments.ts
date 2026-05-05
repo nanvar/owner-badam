@@ -45,18 +45,26 @@ export async function createOwnerPaymentAction(
   if (Number.isNaN(date.getTime())) {
     return { status: "error", message: "Invalid date" };
   }
-  await prisma.ownerPayment.create({
-    data: {
-      ownerId: v.ownerId,
-      propertyId: v.propertyId || null,
-      date,
-      amount: v.amount,
-      method: v.method || null,
-      reference: v.reference || null,
-      notes: v.notes || null,
-      recordedById: session.userId,
-    },
-  });
+  try {
+    await prisma.ownerPayment.create({
+      data: {
+        ownerId: v.ownerId,
+        propertyId: v.propertyId || null,
+        date,
+        amount: v.amount,
+        method: v.method || null,
+        reference: v.reference || null,
+        notes: v.notes || null,
+        recordedById: session.userId,
+      },
+    });
+  } catch (err) {
+    console.error("[owner-payment] create failed:", err);
+    return {
+      status: "error",
+      message: (err as Error).message ?? "Failed to record payment",
+    };
+  }
   // Best-effort push — fire-and-forget so a notification outage never
   // blocks the bookkeeping action.
   pushToOwner(v.ownerId, {

@@ -42,7 +42,7 @@ export default async function AdminLayout({
           },
           {
             href: `/${locale}/admin/company/expenses`,
-            label: "Company expenses",
+            label: "Company finances",
             icon: <Receipt className="h-4 w-4" />,
           },
         ]

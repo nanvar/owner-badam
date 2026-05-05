@@ -167,6 +167,7 @@
     "passwordHint": "Leave empty to keep the current password",
     "deleteOwnerConfirm": "Delete this owner? Their properties and reservations will also be removed.",
     "recordPayment": "Record payment",
+    "payments": "Payments",
     "paid": "Paid",
     "totalPaid": "Total paid",
     "noPayments": "No payments recorded yet.",

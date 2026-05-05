@@ -39,7 +39,7 @@ export async function upsertExpenseAction(
     propertyId: formData.get("propertyId"),
     date: formData.get("date"),
     type: formData.get("type"),
-    description: formData.get("description"),
+    description: (formData.get("description") as string | null) ?? "",
     amount: formData.get("amount") || 0,
   });
   if (!parsed.success) {

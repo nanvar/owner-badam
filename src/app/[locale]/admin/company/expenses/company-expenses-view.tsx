@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Edit3, Trash2 } from "lucide-react";
+import { Plus, Edit3, Trash2, Receipt, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Field, Textarea } from "@/components/ui/input";
@@ -22,60 +22,104 @@ import {
 } from "@/lib/company-expense-types";
 import type { Locale } from "@/i18n/config";
 
-type Expense = {
+export type Kind = "EXPENSE" | "PROFIT";
+
+export type Entry = {
   id: string;
+  kind: Kind;
   date: string;
-  category: CompanyExpenseCategoryKey;
+  category: CompanyExpenseCategoryKey | null;
+  propertyId: string | null;
+  propertyName: string | null;
+  propertyColor: string | null;
   description: string;
   amount: number;
 };
 
-export function CompanyExpensesView({
+type PropertyOption = { id: string; name: string; color: string };
+
+export function CompanyFinancesView({
   locale,
-  expenses,
-  total,
+  entries,
+  properties,
 }: {
   locale: Locale;
-  expenses: Expense[];
-  total: number;
+  entries: Entry[];
+  properties: PropertyOption[];
 }) {
-  const [editing, setEditing] = useState<Expense | null | undefined>(undefined);
+  const [tab, setTab] = useState<Kind>("EXPENSE");
+  // Separate editor state per kind so opening a profit modal can never inherit
+  // an expense's data and vice versa.
+  const [editingExpense, setEditingExpense] = useState<Entry | null | undefined>(
+    undefined,
+  );
+  const [editingProfit, setEditingProfit] = useState<Entry | null | undefined>(
+    undefined,
+  );
   const [deletePending, startDelete] = useTransition();
   const router = useRouter();
 
+  const expenses = entries.filter((e) => e.kind === "EXPENSE");
+  const profits = entries.filter((e) => e.kind === "PROFIT");
+  const visible = tab === "EXPENSE" ? expenses : profits;
+
   return (
     <div>
-      <PageHeader
-        title="Company expenses"
-        subtitle={
-          <span className="text-sm text-[var(--color-muted)]">
-            Costs the company itself bears (salaries, rent, software). Separate
-            from per-property owner expenses.
-          </span>
-        }
-        right={
-          <Button onClick={() => setEditing(null)}>
-            <Plus className="h-4 w-4" />
-            Add expense
-          </Button>
-        }
-      />
+      <PageHeader title="Company finances" />
 
-      <div
-        className="mb-5 flex items-center justify-between rounded-2xl border border-rose-500/20 bg-rose-500/5 px-5 py-4"
-      >
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-          Total · {expenses.length} entries
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="flex rounded-xl border border-[var(--color-border)] bg-white p-1">
+          {(["EXPENSE", "PROFIT"] as const).map((k) => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                tab === k
+                  ? k === "EXPENSE"
+                    ? "bg-rose-500 text-white"
+                    : "bg-emerald-600 text-white"
+                  : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]",
+              )}
+            >
+              {k === "EXPENSE" ? (
+                <Receipt className="h-3.5 w-3.5" />
+              ) : (
+                <TrendingUp className="h-3.5 w-3.5" />
+              )}
+              {k === "EXPENSE" ? "Expenses" : "Profit"}
+              <span
+                className={cn(
+                  "rounded-full px-1.5 text-[10px] font-bold",
+                  tab === k
+                    ? "bg-white/25 text-white"
+                    : "bg-[var(--color-surface-2)] text-[var(--color-muted)]",
+                )}
+              >
+                {k === "EXPENSE" ? expenses.length : profits.length}
+              </span>
+            </button>
+          ))}
         </div>
-        <div className="text-2xl font-bold tabular-nums text-rose-600">
-          {formatCurrency(total, "AED", locale)}
-        </div>
+        <Button
+          className="ml-auto"
+          onClick={() =>
+            tab === "EXPENSE"
+              ? setEditingExpense(null)
+              : setEditingProfit(null)
+          }
+        >
+          <Plus className="h-4 w-4" />
+          {tab === "EXPENSE" ? "Add expense" : "Add profit"}
+        </Button>
       </div>
 
-      {expenses.length === 0 ? (
+      {visible.length === 0 ? (
         <Card className="grid place-items-center px-6 py-16 text-center">
           <p className="text-sm text-[var(--color-muted)]">
-            No company expenses recorded yet.
+            {tab === "EXPENSE"
+              ? "No expenses recorded yet."
+              : "No profit recorded yet."}
           </p>
         </Card>
       ) : (
@@ -85,14 +129,18 @@ export function CompanyExpensesView({
               <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
                 <tr>
                   <th className="px-4 py-3 text-left font-semibold">Date</th>
-                  <th className="px-4 py-3 text-left font-semibold">Category</th>
-                  <th className="px-4 py-3 text-left font-semibold">Description</th>
+                  <th className="px-4 py-3 text-left font-semibold">
+                    {tab === "EXPENSE" ? "Category" : "Property"}
+                  </th>
+                  <th className="px-4 py-3 text-left font-semibold">
+                    Description
+                  </th>
                   <th className="px-4 py-3 text-right font-semibold">Amount</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody>
-                {expenses.map((e) => (
+                {visible.map((e) => (
                   <tr
                     key={e.id}
                     className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
@@ -101,25 +149,51 @@ export function CompanyExpensesView({
                       {formatDate(e.date, locale)}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          "inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                          COMPANY_EXPENSE_CATEGORY_TONE[e.category],
-                        )}
-                      >
-                        {COMPANY_EXPENSE_CATEGORY_LABELS[e.category]}
-                      </span>
+                      {e.kind === "EXPENSE" && e.category ? (
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                            COMPANY_EXPENSE_CATEGORY_TONE[e.category],
+                          )}
+                        >
+                          {COMPANY_EXPENSE_CATEGORY_LABELS[e.category]}
+                        </span>
+                      ) : e.propertyName ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span
+                            className="h-5 w-1 shrink-0 rounded-full"
+                            style={{
+                              background: e.propertyColor ?? "#94a3b8",
+                            }}
+                          />
+                          <span className="font-medium">{e.propertyName}</span>
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-4 py-3 max-w-[360px] truncate">
                       {e.description}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-rose-600">
-                      − {formatCurrency(e.amount, "AED", locale)}
+                    <td
+                      className={cn(
+                        "px-4 py-3 text-right tabular-nums font-semibold",
+                        e.kind === "EXPENSE"
+                          ? "text-rose-600"
+                          : "text-emerald-700",
+                      )}
+                    >
+                      {e.kind === "EXPENSE" ? "− " : "+ "}
+                      {formatCurrency(e.amount, "AED", locale)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <button
-                          onClick={() => setEditing(e)}
+                          onClick={() =>
+                            e.kind === "EXPENSE"
+                              ? setEditingExpense(e)
+                              : setEditingProfit(e)
+                          }
                           aria-label="Edit"
                           className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]"
                         >
@@ -127,7 +201,7 @@ export function CompanyExpensesView({
                         </button>
                         <button
                           onClick={() => {
-                            if (confirm("Delete this expense?")) {
+                            if (confirm("Delete this entry?")) {
                               startDelete(async () => {
                                 await deleteCompanyExpenseAction(e.id);
                                 router.refresh();
@@ -152,11 +226,24 @@ export function CompanyExpensesView({
 
       <ExpenseEditor
         key={
-          editing === undefined ? "closed" : editing?.id ?? "new"
+          editingExpense === undefined
+            ? "exp-closed"
+            : editingExpense?.id ?? "exp-new"
         }
-        open={editing !== undefined}
-        expense={editing ?? null}
-        onClose={() => setEditing(undefined)}
+        open={editingExpense !== undefined}
+        entry={editingExpense ?? null}
+        onClose={() => setEditingExpense(undefined)}
+      />
+      <ProfitEditor
+        key={
+          editingProfit === undefined
+            ? "pro-closed"
+            : editingProfit?.id ?? "pro-new"
+        }
+        open={editingProfit !== undefined}
+        entry={editingProfit ?? null}
+        properties={properties}
+        onClose={() => setEditingProfit(undefined)}
       />
     </div>
   );
@@ -164,11 +251,122 @@ export function CompanyExpensesView({
 
 function ExpenseEditor({
   open,
-  expense,
+  entry,
   onClose,
 }: {
   open: boolean;
-  expense: Expense | null;
+  entry: Entry | null;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState<
+    CompanyExpenseState | undefined,
+    FormData
+  >(upsertCompanyExpenseAction, undefined);
+  const [category, setCategory] = useState<string>(entry?.category ?? "OTHER");
+
+  useEffect(() => {
+    if (state?.status === "ok" && open) {
+      router.refresh();
+      onClose();
+    }
+  }, [state, open, onClose, router]);
+
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={entry ? "Edit expense" : "Add company expense"}
+    >
+      <form action={action} className="space-y-4">
+        {entry && <input type="hidden" name="id" value={entry.id} />}
+        <input type="hidden" name="kind" value="EXPENSE" />
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Date" htmlFor="exp-date">
+            <Input
+              id="exp-date"
+              name="date"
+              type="date"
+              required
+              defaultValue={
+                entry?.date
+                  ? entry.date.slice(0, 10)
+                  : new Date().toISOString().slice(0, 10)
+              }
+            />
+          </Field>
+          <Field label="Amount (AED)" htmlFor="exp-amount">
+            <Input
+              id="exp-amount"
+              name="amount"
+              type="number"
+              step="0.01"
+              min="0.01"
+              required
+              defaultValue={entry?.amount || ""}
+            />
+          </Field>
+        </div>
+        <Field label="Category" htmlFor="exp-category">
+          <select
+            id="exp-category"
+            name="category"
+            required
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
+          >
+            {COMPANY_EXPENSE_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {COMPANY_EXPENSE_CATEGORY_LABELS[c]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field
+          label="Description"
+          htmlFor="exp-description"
+          hint={
+            category === "OTHER"
+              ? "Required — describe the expense"
+              : "Optional"
+          }
+        >
+          <Textarea
+            id="exp-description"
+            name="description"
+            required={category === "OTHER"}
+            defaultValue={entry?.description ?? ""}
+            placeholder="Office rent, March 2026"
+          />
+        </Field>
+        {state?.status === "error" && (
+          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
+            {state.message}
+          </div>
+        )}
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={pending}>
+            Save
+          </Button>
+        </div>
+      </form>
+    </Sheet>
+  );
+}
+
+function ProfitEditor({
+  open,
+  entry,
+  properties,
+  onClose,
+}: {
+  open: boolean;
+  entry: Entry | null;
+  properties: PropertyOption[];
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -188,58 +386,62 @@ function ExpenseEditor({
     <Sheet
       open={open}
       onClose={onClose}
-      title={expense ? "Edit company expense" : "Add company expense"}
+      title={entry ? "Edit profit" : "Add company profit"}
     >
       <form action={action} className="space-y-4">
-        {expense && <input type="hidden" name="id" value={expense.id} />}
+        {entry && <input type="hidden" name="id" value={entry.id} />}
+        <input type="hidden" name="kind" value="PROFIT" />
+        <Field label="Property" htmlFor="pro-property">
+          <select
+            id="pro-property"
+            name="propertyId"
+            required
+            defaultValue={entry?.propertyId ?? ""}
+            className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
+          >
+            <option value="" disabled>
+              Select a property…
+            </option>
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Date" htmlFor="date">
+          <Field label="Date" htmlFor="pro-date">
             <Input
-              id="date"
+              id="pro-date"
               name="date"
               type="date"
               required
               defaultValue={
-                expense?.date
-                  ? expense.date.slice(0, 10)
+                entry?.date
+                  ? entry.date.slice(0, 10)
                   : new Date().toISOString().slice(0, 10)
               }
             />
           </Field>
-          <Field label="Category" htmlFor="category">
-            <select
-              id="category"
-              name="category"
+          <Field label="Amount (AED)" htmlFor="pro-amount">
+            <Input
+              id="pro-amount"
+              name="amount"
+              type="number"
+              step="0.01"
+              min="0.01"
               required
-              defaultValue={expense?.category ?? "OTHER"}
-              className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
-            >
-              {COMPANY_EXPENSE_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {COMPANY_EXPENSE_CATEGORY_LABELS[c]}
-                </option>
-              ))}
-            </select>
+              defaultValue={entry?.amount || ""}
+            />
           </Field>
         </div>
-        <Field label="Amount (AED)" htmlFor="amount">
-          <Input
-            id="amount"
-            name="amount"
-            type="number"
-            step="0.01"
-            min="0.01"
-            required
-            defaultValue={expense?.amount || ""}
-          />
-        </Field>
-        <Field label="Description" htmlFor="description">
+        <Field label="Description" htmlFor="pro-description">
           <Textarea
-            id="description"
+            id="pro-description"
             name="description"
             required
-            defaultValue={expense?.description ?? ""}
-            placeholder="Office rent, March 2026"
+            defaultValue={entry?.description ?? ""}
+            placeholder="Late check-out fee, parking, etc."
           />
         </Field>
         {state?.status === "error" && (

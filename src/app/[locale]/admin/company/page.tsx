@@ -119,13 +119,19 @@ export default async function SuperAdminDashboard({
     .filter((x): x is PropertyAgg => !!x)
     .sort((a, b) => b.agencyEarnings - a.agencyEarnings);
 
-  // Company expense totals (all-time)
-  const companyExpenseAgg = await prisma.companyExpense.aggregate({
+  // Company expense + profit totals (all-time). Stored together in
+  // CompanyExpense with a `kind` discriminator. Net = profit − expenses
+  // and feeds the company net-profit KPI.
+  const companyEntryAggs = await prisma.companyExpense.groupBy({
+    by: ["kind"],
     _sum: { amount: true },
     _count: { _all: true },
   });
-  const totalCompanyExpenses = companyExpenseAgg._sum.amount ?? 0;
-  const companyExpenseCount = companyExpenseAgg._count._all;
+  const expenseRow = companyEntryAggs.find((r) => r.kind === "EXPENSE");
+  const profitRow = companyEntryAggs.find((r) => r.kind === "PROFIT");
+  const totalCompanyExpenses = expenseRow?._sum.amount ?? 0;
+  const companyExpenseCount = expenseRow?._count._all ?? 0;
+  const totalCompanyExtraProfit = profitRow?._sum.amount ?? 0;
 
   // Outstanding payout per owner = accrued (realized) − recorded payments.
   // Properties belonging to a fully-paid owner drop off the reporting list,
@@ -228,7 +234,8 @@ export default async function SuperAdminDashboard({
   const distinctOwners = new Set(reportingTable.map((p) => p.ownerId)).size;
   // Profit and revenue tiles use realized only. Upcoming is split out
   // into its own tile (clickable for the per-property breakdown).
-  const companyNet = totalAgency - totalCompanyExpenses;
+  const companyNet =
+    totalAgency + totalCompanyExtraProfit - totalCompanyExpenses;
 
   return (
     <div>
@@ -269,7 +276,11 @@ export default async function SuperAdminDashboard({
         <KpiTile
           label="Company profit"
           value={formatCurrency(companyNet, "AED", loc)}
-          hint="realized − expenses"
+          hint={
+            totalCompanyExtraProfit > 0
+              ? "agency + profit − expenses"
+              : "agency − expenses"
+          }
           accent={companyNet >= 0 ? "emerald" : "rose"}
           icon={<Wallet className="h-4 w-4" />}
         />

@@ -659,7 +659,7 @@ function RowMenu({
           {showExpenses && (
             <MenuItem
               icon={<Receipt className="h-4 w-4" />}
-              label={labels.showExpenses ?? "Show expenses"}
+              label={labels.expenses ?? "Expenses"}
               count={expensesCount}
               onClick={() => {
                 close();
@@ -670,7 +670,7 @@ function RowMenu({
           {showPayments && (
             <MenuItem
               icon={<Wallet className="h-4 w-4" />}
-              label={labels.recordPayment ?? "Record payment"}
+              label={labels.payments ?? "Payments"}
               count={paymentsCount}
               onClick={() => {
                 close();
