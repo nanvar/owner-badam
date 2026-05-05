@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Card } from "@/components/ui/card";
 import { loginAction, type LoginState } from "@/app/actions/auth";
 import type { Locale } from "@/i18n/config";
@@ -76,10 +77,9 @@ export function LoginForm({ locale, brand }: { locale: Locale; brand: Brand }) {
               />
             </Field>
             <Field label={t("login.password")} htmlFor="password">
-              <Input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 autoComplete="current-password"
                 required
                 placeholder="••••••••"

@@ -324,10 +324,14 @@ function ReservationEditor({
     reservation?.totalPrice ? String(reservation.totalPrice) : "",
   );
   const [agencyCommissionStr, setAgencyCommissionStr] = useState<string>(
-    String(reservation?.agencyCommission ?? 0),
+    reservation?.agencyCommission
+      ? String(reservation.agencyCommission)
+      : "",
   );
   const [portalCommissionStr, setPortalCommissionStr] = useState<string>(
-    String(reservation?.portalCommission ?? 0),
+    reservation?.portalCommission
+      ? String(reservation.portalCommission)
+      : "",
   );
   const totalPrice = parseFloat(totalPriceStr) || 0;
   const agencyCommission = parseFloat(agencyCommissionStr) || 0;
@@ -474,7 +478,7 @@ function ReservationEditor({
                 type="number"
                 step="0.01"
                 min="0"
-                required
+                placeholder="0"
                 value={agencyCommissionStr}
                 onChange={(e) => setAgencyCommissionStr(e.target.value)}
               />
@@ -489,7 +493,7 @@ function ReservationEditor({
                 type="number"
                 step="0.01"
                 min="0"
-                required
+                placeholder="0"
                 value={portalCommissionStr}
                 onChange={(e) => setPortalCommissionStr(e.target.value)}
               />
@@ -613,8 +617,8 @@ function CompanyReservationCreator({
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [totalPriceStr, setTotalPriceStr] = useState("");
-  const [agencyCommissionStr, setAgencyCommissionStr] = useState("0");
-  const [portalCommissionStr, setPortalCommissionStr] = useState("0");
+  const [agencyCommissionStr, setAgencyCommissionStr] = useState("");
+  const [portalCommissionStr, setPortalCommissionStr] = useState("");
   const totalPrice = parseFloat(totalPriceStr) || 0;
   const agencyCommission = parseFloat(agencyCommissionStr) || 0;
   const portalCommission = parseFloat(portalCommissionStr) || 0;

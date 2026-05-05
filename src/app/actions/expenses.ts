@@ -5,14 +5,24 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { EXPENSE_TYPES } from "@/lib/expense-types";
 
-const ExpenseSchema = z.object({
-  id: z.string().optional(),
-  propertyId: z.string().min(1),
-  date: z.string().min(1),
-  type: z.enum(EXPENSE_TYPES),
-  description: z.string().min(1).max(500),
-  amount: z.coerce.number().nonnegative(),
-});
+const ExpenseSchema = z
+  .object({
+    id: z.string().optional(),
+    propertyId: z.string().min(1),
+    date: z.string().min(1),
+    type: z.enum(EXPENSE_TYPES),
+    description: z.string().max(500).optional().or(z.literal("")),
+    amount: z.coerce.number().nonnegative(),
+  })
+  // Description is mandatory only for OTHERS — typed expenses (DEWA, GAS …)
+  // are self-explanatory.
+  .refine(
+    (v) => v.type !== "OTHERS" || (v.description && v.description.trim().length > 0),
+    {
+      message: "Description is required for Others",
+      path: ["description"],
+    },
+  );
 
 export type ExpenseState =
   | { status: "idle" }
@@ -44,7 +54,7 @@ export async function upsertExpenseAction(
         propertyId: v.propertyId,
         date,
         type: v.type,
-        description: v.description,
+        description: v.description ?? "",
         amount: v.amount,
       },
     });
@@ -54,7 +64,7 @@ export async function upsertExpenseAction(
         propertyId: v.propertyId,
         date,
         type: v.type,
-        description: v.description,
+        description: v.description ?? "",
         amount: v.amount,
       },
     });

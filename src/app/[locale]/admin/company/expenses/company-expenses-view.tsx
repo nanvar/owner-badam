@@ -151,7 +151,9 @@ export function CompanyExpensesView({
       )}
 
       <ExpenseEditor
-        key={editing?.id ?? "new"}
+        key={
+          editing === undefined ? "closed" : editing?.id ?? "new"
+        }
         open={editing !== undefined}
         expense={editing ?? null}
         onClose={() => setEditing(undefined)}

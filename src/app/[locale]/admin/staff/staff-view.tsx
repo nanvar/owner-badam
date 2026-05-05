@@ -6,6 +6,7 @@ import { Plus, User, Edit3, Trash2, Ban, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Field } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Sheet } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/app-shell";
@@ -258,10 +259,9 @@ function CreateSheet({
           />
         </Field>
         <Field label="Password" htmlFor="c-password" hint="Min 6 characters">
-          <Input
+          <PasswordInput
             id="c-password"
             name="password"
-            type="password"
             required
             minLength={6}
           />
@@ -338,10 +338,9 @@ function EditSheet({
             htmlFor="e-password"
             hint="Leave empty to keep current"
           >
-            <Input
+            <PasswordInput
               id="e-password"
               name="password"
-              type="password"
               minLength={6}
             />
           </Field>

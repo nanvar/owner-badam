@@ -15,6 +15,7 @@ import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Field } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Sheet } from "@/components/ui/sheet";
 import { PageHeader } from "@/components/app-shell";
 import {
@@ -217,7 +218,7 @@ export function OwnersView({
             <Input id="c-email" name="email" type="email" required placeholder="owner@example.com" />
           </Field>
           <Field label={labels.ownerPassword} htmlFor="c-password">
-            <Input id="c-password" name="password" type="password" required minLength={4} />
+            <PasswordInput id="c-password" name="password" required minLength={4} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={labels.ownerPhone} htmlFor="c-phone">
@@ -265,7 +266,7 @@ export function OwnersView({
               htmlFor="e-password"
               hint={labels.passwordHint ?? "Leave empty to keep current password"}
             >
-              <Input id="e-password" name="password" type="password" minLength={4} placeholder="••••••••" />
+              <PasswordInput id="e-password" name="password" minLength={4} placeholder="••••••••" />
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label={labels.ownerPhone} htmlFor="e-phone">

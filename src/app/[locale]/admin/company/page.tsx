@@ -1,5 +1,4 @@
 import { setRequestLocale } from "next-intl/server";
-import Link from "next/link";
 import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
 import {
@@ -13,7 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 import { UpcomingTile } from "./upcoming-tile";
 
 type PropertyAgg = {
@@ -180,6 +179,32 @@ export default async function SuperAdminDashboard({
     }),
   ]);
 
+  // Reservations for the Reporting table — split into "live" (currently
+  // ongoing) and "completed" (already checked out). Future / not-yet-started
+  // reservations don't appear here; they live on the dedicated Upcoming tile.
+  const liveReservations = await prisma.reservation.findMany({
+    where: {
+      upcoming: false,
+      checkIn: { lte: today },
+      checkOut: { gt: today },
+    },
+    include: {
+      property: { select: { id: true, name: true, color: true } },
+    },
+    orderBy: { checkOut: "asc" },
+  });
+  const completedReservations = await prisma.reservation.findMany({
+    where: {
+      upcoming: false,
+      checkOut: { lte: today },
+    },
+    include: {
+      property: { select: { id: true, name: true, color: true } },
+    },
+    orderBy: { checkOut: "desc" },
+    take: 50,
+  });
+
   // KPIs
   const totalAgency = propertyTable.reduce((s, p) => s + p.agencyEarnings, 0);
   const totalPortal = propertyTable.reduce((s, p) => s + p.portalCommissions, 0);
@@ -267,75 +292,130 @@ export default async function SuperAdminDashboard({
       </div>
 
       {/* Reporting */}
-      <h2 className="mt-8 mb-3 text-base font-bold tracking-tight">
+      <h2 className="mt-8 mb-3 flex items-center gap-2 text-base font-bold tracking-tight">
         Reporting
+        {liveReservations.length > 0 && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-600">
+            <span className="relative grid h-2 w-2 place-items-center">
+              <span className="absolute inset-0 animate-ping rounded-full bg-rose-500/60" />
+              <span className="relative h-2 w-2 rounded-full bg-rose-500" />
+            </span>
+            {liveReservations.length} live
+          </span>
+        )}
       </h2>
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
               <tr>
+                <th className="px-4 py-3 text-left font-semibold">Status</th>
                 <th className="px-4 py-3 text-left font-semibold">Property</th>
-                <th className="px-4 py-3 text-left font-semibold">Owner</th>
-                <th className="px-4 py-3 text-right font-semibold">Bookings</th>
-                <th className="px-4 py-3 text-right font-semibold">Revenue</th>
+                <th className="px-4 py-3 text-left font-semibold">Guest</th>
+                <th className="px-4 py-3 text-left font-semibold">Check-in</th>
+                <th className="px-4 py-3 text-left font-semibold">Check-out</th>
+                <th className="px-4 py-3 text-right font-semibold">Nights</th>
+                <th className="px-4 py-3 text-right font-semibold">Total</th>
                 <th className="px-4 py-3 text-right font-semibold">Company</th>
-                <th className="px-4 py-3 text-right font-semibold">Portal</th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Owner payout
-                </th>
               </tr>
             </thead>
             <tbody>
-              {reportingTable.length === 0 ? (
+              {liveReservations.length === 0 && completedReservations.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-12 text-center text-sm text-[var(--color-muted)]"
                   >
-                    All owners are settled — nothing outstanding.
+                    No reservations yet.
                   </td>
                 </tr>
               ) : (
-                reportingTable.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <span
-                          className="h-7 w-1 shrink-0 rounded-full"
-                          style={{ background: p.color }}
-                        />
-                        <span className="font-semibold">{p.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/${loc}/admin/owners/${p.ownerId}`}
-                        className="text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-brand)] hover:underline"
-                      >
-                        {p.ownerName}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {p.bookings}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {formatCurrency(p.totalRevenue, "AED", loc)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-bold tabular-nums text-emerald-600">
-                      {formatCurrency(p.agencyEarnings, "AED", loc)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-[var(--color-muted)]">
-                      {formatCurrency(p.portalCommissions, "AED", loc)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {formatCurrency(p.ownerPayoutOutstanding, "AED", loc)}
-                    </td>
-                  </tr>
-                ))
+                <>
+                  {liveReservations.map((r) => (
+                    <tr
+                      key={r.id}
+                      className="border-t border-[var(--color-border)] bg-rose-500/5 hover:bg-rose-500/10"
+                    >
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-600">
+                          <span className="relative grid h-2 w-2 place-items-center">
+                            <span className="absolute inset-0 animate-ping rounded-full bg-rose-500/60" />
+                            <span className="relative h-2 w-2 rounded-full bg-rose-500" />
+                          </span>
+                          Live
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-5 w-1 shrink-0 rounded-full"
+                            style={{ background: r.property.color }}
+                          />
+                          <span className="font-semibold">{r.property.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">{r.guestName ?? "—"}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {formatDate(r.checkIn.toISOString(), loc)}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {formatDate(r.checkOut.toISOString(), loc)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {r.nights}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {formatCurrency(r.totalPrice, "AED", loc)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold tabular-nums text-emerald-600">
+                        {formatCurrency(r.agencyCommission, "AED", loc)}
+                      </td>
+                    </tr>
+                  ))}
+                  {liveReservations.length > 0 &&
+                    completedReservations.length > 0 && (
+                      <tr>
+                        <td colSpan={8} className="h-8" />
+                      </tr>
+                    )}
+                  {completedReservations.map((r) => (
+                    <tr
+                      key={r.id}
+                      className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
+                    >
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                          Done
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-5 w-1 shrink-0 rounded-full"
+                            style={{ background: r.property.color }}
+                          />
+                          <span className="font-medium">{r.property.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">{r.guestName ?? "—"}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-[var(--color-muted)]">
+                        {formatDate(r.checkIn.toISOString(), loc)}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-[var(--color-muted)]">
+                        {formatDate(r.checkOut.toISOString(), loc)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {r.nights}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {formatCurrency(r.totalPrice, "AED", loc)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
+                        {formatCurrency(r.agencyCommission, "AED", loc)}
+                      </td>
+                    </tr>
+                  ))}
+                </>
               )}
             </tbody>
           </table>

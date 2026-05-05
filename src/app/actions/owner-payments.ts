@@ -7,6 +7,7 @@ import { pushToOwner } from "@/lib/push";
 
 const OwnerPaymentSchema = z.object({
   ownerId: z.string().min(1),
+  propertyId: z.string().optional().or(z.literal("")),
   date: z.string().min(1),
   amount: z.coerce.number().positive(),
   method: z.string().max(60).optional().or(z.literal("")),
@@ -26,6 +27,7 @@ export async function createOwnerPaymentAction(
   const session = await requireRole("ADMIN");
   const parsed = OwnerPaymentSchema.safeParse({
     ownerId: formData.get("ownerId"),
+    propertyId: formData.get("propertyId") || "",
     date: formData.get("date"),
     amount: formData.get("amount") || 0,
     method: formData.get("method") || "",
@@ -46,6 +48,7 @@ export async function createOwnerPaymentAction(
   await prisma.ownerPayment.create({
     data: {
       ownerId: v.ownerId,
+      propertyId: v.propertyId || null,
       date,
       amount: v.amount,
       method: v.method || null,

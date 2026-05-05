@@ -93,6 +93,7 @@ model Property {
   expenses       Expense[]
   advances       Advance[]
   directBookings DirectBooking[]
+  ownerPayments  OwnerPayment[]
   ownerReports   OwnerReport[]
 
   @@index([ownerId])
@@ -265,20 +266,26 @@ model OwnerReport {
 // not the accrued reservation `payout` figure. recordedById tracks who
 // entered the row so management has an audit trail.
 model OwnerPayment {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   ownerId      String
-  owner        User     @relation("OwnerPaymentRecipient", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner        User      @relation("OwnerPaymentRecipient", fields: [ownerId], references: [id], onDelete: Cascade)
+  // Optional: which property the payout covers. Helps admins reconcile
+  // when an owner has multiple properties. Null means the payment is
+  // owner-wide (legacy / cross-property settlement).
+  propertyId   String?
+  property     Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   date         DateTime
   amount       Float
-  method       String?  // bank, cash, transfer, …
-  reference    String?  // invoice / period / external ref
-  notes        String?  @db.Text
+  method       String?   // bank, cash, transfer, …
+  reference    String?   // invoice / period / external ref
+  notes        String?   @db.Text
   recordedById String?
-  recordedBy   User?    @relation("OwnerPaymentRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  recordedBy   User?     @relation("OwnerPaymentRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([ownerId])
+  @@index([propertyId])
   @@index([date])
 }
 

@@ -156,6 +156,11 @@ export function LedgerView({
       )}
 
       <ExpenseEditor
+        key={
+          editingExpense === undefined
+            ? "closed"
+            : editingExpense?.id ?? "new"
+        }
         open={editingExpense !== undefined}
         expense={editingExpense ?? null}
         properties={properties}
@@ -227,6 +232,7 @@ function ExpenseEditor({
     upsertExpenseAction,
     undefined,
   );
+  const [type, setType] = useState<string>(expense?.type ?? "OTHERS");
 
   useEffect(() => {
     if (state?.status === "ok" && open) {
@@ -277,7 +283,8 @@ function ExpenseEditor({
               id="type"
               name="type"
               required
-              defaultValue={expense?.type ?? "OTHERS"}
+              value={type}
+              onChange={(e) => setType(e.target.value)}
               className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
             >
               {EXPENSE_TYPES.map((t) => (
@@ -299,11 +306,19 @@ function ExpenseEditor({
             defaultValue={expense?.amount || ""}
           />
         </Field>
-        <Field label={labels.description} htmlFor="description">
+        <Field
+          label={labels.description}
+          htmlFor="description"
+          hint={
+            type === "OTHERS"
+              ? "Required — describe the expense"
+              : "Optional"
+          }
+        >
           <Textarea
             id="description"
             name="description"
-            required
+            required={type === "OTHERS"}
             defaultValue={expense?.description ?? ""}
             placeholder="Paid Outstanding DEWA Bill — Address Opera 2001"
           />

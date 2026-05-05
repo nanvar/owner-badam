@@ -8,7 +8,6 @@ import { StatCard } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
 import { formatCurrency } from "@/lib/utils";
 import { PropertiesView } from "../../properties-view";
-import { OwnerPaymentsSection } from "./owner-payments-section";
 
 export default async function OwnerDetailPage({
   params,
@@ -53,7 +52,10 @@ export default async function OwnerDetailPage({
     }),
     prisma.ownerPayment.findMany({
       where: { ownerId: owner.id },
-      include: { recordedBy: { select: { name: true, email: true } } },
+      include: {
+        recordedBy: { select: { name: true, email: true } },
+        property: { select: { id: true, name: true, color: true } },
+      },
       orderBy: { date: "desc" },
     }),
   ]);
@@ -161,6 +163,15 @@ export default async function OwnerDetailPage({
             description: e.description,
             amount: e.amount,
           }))}
+          payments={payments.map((p) => ({
+            id: p.id,
+            propertyId: p.propertyId,
+            date: p.date.toISOString(),
+            amount: p.amount,
+            method: p.method,
+            reference: p.reference,
+            notes: p.notes,
+          }))}
           labels={{
             title: tCommon("properties"),
             addProperty: tAdmin("addProperty"),
@@ -198,26 +209,16 @@ export default async function OwnerDetailPage({
             description: tAdmin("description"),
             amount: tAdmin("amount"),
             deleteLedgerConfirm: tAdmin("deleteLedgerConfirm"),
+            recordPayment: tAdmin("recordPayment"),
+            paid: tAdmin("paid"),
+            totalPaid: tAdmin("totalPaid"),
+            noPayments: tAdmin("noPayments"),
+            paymentMethod: tAdmin("paymentMethod"),
+            paymentReference: tAdmin("paymentReference"),
+            deletePaymentConfirm: tAdmin("deletePaymentConfirm"),
           }}
         />
       </div>
-
-      <OwnerPaymentsSection
-        ownerId={owner.id}
-        ownerName={owner.name ?? owner.email}
-        locale={loc}
-        payments={payments.map((p) => ({
-          id: p.id,
-          date: p.date.toISOString(),
-          amount: p.amount,
-          method: p.method,
-          reference: p.reference,
-          notes: p.notes,
-          recordedByName:
-            p.recordedBy?.name ?? p.recordedBy?.email ?? null,
-          createdAt: p.createdAt.toISOString(),
-        }))}
-      />
     </div>
   );
 }

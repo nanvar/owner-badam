@@ -1,4 +1,4 @@
-import { setRequestLocale } from "next-intl/server";
+import { setRequestLocale, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Clock, Wallet } from "lucide-react";
 import { isLocale, type Locale } from "@/i18n/config";
@@ -18,6 +18,7 @@ export default async function OwnerPaymentsPage({
   setRequestLocale(locale);
   const session = await requireRole("OWNER");
   const loc = locale as Locale;
+  const t = await getTranslations({ locale, namespace: "owner" });
 
   const [upcomingAgg, payments] = await Promise.all([
     prisma.reservation.aggregate({
@@ -36,7 +37,7 @@ export default async function OwnerPaymentsPage({
 
   return (
     <div>
-      <PageHeader title="Payments" />
+      <PageHeader title={t("paymentsTitle")} />
 
       <Card className="overflow-hidden">
         <CardBody className="bg-gradient-to-br from-sky-500/15 to-sky-500/0">
@@ -46,16 +47,20 @@ export default async function OwnerPaymentsPage({
             </span>
             <div className="flex-1">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-sky-700">
-                Upcoming
+                {t("paymentsUpcoming")}
               </div>
               <div className="text-base font-bold tabular-nums">
-                {upcomingCount} reservation{upcomingCount === 1 ? "" : "s"}
+                {upcomingCount}{" "}
+                {upcomingCount === 1
+                  ? t("reservationOne")
+                  : t("reservationMany")}
                 <span className="ml-2 text-sm font-medium text-[var(--color-muted)]">
-                  · expected payout {formatCurrency(upcomingPayout, "AED", loc)}
+                  · {t("paymentsExpectedPayout")}{" "}
+                  {formatCurrency(upcomingPayout, "AED", loc)}
                 </span>
               </div>
               <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                Pending payment — not counted in dashboard or reports.
+                {t("paymentsPending")}
               </div>
             </div>
           </div>
@@ -65,15 +70,15 @@ export default async function OwnerPaymentsPage({
       <div className="mt-6">
         <h2 className="mb-3 flex items-center gap-2 text-base font-semibold tracking-tight">
           <Wallet className="h-4 w-4 text-[var(--color-brand)]" />
-          Payments received
+          {t("paymentsReceived")}
           <span className="text-xs font-normal text-[var(--color-muted)]">
-            · total {formatCurrency(totalPaid, "AED", loc)}
+            · {t("paymentsTotalLabel")} {formatCurrency(totalPaid, "AED", loc)}
           </span>
         </h2>
         {payments.length === 0 ? (
           <Card>
             <CardBody className="py-10 text-center text-sm text-[var(--color-muted)]">
-              No payments recorded yet.
+              {t("paymentsEmpty")}
             </CardBody>
           </Card>
         ) : (
@@ -82,17 +87,18 @@ export default async function OwnerPaymentsPage({
               <table className="w-full text-sm">
                 <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold">Date</th>
+                    <th className="px-4 py-3 text-left font-semibold">
+                      {t("date")}
+                    </th>
                     <th className="px-4 py-3 text-right font-semibold">
-                      Amount
+                      {t("amount")}
                     </th>
                     <th className="px-4 py-3 text-left font-semibold">
-                      Method
+                      {t("paymentsMethod")}
                     </th>
                     <th className="px-4 py-3 text-left font-semibold">
-                      Reference
+                      {t("paymentsReference")}
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold">Notes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -112,9 +118,6 @@ export default async function OwnerPaymentsPage({
                       </td>
                       <td className="px-4 py-3 text-[var(--color-muted)]">
                         {p.reference ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-[var(--color-muted)]">
-                        {p.notes ?? "—"}
                       </td>
                     </tr>
                   ))}

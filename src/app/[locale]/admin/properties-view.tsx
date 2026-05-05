@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
   Plus,
   RefreshCw,
@@ -15,6 +15,8 @@ import {
   Receipt,
   ChevronRight,
   X,
+  Wallet,
+  MoreHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -34,6 +36,11 @@ import {
   deleteExpenseAction,
   type ExpenseState,
 } from "@/app/actions/expenses";
+import {
+  createOwnerPaymentAction,
+  deleteOwnerPaymentAction,
+  type OwnerPaymentState,
+} from "@/app/actions/owner-payments";
 import {
   EXPENSE_TYPES,
   EXPENSE_TYPE_LABELS,
@@ -70,6 +77,16 @@ type ExpenseEntry = {
   amount: number;
 };
 
+type PaymentEntry = {
+  id: string;
+  propertyId: string | null;
+  date: string;
+  amount: number;
+  method: string | null;
+  reference: string | null;
+  notes: string | null;
+};
+
 type Labels = Record<string, string>;
 
 export function PropertiesView({
@@ -80,6 +97,7 @@ export function PropertiesView({
   lockedOwnerId,
   hideTitle,
   expenses,
+  payments,
 }: {
   locale: Locale;
   properties: Property[];
@@ -88,6 +106,7 @@ export function PropertiesView({
   lockedOwnerId?: string;
   hideTitle?: boolean;
   expenses?: ExpenseEntry[];
+  payments?: PaymentEntry[];
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<Property | null | undefined>(undefined);
@@ -96,6 +115,7 @@ export function PropertiesView({
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deletePending, startDelete] = useTransition();
   const [expensesProperty, setExpensesProperty] = useState<Property | null>(null);
+  const [paymentsProperty, setPaymentsProperty] = useState<Property | null>(null);
 
   const expensesByProperty = (expenses ?? []).reduce<Record<string, ExpenseEntry[]>>(
     (acc, e) => {
@@ -104,7 +124,16 @@ export function PropertiesView({
     },
     {},
   );
+  const paymentsByProperty = (payments ?? []).reduce<Record<string, PaymentEntry[]>>(
+    (acc, p) => {
+      if (!p.propertyId) return acc;
+      (acc[p.propertyId] ||= []).push(p);
+      return acc;
+    },
+    {},
+  );
   const showExpenseColumn = !!expenses;
+  const showPaymentsColumn = !!payments;
 
   return (
     <div>
@@ -162,6 +191,20 @@ export function PropertiesView({
 
       {properties.length === 0 ? (
         <EmptyState label={labels.noProperties} />
+      ) : lockedOwnerId ? (
+        <PropertyTable
+          properties={properties}
+          labels={labels}
+          locale={locale}
+          expensesByProperty={expensesByProperty}
+          paymentsByProperty={paymentsByProperty}
+          showExpenseColumn={showExpenseColumn}
+          showPaymentsColumn={showPaymentsColumn}
+          onShowExpenses={(p) => setExpensesProperty(p)}
+          onRecordPayment={(p) => setPaymentsProperty(p)}
+          onEdit={(p) => setEditing(p)}
+          onDelete={(id) => setDeleteId(id)}
+        />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {properties.map((p) => (
@@ -175,7 +218,11 @@ export function PropertiesView({
               expenses={
                 showExpenseColumn ? expensesByProperty[p.id] ?? [] : null
               }
+              payments={
+                showPaymentsColumn ? paymentsByProperty[p.id] ?? [] : null
+              }
               onShowExpenses={() => setExpensesProperty(p)}
+              onRecordPayment={() => setPaymentsProperty(p)}
               onEdit={() => setEditing(p)}
               onDelete={() => setDeleteId(p.id)}
               onSync={async () => {
@@ -209,6 +256,21 @@ export function PropertiesView({
           locale={locale}
           labels={labels}
           onClose={() => setExpensesProperty(null)}
+        />
+      )}
+
+      {showPaymentsColumn && (
+        <PropertyPaymentsDrawer
+          open={!!paymentsProperty}
+          property={paymentsProperty}
+          payments={
+            paymentsProperty
+              ? paymentsByProperty[paymentsProperty.id] ?? []
+              : []
+          }
+          locale={locale}
+          labels={labels}
+          onClose={() => setPaymentsProperty(null)}
         />
       )}
 
@@ -250,7 +312,9 @@ function PropertyCard({
   hideOwner,
   hideSync,
   expenses,
+  payments,
   onShowExpenses,
+  onRecordPayment,
   onEdit,
   onDelete,
   onSync,
@@ -261,7 +325,9 @@ function PropertyCard({
   hideOwner?: boolean;
   hideSync?: boolean;
   expenses: ExpenseEntry[] | null;
+  payments: PaymentEntry[] | null;
   onShowExpenses: () => void;
+  onRecordPayment: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onSync: () => Promise<void>;
@@ -269,6 +335,9 @@ function PropertyCard({
   const [pending, start] = useTransition();
   const expenseTotal = expenses
     ? expenses.reduce((s, e) => s + e.amount, 0)
+    : 0;
+  const paymentTotal = payments
+    ? payments.reduce((s, p) => s + p.amount, 0)
     : 0;
   const detailHref = `/${locale}/admin/owners/${property.ownerId}/properties/${property.id}`;
   return (
@@ -328,7 +397,7 @@ function PropertyCard({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/50 px-3 py-2">
             <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
               <CalendarIcon className="h-3 w-3" />
@@ -351,24 +420,323 @@ function PropertyCard({
               </div>
             </div>
           )}
+          {payments && (
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+              <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700/80">
+                <Wallet className="h-3 w-3" />
+                {labels.paid ?? "Paid"}
+              </div>
+              <div className="mt-0.5 text-base font-bold tabular-nums text-emerald-700">
+                {payments.length === 0
+                  ? "—"
+                  : formatCurrency(paymentTotal, "AED", locale)}
+              </div>
+            </div>
+          )}
         </div>
 
-        {expenses && (
-          <button
-            onClick={onShowExpenses}
-            className="flex items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-xs font-semibold transition-colors hover:border-[var(--color-brand)] hover:text-[var(--color-brand)]"
-          >
-            <Receipt className="h-3.5 w-3.5" />
-            {labels.showExpenses}
-            {expenses.length > 0 && (
-              <span className="rounded-full bg-[var(--color-surface-2)] px-1.5 text-[10px] font-bold text-[var(--color-muted)]">
-                {expenses.length}
-              </span>
-            )}
-          </button>
-        )}
+        <div
+          className={cn(
+            "grid gap-2",
+            expenses && payments ? "grid-cols-2" : "grid-cols-1",
+          )}
+        >
+          {expenses && (
+            <button
+              onClick={onShowExpenses}
+              className="flex items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-xs font-semibold transition-colors hover:border-[var(--color-brand)] hover:text-[var(--color-brand)]"
+            >
+              <Receipt className="h-3.5 w-3.5" />
+              {labels.showExpenses}
+              {expenses.length > 0 && (
+                <span className="rounded-full bg-[var(--color-surface-2)] px-1.5 text-[10px] font-bold text-[var(--color-muted)]">
+                  {expenses.length}
+                </span>
+              )}
+            </button>
+          )}
+          {payments && (
+            <button
+              onClick={onRecordPayment}
+              className="flex items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-xs font-semibold transition-colors hover:border-emerald-500 hover:text-emerald-700"
+            >
+              <Wallet className="h-3.5 w-3.5" />
+              {labels.recordPayment ?? "Record payment"}
+              {payments.length > 0 && (
+                <span className="rounded-full bg-[var(--color-surface-2)] px-1.5 text-[10px] font-bold text-[var(--color-muted)]">
+                  {payments.length}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+function PropertyTable({
+  properties,
+  labels,
+  locale,
+  expensesByProperty,
+  paymentsByProperty,
+  showExpenseColumn,
+  showPaymentsColumn,
+  onShowExpenses,
+  onRecordPayment,
+  onEdit,
+  onDelete,
+}: {
+  properties: Property[];
+  labels: Labels;
+  locale: Locale;
+  expensesByProperty: Record<string, ExpenseEntry[]>;
+  paymentsByProperty: Record<string, PaymentEntry[]>;
+  showExpenseColumn: boolean;
+  showPaymentsColumn: boolean;
+  onShowExpenses: (p: Property) => void;
+  onRecordPayment: (p: Property) => void;
+  onEdit: (p: Property) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <Card className="overflow-visible">
+      <table className="w-full table-fixed text-sm">
+        <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
+          <tr>
+            <th className="px-3 py-3 text-left font-semibold">
+              {labels.name ?? "Name"}
+            </th>
+            <th className="w-16 px-2 py-3 text-right font-semibold">
+              {labels.reservations ?? "Res."}
+            </th>
+            {showExpenseColumn && (
+              <th className="w-28 px-2 py-3 text-right font-semibold">
+                {labels.expenses ?? "Expenses"}
+              </th>
+            )}
+            {showPaymentsColumn && (
+              <th className="w-28 px-2 py-3 text-right font-semibold">
+                {labels.paid ?? "Paid"}
+              </th>
+            )}
+            <th className="w-10 px-1 py-3" />
+          </tr>
+        </thead>
+          <tbody>
+            {properties.map((p) => {
+              const expenses = showExpenseColumn
+                ? expensesByProperty[p.id] ?? []
+                : [];
+              const payments = showPaymentsColumn
+                ? paymentsByProperty[p.id] ?? []
+                : [];
+              const expenseTotal = expenses.reduce((s, e) => s + e.amount, 0);
+              const paymentTotal = payments.reduce((s, e) => s + e.amount, 0);
+              const detailHref = `/${locale}/admin/owners/${p.ownerId}/properties/${p.id}`;
+              return (
+                <tr
+                  key={p.id}
+                  className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
+                >
+                  <td className="px-4 py-3">
+                    <Link
+                      href={detailHref}
+                      className="group flex items-center gap-3"
+                    >
+                      <span
+                        className="h-8 w-1 shrink-0 rounded-full"
+                        style={{ background: p.color }}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1 truncate font-semibold tracking-tight group-hover:text-[var(--color-brand)]">
+                          {p.name}
+                          <ChevronRight className="h-3.5 w-3.5 text-[var(--color-muted)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--color-brand)]" />
+                        </span>
+                        {p.address && (
+                          <span className="block truncate text-xs text-[var(--color-muted)]">
+                            {p.address}
+                          </span>
+                        )}
+                      </span>
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {p.reservationCount}
+                  </td>
+                  {showExpenseColumn && (
+                    <td className="px-4 py-3 text-right tabular-nums text-rose-600">
+                      {expenses.length === 0
+                        ? "—"
+                        : formatCurrency(expenseTotal, "AED", locale)}
+                    </td>
+                  )}
+                  {showPaymentsColumn && (
+                    <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
+                      {payments.length === 0
+                        ? "—"
+                        : formatCurrency(paymentTotal, "AED", locale)}
+                    </td>
+                  )}
+                  <td className="px-2 py-3 text-right">
+                    <RowMenu
+                      labels={labels}
+                      expensesCount={expenses.length}
+                      paymentsCount={payments.length}
+                      showExpenses={showExpenseColumn}
+                      showPayments={showPaymentsColumn}
+                      onShowExpenses={() => onShowExpenses(p)}
+                      onRecordPayment={() => onRecordPayment(p)}
+                      onEdit={() => onEdit(p)}
+                      onDelete={() => onDelete(p.id)}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
+
+function RowMenu({
+  labels,
+  expensesCount,
+  paymentsCount,
+  showExpenses,
+  showPayments,
+  onShowExpenses,
+  onRecordPayment,
+  onEdit,
+  onDelete,
+}: {
+  labels: Labels;
+  expensesCount: number;
+  paymentsCount: number;
+  showExpenses: boolean;
+  showPayments: boolean;
+  onShowExpenses: () => void;
+  onRecordPayment: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const close = () => setOpen(false);
+
+  return (
+    <div ref={ref} className="relative inline-block text-left">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Actions"
+        className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]"
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-1 w-56 origin-top-right overflow-hidden rounded-xl border border-[var(--color-border)] bg-white py-1 shadow-lg shadow-black/10 ring-1 ring-black/5 animate-fade-in">
+          {showExpenses && (
+            <MenuItem
+              icon={<Receipt className="h-4 w-4" />}
+              label={labels.showExpenses ?? "Show expenses"}
+              count={expensesCount}
+              onClick={() => {
+                close();
+                onShowExpenses();
+              }}
+            />
+          )}
+          {showPayments && (
+            <MenuItem
+              icon={<Wallet className="h-4 w-4" />}
+              label={labels.recordPayment ?? "Record payment"}
+              count={paymentsCount}
+              onClick={() => {
+                close();
+                onRecordPayment();
+              }}
+            />
+          )}
+          <MenuItem
+            icon={<Edit3 className="h-4 w-4" />}
+            label={labels.edit ?? "Edit"}
+            onClick={() => {
+              close();
+              onEdit();
+            }}
+          />
+          <div className="my-1 h-px bg-[var(--color-border)]" />
+          <MenuItem
+            icon={<Trash2 className="h-4 w-4" />}
+            label={labels.delete ?? "Delete"}
+            danger
+            onClick={() => {
+              close();
+              onDelete();
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MenuItem({
+  icon,
+  label,
+  count,
+  danger,
+  disabled,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  count?: number;
+  danger?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        danger
+          ? "text-rose-600 hover:bg-rose-500/10"
+          : "text-[var(--color-foreground)] hover:bg-[var(--color-surface-2)]",
+      )}
+    >
+      <span className="shrink-0 text-[var(--color-muted)]">{icon}</span>
+      <span className="flex-1">{label}</span>
+      {typeof count === "number" && count > 0 && (
+        <span className="rounded-full bg-[var(--color-surface-2)] px-1.5 text-[10px] font-bold text-[var(--color-muted)]">
+          {count}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -711,6 +1079,7 @@ function PropertyExpensesDrawer({
 
       {property && (
         <ExpenseEditor
+          key={editing === undefined ? "closed" : editing?.id ?? "new"}
           open={editing !== undefined}
           expense={editing ?? null}
           propertyId={property.id}
@@ -740,6 +1109,7 @@ function ExpenseEditor({
     ExpenseState | undefined,
     FormData
   >(upsertExpenseAction, undefined);
+  const [type, setType] = useState<string>(expense?.type ?? "OTHERS");
 
   useEffect(() => {
     if (state?.status === "ok" && open) {
@@ -776,7 +1146,8 @@ function ExpenseEditor({
               id="type"
               name="type"
               required
-              defaultValue={expense?.type ?? "OTHERS"}
+              value={type}
+              onChange={(e) => setType(e.target.value)}
               className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
             >
               {EXPENSE_TYPES.map((t) => (
@@ -801,11 +1172,19 @@ function ExpenseEditor({
             defaultValue={expense?.amount || ""}
           />
         </Field>
-        <Field label={labels.description} htmlFor="description">
+        <Field
+          label={labels.description}
+          htmlFor="description"
+          hint={
+            type === "OTHERS"
+              ? "Required — describe the expense"
+              : "Optional"
+          }
+        >
           <Textarea
             id="description"
             name="description"
-            required
+            required={type === "OTHERS"}
             defaultValue={expense?.description ?? ""}
             placeholder="Paid Outstanding DEWA Bill"
           />
@@ -816,6 +1195,238 @@ function ExpenseEditor({
           </div>
         )}
         <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            {labels.cancel}
+          </Button>
+          <Button type="submit" loading={pending}>
+            {labels.save}
+          </Button>
+        </div>
+      </form>
+    </Sheet>
+  );
+}
+
+function PropertyPaymentsDrawer({
+  open,
+  property,
+  payments,
+  locale,
+  labels,
+  onClose,
+}: {
+  open: boolean;
+  property: Property | null;
+  payments: PaymentEntry[];
+  locale: Locale;
+  labels: Labels;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [creating, setCreating] = useState(false);
+  const [deletePending, startDelete] = useTransition();
+  const total = payments.reduce((s, p) => s + p.amount, 0);
+
+  return (
+    <Sheet
+      open={open && !!property}
+      onClose={onClose}
+      side="right"
+      title={property?.name}
+      description={labels.recordPayment ?? "Record payment"}
+    >
+      <div className="flex items-center justify-between rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+            {labels.totalPaid ?? "Total paid"} · {payments.length}
+          </div>
+          <div className="mt-0.5 text-xl font-bold text-emerald-700">
+            {formatCurrency(total, "AED", locale)}
+          </div>
+        </div>
+        <Button onClick={() => setCreating(true)}>
+          <Plus className="h-4 w-4" />
+          {labels.recordPayment ?? "Record payment"}
+        </Button>
+      </div>
+
+      {payments.length === 0 ? (
+        <p className="mt-6 rounded-2xl border border-dashed border-[var(--color-border)] bg-white px-4 py-10 text-center text-sm text-[var(--color-muted)]">
+          {labels.noPayments ?? "No payments recorded yet."}
+        </p>
+      ) : (
+        <ul className="mt-4 space-y-2">
+          {payments.map((p) => (
+            <li
+              key={p.id}
+              className="flex items-start gap-3 rounded-2xl border border-[var(--color-border)] bg-white px-3 py-2.5"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 text-[10px] text-[var(--color-muted)]">
+                  <span>{formatDate(p.date, locale)}</span>
+                  {p.method && (
+                    <span className="rounded-full bg-[var(--color-surface-2)] px-1.5 py-0.5 font-semibold uppercase tracking-wider">
+                      {p.method}
+                    </span>
+                  )}
+                  {p.reference && (
+                    <span className="truncate">· {p.reference}</span>
+                  )}
+                </div>
+                {p.notes && (
+                  <div className="mt-1 line-clamp-2 text-xs text-[var(--color-muted)]">
+                    {p.notes}
+                  </div>
+                )}
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-bold text-emerald-700 tabular-nums">
+                  + {formatCurrency(p.amount, "AED", locale)}
+                </div>
+                <button
+                  disabled={deletePending}
+                  onClick={() => {
+                    if (
+                      !confirm(
+                        labels.deletePaymentConfirm ??
+                          "Delete this payment? This cannot be undone.",
+                      )
+                    )
+                      return;
+                    startDelete(async () => {
+                      await deleteOwnerPaymentAction(p.id);
+                      router.refresh();
+                    });
+                  }}
+                  aria-label="Delete"
+                  className="mt-1 rounded-lg p-1 text-[var(--color-muted)] hover:bg-rose-500/10 hover:text-rose-600 disabled:opacity-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {property && (
+        <PaymentEditor
+          key={creating ? "open" : "closed"}
+          open={creating}
+          ownerId={property.ownerId}
+          propertyId={property.id}
+          labels={labels}
+          onClose={() => setCreating(false)}
+        />
+      )}
+    </Sheet>
+  );
+}
+
+function PaymentEditor({
+  open,
+  ownerId,
+  propertyId,
+  labels,
+  onClose,
+}: {
+  open: boolean;
+  ownerId: string;
+  propertyId: string;
+  labels: Labels;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState<
+    OwnerPaymentState | undefined,
+    FormData
+  >(createOwnerPaymentAction, undefined);
+
+  useEffect(() => {
+    if (state?.status === "ok") {
+      router.refresh();
+      onClose();
+    }
+  }, [state, onClose, router]);
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={labels.recordPayment ?? "Record payment"}
+    >
+      <form action={action} className="space-y-4">
+        <input type="hidden" name="ownerId" value={ownerId} />
+        <input type="hidden" name="propertyId" value={propertyId} />
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={labels.date} htmlFor="op-date">
+            <Input
+              id="op-date"
+              name="date"
+              type="date"
+              defaultValue={today}
+              required
+            />
+          </Field>
+          <Field
+            label={`${labels.amount} (${labels.currency})`}
+            htmlFor="op-amount"
+          >
+            <Input
+              id="op-amount"
+              name="amount"
+              type="number"
+              step="0.01"
+              min="0.01"
+              required
+              placeholder="0.00"
+            />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field
+            label={labels.paymentMethod ?? "Method"}
+            htmlFor="op-method"
+            hint="bank, cash, …"
+          >
+            <Input
+              id="op-method"
+              name="method"
+              placeholder="bank transfer"
+            />
+          </Field>
+          <Field
+            label={labels.paymentReference ?? "Reference"}
+            htmlFor="op-reference"
+            hint="invoice / period"
+          >
+            <Input
+              id="op-reference"
+              name="reference"
+              placeholder="Apr 2026"
+            />
+          </Field>
+        </div>
+
+        <Field label={labels.notes} htmlFor="op-notes">
+          <Textarea
+            id="op-notes"
+            name="notes"
+            placeholder="Anything worth remembering about this payment…"
+          />
+        </Field>
+
+        {state?.status === "error" && (
+          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
+            {state.message}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>
             {labels.cancel}
           </Button>

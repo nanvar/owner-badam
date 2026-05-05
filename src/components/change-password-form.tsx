@@ -3,7 +3,8 @@
 import { useActionState, useEffect } from "react";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input, Field } from "@/components/ui/input";
+import { Field } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import {
   changeOwnPasswordAction,
   type ChangePasswordState,
@@ -25,10 +26,9 @@ export function ChangePasswordForm({ onDone }: { onDone: () => void }) {
   return (
     <form action={action} className="space-y-4">
       <Field label="Current password" htmlFor="currentPassword">
-        <Input
+        <PasswordInput
           id="currentPassword"
           name="currentPassword"
-          type="password"
           autoComplete="current-password"
           required
         />
@@ -38,20 +38,18 @@ export function ChangePasswordForm({ onDone }: { onDone: () => void }) {
         htmlFor="newPassword"
         hint="At least 6 characters"
       >
-        <Input
+        <PasswordInput
           id="newPassword"
           name="newPassword"
-          type="password"
           autoComplete="new-password"
           minLength={6}
           required
         />
       </Field>
       <Field label="Confirm new password" htmlFor="confirmPassword">
-        <Input
+        <PasswordInput
           id="confirmPassword"
           name="confirmPassword"
-          type="password"
           autoComplete="new-password"
           minLength={6}
           required

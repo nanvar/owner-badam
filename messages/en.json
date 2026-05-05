@@ -1,4 +1,9 @@
 {
+  "notFound": {
+    "title": "Page not found",
+    "description": "The page you’re looking for doesn’t exist or was moved.",
+    "backHome": "Back to home"
+  },
   "common": {
     "appName": "Badam Owners",
     "tagline": "Property revenue, simplified.",
@@ -160,7 +165,14 @@
     "ownerTaxId": "Tax ID / Passport",
     "ownerAddress": "Address",
     "passwordHint": "Leave empty to keep the current password",
-    "deleteOwnerConfirm": "Delete this owner? Their properties and reservations will also be removed."
+    "deleteOwnerConfirm": "Delete this owner? Their properties and reservations will also be removed.",
+    "recordPayment": "Record payment",
+    "paid": "Paid",
+    "totalPaid": "Total paid",
+    "noPayments": "No payments recorded yet.",
+    "paymentMethod": "Method",
+    "paymentReference": "Reference",
+    "deletePaymentConfirm": "Delete this payment? This cannot be undone."
   },
   "owner": {
     "welcome": "Welcome back, {name}",
@@ -219,6 +231,17 @@
     "date": "Date",
     "type": "Type",
     "description": "Description",
-    "concept": "Concept"
+    "concept": "Concept",
+    "paymentsTitle": "Payments",
+    "paymentsUpcoming": "Upcoming",
+    "paymentsExpectedPayout": "expected payout",
+    "paymentsPending": "Pending payment — not counted in dashboard or reports.",
+    "paymentsReceived": "Payments received",
+    "paymentsTotalLabel": "total",
+    "paymentsEmpty": "No payments recorded yet.",
+    "paymentsMethod": "Method",
+    "paymentsReference": "Reference",
+    "reservationOne": "reservation",
+    "reservationMany": "reservations"
   }
 }
