@@ -265,13 +265,11 @@ export default async function SuperAdminDashboard({
 
       {/* KPI grid */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
-        <CompanyPnlTile
+        <CompanyRevenueTile
           locale={loc}
           revenue={totalAgency + totalCompanyExtraProfit}
           agency={totalAgency}
           extraProfit={totalCompanyExtraProfit}
-          expenses={totalCompanyExpenses}
-          expenseCount={companyExpenseCount}
           net={companyNet}
         />
         <UpcomingTile
@@ -289,6 +287,13 @@ export default async function SuperAdminDashboard({
             upcomingPortal: p.upcomingPortal,
             upcomingPayout: p.upcomingPayout,
           }))}
+        />
+        <KpiTile
+          label="Company expenses"
+          value={formatCurrency(totalCompanyExpenses, "AED", loc)}
+          hint={`${companyExpenseCount} entries`}
+          accent="rose"
+          icon={<Receipt className="h-4 w-4" />}
         />
         <KpiTile
           label="Active deposits"
@@ -451,103 +456,54 @@ function KpiTile({
   );
 }
 
-// Combined revenue + profit + expense tile so admins read the company P&L
-// at a glance without scanning three separate cards.
-function CompanyPnlTile({
+// Revenue + net profit in one tile. Expenses keep their own card so the
+// dashboard still shows a true 6-card grid.
+function CompanyRevenueTile({
   locale,
   revenue,
   agency,
   extraProfit,
-  expenses,
-  expenseCount,
   net,
 }: {
   locale: Locale;
   revenue: number;
   agency: number;
   extraProfit: number;
-  expenses: number;
-  expenseCount: number;
   net: number;
 }) {
-  const positive = net >= 0;
   return (
     <Card className="overflow-hidden">
-      <CardBody
-        className={`bg-gradient-to-br ${positive ? "from-emerald-500/15 to-emerald-500/0 text-emerald-700" : "from-rose-500/15 to-rose-500/0 text-rose-600"}`}
-      >
+      <CardBody className="bg-gradient-to-br from-emerald-500/15 to-emerald-500/0 text-emerald-700">
         <div className="flex items-center justify-between">
           <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80">
-            Company P&amp;L
+            Company revenue
           </div>
           <div className="opacity-80">
-            <Wallet className="h-4 w-4" />
+            <TrendingUp className="h-4 w-4" />
           </div>
         </div>
         <div className="mt-1.5 text-xl font-bold tabular-nums text-[var(--color-foreground)]">
-          {formatCurrency(net, "AED", locale)}
+          {formatCurrency(revenue, "AED", locale)}
         </div>
         <div className="mt-0.5 text-[11px] text-[var(--color-muted)]">
-          net profit
+          {extraProfit > 0
+            ? `agency ${formatCurrency(agency, "AED", locale)} + profit ${formatCurrency(extraProfit, "AED", locale)}`
+            : "agency commission"}
         </div>
-        <div className="mt-3 space-y-1.5 border-t border-black/5 pt-2">
-          <PnlRow
-            icon={<TrendingUp className="h-3 w-3" />}
-            label="Revenue"
-            value={formatCurrency(revenue, "AED", locale)}
-            hint={
-              extraProfit > 0
-                ? `agency ${formatCurrency(agency, "AED", locale)} + profit ${formatCurrency(extraProfit, "AED", locale)}`
-                : "agency commission"
-            }
-            tone="emerald"
-          />
-          <PnlRow
-            icon={<Receipt className="h-3 w-3" />}
-            label="Expenses"
-            value={`− ${formatCurrency(expenses, "AED", locale)}`}
-            hint={`${expenseCount} ${expenseCount === 1 ? "entry" : "entries"}`}
-            tone="rose"
-          />
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-black/5 pt-2 text-xs">
+          <div className="flex items-center gap-1.5">
+            <Wallet className="h-3 w-3 text-[var(--color-muted)]" />
+            <span className="font-medium text-[var(--color-foreground)]">
+              Net profit
+            </span>
+          </div>
+          <span
+            className={`tabular-nums font-bold ${net >= 0 ? "text-emerald-700" : "text-rose-600"}`}
+          >
+            {formatCurrency(net, "AED", locale)}
+          </span>
         </div>
       </CardBody>
     </Card>
-  );
-}
-
-function PnlRow({
-  icon,
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  hint: string;
-  tone: "emerald" | "rose";
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 text-xs">
-      <div className="flex items-center gap-1.5">
-        <span
-          className={
-            tone === "emerald" ? "text-emerald-700" : "text-rose-600"
-          }
-        >
-          {icon}
-        </span>
-        <span className="font-medium text-[var(--color-foreground)]">
-          {label}
-        </span>
-        <span className="text-[10px] text-[var(--color-muted)]">{hint}</span>
-      </div>
-      <span
-        className={`tabular-nums font-semibold ${tone === "emerald" ? "text-emerald-700" : "text-rose-600"}`}
-      >
-        {value}
-      </span>
-    </div>
   );
 }
