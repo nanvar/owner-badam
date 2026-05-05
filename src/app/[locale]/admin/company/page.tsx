@@ -167,12 +167,14 @@ export default async function SuperAdminDashboard({
     .filter((p) => p.ownerPayoutOutstanding > 0.005);
 
 
-  // Active reservations: today falls inside checkIn..checkOut.
+  // Active reservations: today falls inside checkIn..checkOut. Both counts
+  // exclude pipeline (upcoming) — they are pure realized metrics.
   const today = new Date();
   const [allReservationsCount, activeReservationsCount] = await Promise.all([
-    prisma.reservation.count(),
+    prisma.reservation.count({ where: { upcoming: false } }),
     prisma.reservation.count({
       where: {
+        upcoming: false,
         checkIn: { lte: today },
         checkOut: { gt: today },
       },
@@ -315,7 +317,9 @@ export default async function SuperAdminDashboard({
                 <th className="px-4 py-3 text-left font-semibold">Check-in</th>
                 <th className="px-4 py-3 text-left font-semibold">Check-out</th>
                 <th className="px-4 py-3 text-right font-semibold">Nights</th>
-                <th className="px-4 py-3 text-right font-semibold">Total</th>
+                <th className="px-4 py-3 text-right font-semibold">
+                  Owner payout
+                </th>
                 <th className="px-4 py-3 text-right font-semibold">Company</th>
               </tr>
             </thead>
@@ -365,7 +369,7 @@ export default async function SuperAdminDashboard({
                         {r.nights}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">
-                        {formatCurrency(r.totalPrice, "AED", loc)}
+                        {formatCurrency(r.payout, "AED", loc)}
                       </td>
                       <td className="px-4 py-3 text-right font-bold tabular-nums text-emerald-600">
                         {formatCurrency(r.agencyCommission, "AED", loc)}
@@ -408,7 +412,7 @@ export default async function SuperAdminDashboard({
                         {r.nights}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">
-                        {formatCurrency(r.totalPrice, "AED", loc)}
+                        {formatCurrency(r.payout, "AED", loc)}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-emerald-700">
                         {formatCurrency(r.agencyCommission, "AED", loc)}
