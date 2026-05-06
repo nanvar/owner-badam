@@ -32,8 +32,8 @@ const variantStyle: Record<
   }
 > = {
   company: {
-    label: "Company upcoming",
-    drawerTitle: "Company upcoming",
+    label: "Upcoming",
+    drawerTitle: "Upcoming",
     cardClasses: "hover:ring-sky-300/60 hover:shadow-sky-500/10",
     bodyClasses: "from-sky-500/15 to-sky-500/0 text-sky-700",
     ringClasses: "",
@@ -75,7 +75,7 @@ export function UpcomingTile({
           className={`h-full overflow-hidden ring-1 ring-transparent transition-shadow hover:shadow-lg ${style.cardClasses}`}
         >
           <CardBody
-            className={`flex h-full flex-col bg-gradient-to-br ${style.bodyClasses}`}
+            className={`flex h-full flex-col gap-2 bg-gradient-to-br !p-3.5 ${style.bodyClasses}`}
           >
             <div className="flex items-center justify-between">
               <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80">
@@ -85,7 +85,7 @@ export function UpcomingTile({
                 <Clock className="h-4 w-4" />
               </div>
             </div>
-            <div className="mt-auto pt-3 text-2xl font-bold tabular-nums text-[var(--color-foreground)]">
+            <div className="text-lg font-bold tabular-nums text-[var(--color-foreground)]">
               {formatCurrency(totalAmount, "AED", locale)}
             </div>
           </CardBody>

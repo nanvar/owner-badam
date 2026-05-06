@@ -268,12 +268,10 @@ export default async function SuperAdminDashboard({
     <div>
       <PageHeader title="Dashboard" />
 
-      {/* KPI grid — 7 cards. auto-rows-fr + *:h-full keeps every card
-          the same height so the dashboard reads as a uniform grid. */}
-      <div className="grid auto-rows-fr grid-cols-1 gap-3 *:h-full sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      {/* KPI grid — 6 compact cards. auto-rows-fr + *:h-full keeps every
+          card the same height. */}
+      <div className="grid auto-rows-fr grid-cols-1 gap-3 *:h-full sm:grid-cols-2 md:grid-cols-3">
         <DualValueTile
-          label="Finance"
-          icon={<TrendingUp className="h-4 w-4" />}
           accent="emerald"
           values={[
             {
@@ -288,6 +286,11 @@ export default async function SuperAdminDashboard({
               label: "Profit",
               value: formatCurrency(companyNet, "AED", loc),
               tone: companyNet >= 0 ? "emerald" : "rose",
+            },
+            {
+              label: "Expenses",
+              value: formatCurrency(totalCompanyExpenses, "AED", loc),
+              tone: "rose",
             },
           ]}
         />
@@ -324,12 +327,6 @@ export default async function SuperAdminDashboard({
             upcomingPortal: p.upcomingPortal,
             upcomingPayout: p.upcomingPayout,
           }))}
-        />
-        <KpiTile
-          label="Company expenses"
-          value={formatCurrency(totalCompanyExpenses, "AED", loc)}
-          accent="rose"
-          icon={<Receipt className="h-4 w-4" />}
         />
         <KpiTile
           label="Active deposits"
@@ -465,7 +462,7 @@ function KpiTile({
   return (
     <Card className="h-full overflow-hidden">
       <CardBody
-        className={`flex h-full flex-col bg-gradient-to-br ${accentMap[accent]}`}
+        className={`flex h-full flex-col gap-2 bg-gradient-to-br !p-3.5 ${accentMap[accent]}`}
       >
         <div className="flex items-center justify-between">
           <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80">
@@ -473,7 +470,7 @@ function KpiTile({
           </div>
           <div className="opacity-80">{icon}</div>
         </div>
-        <div className="mt-auto pt-3 text-2xl font-bold tabular-nums text-[var(--color-foreground)]">
+        <div className="text-lg font-bold tabular-nums text-[var(--color-foreground)]">
           {value}
         </div>
       </CardBody>
@@ -482,15 +479,16 @@ function KpiTile({
 }
 
 // Multiple labelled values side by side, separated by thin vertical
-// dividers so each amount is clearly identifiable. Same shell as KpiTile.
+// dividers. Header row hidden when label is omitted so the card stays
+// compact (used for the Finance card).
 function DualValueTile({
   label,
   icon,
   accent,
   values,
 }: {
-  label: string;
-  icon: React.ReactNode;
+  label?: string;
+  icon?: React.ReactNode;
   accent: "emerald" | "rose" | "indigo" | "amber" | "sky";
   values: { label: string; value: string; tone?: "emerald" | "rose" }[];
 }) {
@@ -510,26 +508,30 @@ function DualValueTile({
   return (
     <Card className="h-full overflow-hidden">
       <CardBody
-        className={`flex h-full flex-col bg-gradient-to-br ${accentMap[accent]}`}
+        className={`flex h-full flex-col gap-2 bg-gradient-to-br !p-3.5 ${accentMap[accent]}`}
       >
-        <div className="flex items-center justify-between">
-          <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80">
-            {label}
+        {(label || icon) && (
+          <div className="flex items-center justify-between">
+            {label && (
+              <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80">
+                {label}
+              </div>
+            )}
+            {icon && <div className="opacity-80">{icon}</div>}
           </div>
-          <div className="opacity-80">{icon}</div>
-        </div>
-        <div className="mt-auto flex items-end gap-3 pt-3">
+        )}
+        <div className="flex items-end gap-3">
           {values.map((v, i) => (
             <Fragment key={i}>
               {i > 0 && (
-                <span className="h-10 w-px self-center bg-current opacity-15" />
+                <span className="h-8 w-px self-center bg-current opacity-15" />
               )}
               <div className="flex-1">
                 <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
                   {v.label}
                 </div>
                 <div
-                  className={`text-2xl font-bold tabular-nums ${toneClass(v.tone)}`}
+                  className={`text-lg font-bold tabular-nums ${toneClass(v.tone)}`}
                 >
                   {v.value}
                 </div>
