@@ -1,4 +1,5 @@
 import { setRequestLocale } from "next-intl/server";
+import { Fragment } from "react";
 import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -8,13 +9,13 @@ import {
   Users,
   TrendingUp,
   CalendarDays,
-  Clock,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
 import { formatCurrency } from "@/lib/utils";
+import { UpcomingTile } from "./upcoming-tile";
 
 type PropertyAgg = {
   id: string;
@@ -267,20 +268,62 @@ export default async function SuperAdminDashboard({
     <div>
       <PageHeader title="Dashboard" />
 
-      {/* KPI grid — 10 compact cards. auto-fit + minmax keeps them
-          uniform; the layout naturally breaks into 2 rows on most screens. */}
-      <div className="grid auto-rows-fr grid-cols-[repeat(auto-fit,minmax(165px,1fr))] gap-2 *:h-full">
-        <KpiTile
-          label="Company revenue"
-          value={formatCurrency(totalAgency + totalCompanyExtraProfit, "AED", loc)}
-          accent="emerald"
+      {/* KPI grid — 7 cards. auto-rows-fr + *:h-full keeps every card
+          the same height so the dashboard reads as a uniform grid. */}
+      <div className="grid auto-rows-fr grid-cols-1 gap-3 *:h-full sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        <DualValueTile
+          label="Finance"
           icon={<TrendingUp className="h-4 w-4" />}
+          accent="emerald"
+          values={[
+            {
+              label: "Revenue",
+              value: formatCurrency(
+                totalAgency + totalCompanyExtraProfit,
+                "AED",
+                loc,
+              ),
+            },
+            {
+              label: "Profit",
+              value: formatCurrency(companyNet, "AED", loc),
+              tone: companyNet >= 0 ? "emerald" : "rose",
+            },
+          ]}
         />
-        <KpiTile
-          label="Company profit"
-          value={formatCurrency(companyNet, "AED", loc)}
-          accent={companyNet >= 0 ? "emerald" : "rose"}
-          icon={<Wallet className="h-4 w-4" />}
+        <UpcomingTile
+          variant="company"
+          locale={loc}
+          totalAmount={totalUpcomingAgency}
+          totalBookings={totalUpcomingBookings}
+          rows={propertyTable.map((p) => ({
+            id: p.id,
+            name: p.name,
+            color: p.color,
+            ownerName: p.ownerName,
+            upcomingBookings: p.upcomingBookings,
+            upcomingRevenue: p.upcomingRevenue,
+            upcomingAgency: p.upcomingAgency,
+            upcomingPortal: p.upcomingPortal,
+            upcomingPayout: p.upcomingPayout,
+          }))}
+        />
+        <UpcomingTile
+          variant="owner"
+          locale={loc}
+          totalAmount={totalUpcomingPayout}
+          totalBookings={totalUpcomingBookings}
+          rows={propertyTable.map((p) => ({
+            id: p.id,
+            name: p.name,
+            color: p.color,
+            ownerName: p.ownerName,
+            upcomingBookings: p.upcomingBookings,
+            upcomingRevenue: p.upcomingRevenue,
+            upcomingAgency: p.upcomingAgency,
+            upcomingPortal: p.upcomingPortal,
+            upcomingPayout: p.upcomingPayout,
+          }))}
         />
         <KpiTile
           label="Company expenses"
@@ -289,46 +332,26 @@ export default async function SuperAdminDashboard({
           icon={<Receipt className="h-4 w-4" />}
         />
         <KpiTile
-          label="Company upcoming"
-          value={formatCurrency(totalUpcomingAgency, "AED", loc)}
-          accent="sky"
-          icon={<Clock className="h-4 w-4" />}
-        />
-        <KpiTile
-          label="Owner upcoming"
-          value={formatCurrency(totalUpcomingPayout, "AED", loc)}
-          accent="indigo"
-          icon={<Clock className="h-4 w-4" />}
-        />
-        <KpiTile
           label="Active deposits"
           value={formatCurrency(totalActiveDeposits, "AED", loc)}
           accent="sky"
           icon={<Wallet className="h-4 w-4" />}
         />
         <KpiTile
-          label="Owners amount"
+          label="Owner payout"
           value={formatCurrency(totalOwnerOutstanding, "AED", loc)}
           accent="indigo"
           icon={<Users className="h-4 w-4" />}
         />
-        <KpiTile
-          label="Reservations · all"
-          value={String(allReservationsCount)}
+        <DualValueTile
+          label="Reservations"
+          icon={<CalendarDays className="h-4 w-4" />}
           accent="amber"
-          icon={<CalendarDays className="h-4 w-4" />}
-        />
-        <KpiTile
-          label="Reservations · live"
-          value={String(activeReservationsCount)}
-          accent="rose"
-          icon={<CalendarDays className="h-4 w-4" />}
-        />
-        <KpiTile
-          label="Reservations · upcoming"
-          value={String(totalUpcomingBookings)}
-          accent="sky"
-          icon={<CalendarDays className="h-4 w-4" />}
+          values={[
+            { label: "All", value: String(allReservationsCount) },
+            { label: "Live", value: String(activeReservationsCount) },
+            { label: "Upcoming", value: String(totalUpcomingBookings) },
+          ]}
         />
       </div>
 
@@ -458,3 +481,63 @@ function KpiTile({
   );
 }
 
+// Multiple labelled values side by side, separated by thin vertical
+// dividers so each amount is clearly identifiable. Same shell as KpiTile.
+function DualValueTile({
+  label,
+  icon,
+  accent,
+  values,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  accent: "emerald" | "rose" | "indigo" | "amber" | "sky";
+  values: { label: string; value: string; tone?: "emerald" | "rose" }[];
+}) {
+  const accentMap: Record<typeof accent, string> = {
+    emerald: "from-emerald-500/15 to-emerald-500/0 text-emerald-700",
+    rose: "from-rose-500/15 to-rose-500/0 text-rose-600",
+    indigo: "from-indigo-500/15 to-indigo-500/0 text-indigo-700",
+    amber: "from-amber-500/15 to-amber-500/0 text-amber-700",
+    sky: "from-sky-500/15 to-sky-500/0 text-sky-700",
+  };
+  const toneClass = (tone?: "emerald" | "rose") =>
+    tone === "emerald"
+      ? "text-emerald-700"
+      : tone === "rose"
+        ? "text-rose-600"
+        : "text-[var(--color-foreground)]";
+  return (
+    <Card className="h-full overflow-hidden">
+      <CardBody
+        className={`flex h-full flex-col bg-gradient-to-br ${accentMap[accent]}`}
+      >
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80">
+            {label}
+          </div>
+          <div className="opacity-80">{icon}</div>
+        </div>
+        <div className="mt-auto flex items-end gap-3 pt-3">
+          {values.map((v, i) => (
+            <Fragment key={i}>
+              {i > 0 && (
+                <span className="h-10 w-px self-center bg-current opacity-15" />
+              )}
+              <div className="flex-1">
+                <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
+                  {v.label}
+                </div>
+                <div
+                  className={`text-2xl font-bold tabular-nums ${toneClass(v.tone)}`}
+                >
+                  {v.value}
+                </div>
+              </div>
+            </Fragment>
+          ))}
+        </div>
+      </CardBody>
+    </Card>
+  );
+}

@@ -19,18 +19,49 @@ export type UpcomingRow = {
   upcomingPayout: number;
 };
 
+type Variant = "company" | "owner";
+
+const variantStyle: Record<
+  Variant,
+  {
+    label: string;
+    drawerTitle: string;
+    cardClasses: string;
+    bodyClasses: string;
+    ringClasses: string;
+  }
+> = {
+  company: {
+    label: "Company upcoming",
+    drawerTitle: "Company upcoming",
+    cardClasses: "hover:ring-sky-300/60 hover:shadow-sky-500/10",
+    bodyClasses: "from-sky-500/15 to-sky-500/0 text-sky-700",
+    ringClasses: "",
+  },
+  owner: {
+    label: "Owner upcoming",
+    drawerTitle: "Owner upcoming",
+    cardClasses: "hover:ring-indigo-300/60 hover:shadow-indigo-500/10",
+    bodyClasses: "from-indigo-500/15 to-indigo-500/0 text-indigo-700",
+    ringClasses: "",
+  },
+};
+
 export function UpcomingTile({
+  variant = "company",
   totalAmount,
   totalBookings,
   rows,
   locale,
 }: {
+  variant?: Variant;
   totalAmount: number;
   totalBookings: number;
   rows: UpcomingRow[];
   locale: Locale;
 }) {
   const [open, setOpen] = useState(false);
+  const style = variantStyle[variant];
   const visibleRows = rows.filter((r) => r.upcomingBookings > 0);
 
   return (
@@ -40,11 +71,15 @@ export function UpcomingTile({
         onClick={() => setOpen(true)}
         className="block h-full text-left transition-transform hover:-translate-y-0.5"
       >
-        <Card className="h-full overflow-hidden ring-1 ring-transparent transition-shadow hover:ring-sky-300/60 hover:shadow-lg hover:shadow-sky-500/10">
-          <CardBody className="flex h-full flex-col bg-gradient-to-br from-sky-500/15 to-sky-500/0 text-sky-700">
+        <Card
+          className={`h-full overflow-hidden ring-1 ring-transparent transition-shadow hover:shadow-lg ${style.cardClasses}`}
+        >
+          <CardBody
+            className={`flex h-full flex-col bg-gradient-to-br ${style.bodyClasses}`}
+          >
             <div className="flex items-center justify-between">
               <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80">
-                Upcoming amount
+                {style.label}
               </div>
               <div className="opacity-80">
                 <Clock className="h-4 w-4" />
@@ -61,7 +96,7 @@ export function UpcomingTile({
         open={open}
         onClose={() => setOpen(false)}
         side="right"
-        title="Upcoming reporting"
+        title={style.drawerTitle}
         description={`${totalBookings} reservation${totalBookings === 1 ? "" : "s"} · ${formatCurrency(totalAmount, "AED", locale)} expected`}
       >
         {visibleRows.length === 0 ? (
