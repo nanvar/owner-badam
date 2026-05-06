@@ -220,11 +220,11 @@ export default async function SuperAdminDashboard({
         p.companyExtraProfit > 0,
     );
 
-  // Active reservations: today falls inside checkIn..checkOut. Both counts
-  // exclude pipeline (upcoming) — they are pure realized metrics.
+  // All reservations (realized + upcoming) and live ones (today inside
+  // checkIn..checkOut, realized only — upcoming bookings haven't started).
   const today = new Date();
   const [allReservationsCount, activeReservationsCount] = await Promise.all([
-    prisma.reservation.count({ where: { upcoming: false } }),
+    prisma.reservation.count(),
     prisma.reservation.count({
       where: {
         upcoming: false,
