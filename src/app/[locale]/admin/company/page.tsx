@@ -15,7 +15,7 @@ import { requireRole } from "@/lib/auth";
 import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
 import { formatCurrency } from "@/lib/utils";
-import { UpcomingTile } from "./upcoming-tile";
+import { CombinedUpcomingTile } from "./combined-upcoming-tile";
 
 type PropertyAgg = {
   id: string;
@@ -220,19 +220,24 @@ export default async function SuperAdminDashboard({
         p.companyExtraProfit > 0,
     );
 
-  // All reservations (realized + upcoming) and live ones (today inside
-  // checkIn..checkOut, realized only — upcoming bookings haven't started).
+  // All / Live / Done reservation counts. "All" includes upcoming-flag rows;
+  // "Live" and "Done" only consider realized rows since upcoming are still
+  // pipeline and haven't actually started or finished.
   const today = new Date();
-  const [allReservationsCount, activeReservationsCount] = await Promise.all([
-    prisma.reservation.count(),
-    prisma.reservation.count({
-      where: {
-        upcoming: false,
-        checkIn: { lte: today },
-        checkOut: { gt: today },
-      },
-    }),
-  ]);
+  const [allReservationsCount, activeReservationsCount, doneReservationsCount] =
+    await Promise.all([
+      prisma.reservation.count(),
+      prisma.reservation.count({
+        where: {
+          upcoming: false,
+          checkIn: { lte: today },
+          checkOut: { gt: today },
+        },
+      }),
+      prisma.reservation.count({
+        where: { upcoming: false, checkOut: { lte: today } },
+      }),
+    ]);
 
   // KPIs
   const totalAgency = propertyTable.reduce((s, p) => s + p.agencyEarnings, 0);
@@ -268,71 +273,56 @@ export default async function SuperAdminDashboard({
     <div>
       <PageHeader title="Dashboard" />
 
-      {/* KPI grid — 6 compact cards. auto-rows-fr + *:h-full keeps every
-          card the same height. */}
-      <div className="grid auto-rows-fr grid-cols-1 gap-3 *:h-full sm:grid-cols-2 md:grid-cols-3">
-        <DualValueTile
+      {/* Top row — 4 single-value tiles */}
+      <div className="grid auto-rows-fr grid-cols-2 gap-3 *:h-full md:grid-cols-4">
+        <KpiTile
+          label="Company revenue"
+          value={formatCurrency(
+            totalAgency + totalCompanyExtraProfit,
+            "AED",
+            loc,
+          )}
           accent="emerald"
-          values={[
-            {
-              label: "Revenue",
-              value: formatCurrency(
-                totalAgency + totalCompanyExtraProfit,
-                "AED",
-                loc,
-              ),
-            },
-            {
-              label: "Profit",
-              value: formatCurrency(companyNet, "AED", loc),
-              tone: companyNet >= 0 ? "emerald" : "rose",
-            },
-            {
-              label: "Expenses",
-              value: formatCurrency(totalCompanyExpenses, "AED", loc),
-              tone: "rose",
-            },
-          ]}
+          icon={<TrendingUp className="h-4 w-4" />}
         />
-        <UpcomingTile
-          variant="company"
-          locale={loc}
-          totalAmount={totalUpcomingAgency}
-          totalBookings={totalUpcomingBookings}
-          rows={propertyTable.map((p) => ({
-            id: p.id,
-            name: p.name,
-            color: p.color,
-            ownerName: p.ownerName,
-            upcomingBookings: p.upcomingBookings,
-            upcomingRevenue: p.upcomingRevenue,
-            upcomingAgency: p.upcomingAgency,
-            upcomingPortal: p.upcomingPortal,
-            upcomingPayout: p.upcomingPayout,
-          }))}
+        <KpiTile
+          label="Company profit"
+          value={formatCurrency(companyNet, "AED", loc)}
+          accent={companyNet >= 0 ? "emerald" : "rose"}
+          icon={<Wallet className="h-4 w-4" />}
         />
-        <UpcomingTile
-          variant="owner"
-          locale={loc}
-          totalAmount={totalUpcomingPayout}
-          totalBookings={totalUpcomingBookings}
-          rows={propertyTable.map((p) => ({
-            id: p.id,
-            name: p.name,
-            color: p.color,
-            ownerName: p.ownerName,
-            upcomingBookings: p.upcomingBookings,
-            upcomingRevenue: p.upcomingRevenue,
-            upcomingAgency: p.upcomingAgency,
-            upcomingPortal: p.upcomingPortal,
-            upcomingPayout: p.upcomingPayout,
-          }))}
+        <KpiTile
+          label="Company expenses"
+          value={formatCurrency(totalCompanyExpenses, "AED", loc)}
+          accent="rose"
+          icon={<Receipt className="h-4 w-4" />}
         />
         <KpiTile
           label="Active deposits"
           value={formatCurrency(totalActiveDeposits, "AED", loc)}
           accent="sky"
           icon={<Wallet className="h-4 w-4" />}
+        />
+      </div>
+
+      {/* Bottom row — 3 multi-purpose tiles */}
+      <div className="mt-3 grid auto-rows-fr grid-cols-1 gap-3 *:h-full md:grid-cols-3">
+        <CombinedUpcomingTile
+          locale={loc}
+          companyAmount={totalUpcomingAgency}
+          ownerAmount={totalUpcomingPayout}
+          totalBookings={totalUpcomingBookings}
+          rows={propertyTable.map((p) => ({
+            id: p.id,
+            name: p.name,
+            color: p.color,
+            ownerName: p.ownerName,
+            upcomingBookings: p.upcomingBookings,
+            upcomingRevenue: p.upcomingRevenue,
+            upcomingAgency: p.upcomingAgency,
+            upcomingPortal: p.upcomingPortal,
+            upcomingPayout: p.upcomingPayout,
+          }))}
         />
         <KpiTile
           label="Owner payout"
@@ -347,6 +337,7 @@ export default async function SuperAdminDashboard({
           values={[
             { label: "All", value: String(allReservationsCount) },
             { label: "Live", value: String(activeReservationsCount) },
+            { label: "Done", value: String(doneReservationsCount) },
             { label: "Upcoming", value: String(totalUpcomingBookings) },
           ]}
         />
