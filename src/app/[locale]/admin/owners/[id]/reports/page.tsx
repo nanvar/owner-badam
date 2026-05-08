@@ -129,7 +129,9 @@ export default async function OwnerReportsPage({
                     <td className="px-4 py-3 text-right tabular-nums text-rose-600">
                       {formatCurrency(r.totalExpenses, "AED", loc)}
                     </td>
-                    <td className="px-4 py-3 text-right font-bold tabular-nums text-emerald-700">
+                    <td
+                      className={`px-4 py-3 text-right font-bold tabular-nums ${r.netPayout >= 0 ? "text-emerald-700" : "text-rose-600"}`}
+                    >
                       {formatCurrency(r.netPayout, "AED", loc)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-[var(--color-muted)]">

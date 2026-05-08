@@ -412,7 +412,9 @@ export function ReportBuilder({
                 </span>
                 <span>
                   <span className="text-[var(--color-muted)]">Net</span>{" "}
-                  <span className="text-base font-bold tabular-nums text-emerald-700">
+                  <span
+                    className={`text-base font-bold tabular-nums ${net >= 0 ? "text-emerald-700" : "text-rose-600"}`}
+                  >
                     {formatCurrency(net, "AED", locale)}
                   </span>
                 </span>

@@ -73,10 +73,10 @@ export default async function OwnerDetailPage({
   // actually still owed after expenses + already-paid settlements.
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0);
-  const ownerBalance = Math.max(
-    0,
-    accruedPayout - totalExpenses - totalPaid,
-  );
+  // No clamp — when expenses + paid settlements exceed accrued payout,
+  // the balance is negative and the dashboard should show that the owner
+  // owes the company (otherwise overspent owners look "settled").
+  const ownerPayout = accruedPayout - totalExpenses - totalPaid;
   const totalNights = owner.properties
     .flatMap((p) => p.reservations)
     .reduce((s, r) => s + r.nights, 0);
@@ -130,9 +130,9 @@ export default async function OwnerDetailPage({
         />
         <StatCard
           label="Owner payout"
-          value={formatCurrency(ownerBalance, "AED", loc)}
+          value={formatCurrency(ownerPayout, "AED", loc)}
           icon={<Coins className="h-4 w-4" />}
-          accent="amber"
+          accent={ownerPayout >= 0 ? "amber" : "rose"}
         />
       </div>
 

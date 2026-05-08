@@ -167,7 +167,7 @@ export default async function AdminReportDetailPage({
         <SummaryTile
           label="Net payout"
           value={formatCurrency(report.netPayout, "AED", loc)}
-          accent="brand"
+          accent={report.netPayout >= 0 ? "brand" : "rose"}
         />
       </div>
 

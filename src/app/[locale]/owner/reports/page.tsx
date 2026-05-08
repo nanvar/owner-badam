@@ -70,7 +70,9 @@ export default async function OwnerReportsPage({
                       {r._count.reservations} reservations ·{" "}
                       {r._count.expenses} expenses
                     </div>
-                    <div className="text-lg font-bold tabular-nums text-emerald-700">
+                    <div
+                      className={`text-lg font-bold tabular-nums ${r.netPayout >= 0 ? "text-emerald-700" : "text-rose-600"}`}
+                    >
                       {formatCurrency(r.netPayout, "AED", loc)}
                     </div>
                   </div>

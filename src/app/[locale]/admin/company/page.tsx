@@ -135,7 +135,10 @@ export default async function SuperAdminDashboard({
     const u = upcomingByProp.get(p.id);
     const expenses = expenseByProp.get(p.id) ?? 0;
     const payout = a?._sum.payout ?? 0;
-    const ownerNet = Math.max(0, payout - expenses);
+    // No Math.max clamp — when expenses exceed payout the owner's net is
+    // negative and the dashboard should reflect that (otherwise overspent
+    // properties silently disappear from the outstanding list).
+    const ownerNet = payout - expenses;
     return {
       id: p.id,
       name: p.name,
@@ -206,11 +209,13 @@ export default async function SuperAdminDashboard({
 
   // Outstanding owner debt = realized payout − property expenses − payments
   // already made. Per-property payments come from `paymentsToOwner` (incl.
-  // pro-rated cross-property settlements computed earlier).
+  // pro-rated cross-property settlements computed earlier). No clamp —
+  // negative means the owner owes the company (overspent expenses or
+  // overpaid payouts).
   const reportingTable = propertyTable
     .map((p) => ({
       ...p,
-      ownerDebt: Math.max(0, p.ownerNet - p.paymentsToOwner),
+      ownerDebt: p.ownerNet - p.paymentsToOwner,
     }))
     .filter(
       (p) =>
@@ -254,11 +259,12 @@ export default async function SuperAdminDashboard({
     (s, p) => s + p.upcomingBookings,
     0,
   );
-  // Outstanding-only view: drop properties whose ownerDebt is zero so the
-  // table only ever lists what the company actually still owes.
+  // Outstanding-only view: drop properties whose balance is essentially
+  // zero, but keep both signs — positive (we owe the owner) and negative
+  // (the owner owes us). Larger |debt| comes first.
   const debtTable = reportingTable
-    .filter((p) => p.ownerDebt > 0.005)
-    .sort((a, b) => b.ownerDebt - a.ownerDebt);
+    .filter((p) => Math.abs(p.ownerDebt) > 0.005)
+    .sort((a, b) => Math.abs(b.ownerDebt) - Math.abs(a.ownerDebt));
   const totalOwnerOutstanding = debtTable.reduce(
     (s, p) => s + p.ownerDebt,
     0,
@@ -402,7 +408,9 @@ export default async function SuperAdminDashboard({
                         {p.bookings}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums font-bold text-amber-700">
+                    <td
+                      className={`px-4 py-3 text-right font-bold tabular-nums ${p.ownerDebt >= 0 ? "text-amber-700" : "text-rose-600"}`}
+                    >
                       {formatCurrency(p.ownerDebt, "AED", loc)}
                     </td>
                   </tr>
@@ -418,7 +426,9 @@ export default async function SuperAdminDashboard({
                   >
                     Total
                   </td>
-                  <td className="px-4 py-4 text-right tabular-nums text-base font-bold text-amber-700">
+                  <td
+                    className={`px-4 py-4 text-right tabular-nums text-base font-bold ${totalOwnerOutstanding >= 0 ? "text-amber-700" : "text-rose-600"}`}
+                  >
                     {formatCurrency(totalOwnerOutstanding, "AED", loc)}
                   </td>
                 </tr>
