@@ -76,7 +76,7 @@ export function ReservationsView({
 }) {
   const router = useRouter();
   const [filter, setFilter] = useState<"incomplete" | "complete" | "upcoming">(
-    "incomplete",
+    "complete",
   );
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Item | null>(null);
@@ -566,10 +566,10 @@ function ReservationEditor({
               {formatCurrency(portalCommission, reservation.currency || "AED", locale)}
             </div>
           </div>
-          <details className="text-xs">
-            <summary className="cursor-pointer select-none font-medium text-[var(--color-muted)]">
+          <div className="text-xs">
+            <div className="font-medium text-[var(--color-muted)]">
               {labels.advancedFees ?? "Advanced fees (cleaning, taxes…)"}
-            </summary>
+            </div>
             <div className="mt-2 grid grid-cols-2 gap-3">
               <Field label={`${labels.cleaningFee} (${labels.currency})`} htmlFor="cleaningFee">
                 <Input
@@ -602,7 +602,7 @@ function ReservationEditor({
                 />
               </Field>
             </div>
-          </details>
+          </div>
         </div>
 
         <Field label={labels.notes} htmlFor="notes">
@@ -866,10 +866,10 @@ function CompanyReservationCreator({
               </span>
             </div>
           </div>
-          <details className="text-xs">
-            <summary className="cursor-pointer select-none font-medium text-[var(--color-muted)]">
+          <div className="text-xs">
+            <div className="font-medium text-[var(--color-muted)]">
               {labels.advancedFees ?? "Advanced fees (cleaning, taxes…)"}
-            </summary>
+            </div>
             <div className="mt-2 grid grid-cols-2 gap-3">
               <Field
                 label={`${labels.cleaningFee} (${labels.currency})`}
@@ -908,7 +908,7 @@ function CompanyReservationCreator({
                 />
               </Field>
             </div>
-          </details>
+          </div>
         </div>
 
         <label
