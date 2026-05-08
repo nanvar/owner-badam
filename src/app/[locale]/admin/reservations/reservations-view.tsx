@@ -9,8 +9,8 @@ import {
   useTransition,
 } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
-  Clock,
   Trash2,
   Phone,
   Mail,
@@ -18,11 +18,11 @@ import {
   RefreshCw,
   AlertTriangle,
   Plus,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input, Field, Textarea } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Sheet } from "@/components/ui/sheet";
 import { PageHeader } from "@/components/app-shell";
 import {
@@ -40,9 +40,10 @@ import {
 } from "@/app/actions/reservations";
 import { syncAllAction, type SyncState } from "@/app/actions/sync";
 import { SyncSummary } from "../properties-view";
+import { MonthSelector } from "../company/month-selector";
 import type { Locale } from "@/i18n/config";
 
-type Item = {
+export type ReservationItem = {
   id: string;
   propertyId: string;
   propertyName: string;
@@ -65,7 +66,6 @@ type Item = {
   currency: string;
   notes: string | null;
   detailsFilled: boolean;
-  upcoming: boolean;
   paid: boolean;
   rawSummary: string | null;
 };
@@ -74,19 +74,22 @@ export function ReservationsView({
   locale,
   items,
   properties,
+  monthOptions: monthOpts,
+  selectedMonth,
+  basePath,
   labels,
 }: {
   locale: Locale;
-  items: Item[];
+  items: ReservationItem[];
   properties: { id: string; name: string; color: string }[];
+  monthOptions: { key: string; label: string }[];
+  selectedMonth: string;
+  basePath: string;
   labels: Record<string, string>;
 }) {
   const router = useRouter();
-  const [filter, setFilter] = useState<"incomplete" | "complete" | "upcoming">(
-    "complete",
-  );
   const [search, setSearch] = useState("");
-  const [editing, setEditing] = useState<Item | null>(null);
+  const [editing, setEditing] = useState<ReservationItem | null>(null);
   const [creating, setCreating] = useState(false);
   const [deletePending, startDelete] = useTransition();
   const [syncState, setSyncState] = useState<SyncState | null>(null);
@@ -94,11 +97,6 @@ export function ReservationsView({
 
   const filtered = useMemo(() => {
     const list = items.filter((i) => {
-      if (filter === "upcoming" && !i.upcoming) return false;
-      if (filter === "incomplete" && (i.detailsFilled || i.upcoming))
-        return false;
-      if (filter === "complete" && (!i.detailsFilled || i.upcoming))
-        return false;
       if (search) {
         const q = search.toLowerCase();
         const blob = `${i.guestName ?? ""} ${i.propertyName} ${i.rawSummary ?? ""}`.toLowerCase();
@@ -106,41 +104,27 @@ export function ReservationsView({
       }
       return true;
     });
-    // Stable bucket sort: live (currently ongoing) on top, neither in the
-    // middle, done (already checked out) at the bottom — so admins see
-    // the freshest activity first.
+    // Stable bucket sort: live (currently ongoing) on top, scheduled in
+    // the middle, done (already checked out) at the bottom.
     const now = Date.now();
     const bucket = (i: (typeof items)[number]) => {
-      if (i.upcoming) return 1;
       const ci = new Date(i.checkIn).getTime();
       const co = new Date(i.checkOut).getTime();
       if (ci <= now && co > now) return 0; // live
       if (co <= now) return 2; // done
-      return 1;
+      return 1; // future
     };
     return list
       .map((i, idx) => ({ i, idx, b: bucket(i) }))
       .sort((a, b) => a.b - b.b || a.idx - b.idx)
       .map(({ i }) => i);
-  }, [items, filter, search]);
+  }, [items, search]);
   const firstDoneIndex = useMemo(() => {
     const now = Date.now();
-    return filtered.findIndex((i) => {
-      if (i.upcoming) return false;
-      const co = new Date(i.checkOut).getTime();
-      return co <= now;
-    });
+    return filtered.findIndex((i) => new Date(i.checkOut).getTime() <= now);
   }, [filtered]);
-  const upcomingCount = useMemo(
-    () => items.filter((i) => i.upcoming).length,
-    [items],
-  );
   const incompleteCount = useMemo(
-    () => items.filter((i) => !i.detailsFilled && !i.upcoming).length,
-    [items],
-  );
-  const completeCount = useMemo(
-    () => items.filter((i) => i.detailsFilled && !i.upcoming).length,
+    () => items.filter((i) => !i.detailsFilled).length,
     [items],
   );
 
@@ -183,6 +167,13 @@ export function ReservationsView({
           {syncState.message}
         </div>
       )}
+
+      <MonthSelector
+        options={monthOpts}
+        selected={selectedMonth}
+        basePath={basePath}
+      />
+
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[180px] max-w-md">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
@@ -193,38 +184,18 @@ export function ReservationsView({
             className="pl-9"
           />
         </div>
-        <div className="ml-auto flex rounded-xl border border-[var(--color-border)] bg-white p-1">
-          {(["complete", "upcoming", "incomplete"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                filter === f
-                  ? "bg-[var(--color-brand)] text-white"
-                  : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
-              }`}
-            >
-              {f === "incomplete"
-                ? labels.incomplete
-                : f === "complete"
-                  ? labels.complete
-                  : (labels.upcoming ?? "Upcoming")}
-              <span
-                className={`rounded-full px-1.5 text-[10px] font-bold ${
-                  filter === f
-                    ? "bg-white/25 text-white"
-                    : "bg-[var(--color-surface-2)] text-[var(--color-muted)]"
-                }`}
-              >
-                {f === "incomplete"
-                  ? incompleteCount
-                  : f === "complete"
-                    ? completeCount
-                    : upcomingCount}
-              </span>
-            </button>
-          ))}
-        </div>
+        <Link
+          href={`${basePath}/incomplete`}
+          className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--color-muted)] transition-colors hover:border-amber-500/40 hover:text-amber-700"
+        >
+          <AlertCircle className="h-4 w-4" />
+          Incomplete
+          {incompleteCount > 0 && (
+            <span className="rounded-full bg-amber-500/15 px-1.5 text-[10px] font-bold text-amber-700">
+              {incompleteCount}
+            </span>
+          )}
+        </Link>
       </div>
 
       {filtered.length === 0 ? (
@@ -260,7 +231,7 @@ export function ReservationsView({
                     <tr
                       onClick={() => setEditing(r)}
                       className={`cursor-pointer border-t border-[var(--color-border)] ${
-                        !r.paid && !r.upcoming
+                        !r.paid
                           ? "bg-amber-500/10 hover:bg-amber-500/15"
                           : "hover:bg-[var(--color-surface-2)]/60"
                       }`}
@@ -290,14 +261,7 @@ export function ReservationsView({
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        {r.upcoming && (
-                          <Badge tone="info">
-                            <Clock className="h-3 w-3" />
-                            {labels.upcoming ?? "Upcoming"}
-                          </Badge>
-                        )}
                         {(() => {
-                          if (r.upcoming) return null;
                           const now = Date.now();
                           const ci = new Date(r.checkIn).getTime();
                           const co = new Date(r.checkOut).getTime();
@@ -369,7 +333,7 @@ export function ReservationsView({
   );
 }
 
-function ReservationEditor({
+export function ReservationEditor({
   reservation,
   labels,
   locale,
@@ -377,7 +341,7 @@ function ReservationEditor({
   onDelete,
   deletePending,
 }: {
-  reservation: Item | null;
+  reservation: ReservationItem | null;
   labels: Record<string, string>;
   locale: Locale;
   onClose: () => void;
@@ -389,9 +353,6 @@ function ReservationEditor({
     updateReservationAction,
     undefined,
   );
-  // Track the raw string so the user can keep "0" or partial values like
-  // "0." in the field without React snapping back to empty. The numeric
-  // value used for owner-payout math is derived below.
   const [totalPriceStr, setTotalPriceStr] = useState<string>(
     reservation?.totalPrice ? String(reservation.totalPrice) : "",
   );
@@ -408,13 +369,7 @@ function ReservationEditor({
   const totalPrice = parseFloat(totalPriceStr) || 0;
   const agencyCommission = parseFloat(agencyCommissionStr) || 0;
   const portalCommission = parseFloat(portalCommissionStr) || 0;
-  const [upcoming, setUpcoming] = useState<boolean>(
-    reservation?.upcoming ?? false,
-  );
   const [paid, setPaid] = useState<boolean>(reservation?.paid ?? false);
-  // 12-month "Bill into" picker. Defaults to the reservation's checkIn
-  // month so the existing billing window is preserved unless admin
-  // explicitly moves the entry.
   const monthOpts = monthOptions();
   const defaultMonth = reservation
     ? monthKeyFor(reservation.checkIn)
@@ -456,61 +411,30 @@ function ReservationEditor({
         <input type="hidden" name="currency" value={reservation.currency || "AED"} />
         <input
           type="hidden"
-          name="upcoming"
-          value={upcoming ? "true" : "false"}
-        />
-        <input
-          type="hidden"
           name="paid"
           value={paid ? "true" : "false"}
         />
 
-        <div className="grid gap-2 sm:grid-cols-2">
-          <label
-            className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
-              upcoming
-                ? "border-sky-500/40 bg-sky-500/10"
-                : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={upcoming}
-              onChange={(e) => setUpcoming(e.target.checked)}
-              className="mt-1 h-4 w-4 accent-sky-500"
-            />
-            <div className="flex-1 text-sm">
-              <div className="flex items-center gap-1.5 font-semibold">
-                <Clock className="h-3.5 w-3.5 text-sky-500" />
-                {labels.upcoming ?? "Upcoming"}
-              </div>
-              <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                {labels.upcomingHint ??
-                  "Mark as future / not yet paid."}
-              </div>
+        <label
+          className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
+            paid
+              ? "border-emerald-500/40 bg-emerald-500/10"
+              : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={paid}
+            onChange={(e) => setPaid(e.target.checked)}
+            className="mt-1 h-4 w-4 accent-emerald-500"
+          />
+          <div className="flex-1 text-sm">
+            <div className="font-semibold">Paid</div>
+            <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+              Payment received from the guest / portal.
             </div>
-          </label>
-          <label
-            className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
-              paid
-                ? "border-emerald-500/40 bg-emerald-500/10"
-                : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={paid}
-              onChange={(e) => setPaid(e.target.checked)}
-              className="mt-1 h-4 w-4 accent-emerald-500"
-            />
-            <div className="flex-1 text-sm">
-              <div className="font-semibold">Paid</div>
-              <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                Payment received from the guest / portal.
-              </div>
-            </div>
-          </label>
-        </div>
+          </div>
+        </label>
 
         <Field label="Bill into" htmlFor="bill-resv">
           <select
@@ -711,7 +635,6 @@ function CompanyReservationCreator({
   const totalPrice = parseFloat(totalPriceStr) || 0;
   const agencyCommission = parseFloat(agencyCommissionStr) || 0;
   const portalCommission = parseFloat(portalCommissionStr) || 0;
-  const [upcoming, setUpcoming] = useState(false);
   const [paid, setPaid] = useState(false);
   const monthOpts = monthOptions();
   const currentMonthKey =
@@ -753,11 +676,6 @@ function CompanyReservationCreator({
       }
     >
       <form action={action} className="space-y-4">
-        <input
-          type="hidden"
-          name="upcoming"
-          value={upcoming ? "true" : "false"}
-        />
         <input
           type="hidden"
           name="paid"
@@ -917,51 +835,26 @@ function CompanyReservationCreator({
           </div>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2">
-          <label
-            className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
-              upcoming
-                ? "border-sky-500/40 bg-sky-500/10"
-                : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={upcoming}
-              onChange={(e) => setUpcoming(e.target.checked)}
-              className="mt-1 h-4 w-4 accent-sky-500"
-            />
-            <div className="flex-1 text-sm">
-              <div className="flex items-center gap-1.5 font-semibold">
-                <Clock className="h-3.5 w-3.5 text-sky-500" />
-                {labels.upcoming ?? "Upcoming"}
-              </div>
-              <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                {labels.upcomingHint}
-              </div>
+        <label
+          className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
+            paid
+              ? "border-emerald-500/40 bg-emerald-500/10"
+              : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={paid}
+            onChange={(e) => setPaid(e.target.checked)}
+            className="mt-1 h-4 w-4 accent-emerald-500"
+          />
+          <div className="flex-1 text-sm">
+            <div className="font-semibold">Paid</div>
+            <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+              Payment received from the guest.
             </div>
-          </label>
-          <label
-            className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
-              paid
-                ? "border-emerald-500/40 bg-emerald-500/10"
-                : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={paid}
-              onChange={(e) => setPaid(e.target.checked)}
-              className="mt-1 h-4 w-4 accent-emerald-500"
-            />
-            <div className="flex-1 text-sm">
-              <div className="font-semibold">Paid</div>
-              <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                Payment received from the guest.
-              </div>
-            </div>
-          </label>
-        </div>
+          </div>
+        </label>
 
         <Field label="Bill into" htmlFor="bill-cr">
           <select

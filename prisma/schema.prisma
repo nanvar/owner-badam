@@ -323,6 +323,10 @@ model OwnerPayment {
   method       String?   // bank, cash, transfer, …
   reference    String?   // invoice / period / external ref
   notes        String?   @db.Text
+  // Explicit billing month (YYYY-MM) — selected by the admin so reports
+  // attribute the payout to the period it settles, separate from the
+  // cash-out date stored above.
+  monthKey     String?   @db.VarChar(7)
   recordedById String?
   recordedBy   User?     @relation("OwnerPaymentRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
   createdAt    DateTime  @default(now())
@@ -331,6 +335,7 @@ model OwnerPayment {
   @@index([ownerId])
   @@index([propertyId])
   @@index([date])
+  @@index([monthKey])
 }
 
 // Push-notification device tokens for the owner mobile app. One owner

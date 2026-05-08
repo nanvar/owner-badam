@@ -21,7 +21,6 @@ const ReservationSchema = z.object({
   payout: z.coerce.number().nonnegative(),
   currency: z.string().default("AED"),
   notes: z.string().max(2000).optional().or(z.literal("")),
-  upcoming: z.coerce.boolean().optional(),
   paid: z.coerce.boolean().optional(),
   monthKey: z
     .string()
@@ -56,7 +55,6 @@ export async function updateReservationAction(
     payout: formData.get("payout") || 0,
     currency: (formData.get("currency") as string) || "AED",
     notes: formData.get("notes") || "",
-    upcoming: formData.get("upcoming") === "on" || formData.get("upcoming") === "true",
     paid: formData.get("paid") === "on" || formData.get("paid") === "true",
     monthKey: (formData.get("monthKey") as string | null) ?? "",
   });
@@ -91,7 +89,7 @@ export async function updateReservationAction(
       payout: data.payout,
       currency: data.currency,
       notes: data.notes || null,
-      upcoming: data.upcoming ?? false,
+      upcoming: false,
       paid: data.paid ?? false,
       monthKey,
       detailsFilled: true,
@@ -124,7 +122,6 @@ const CompanyReservationSchema = z.object({
   taxes: z.coerce.number().nonnegative().default(0),
   currency: z.string().default("AED"),
   notes: z.string().max(2000).optional().or(z.literal("")),
-  upcoming: z.coerce.boolean().optional(),
   paid: z.coerce.boolean().optional(),
   monthKey: z
     .string()
@@ -154,7 +151,6 @@ export async function createCompanyReservationAction(
     taxes: formData.get("taxes") || 0,
     currency: (formData.get("currency") as string) || "AED",
     notes: formData.get("notes") || "",
-    upcoming: formData.get("upcoming") === "on" || formData.get("upcoming") === "true",
     paid: formData.get("paid") === "on" || formData.get("paid") === "true",
     monthKey: (formData.get("monthKey") as string | null) ?? "",
   });
@@ -205,7 +201,7 @@ export async function createCompanyReservationAction(
       payout,
       currency: data.currency,
       notes: data.notes || null,
-      upcoming: data.upcoming ?? false,
+      upcoming: false,
       paid: data.paid ?? false,
       monthKey: data.monthKey || monthKeyFor(checkIn),
       detailsFilled: true,

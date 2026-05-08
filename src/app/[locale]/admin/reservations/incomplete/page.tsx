@@ -2,58 +2,30 @@ import { setRequestLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
-import { monthKeyFor, monthLabel } from "@/lib/utils";
-import { ReservationsView } from "./reservations-view";
+import { IncompleteReservationsView } from "./incomplete-view";
 
-export default async function ReservationsAdminPage({
+export default async function IncompleteReservationsPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ month?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
-  const sp = await searchParams;
 
-  const monthsRaw = await prisma.reservation.findMany({
-    where: { monthKey: { not: null } },
-    select: { monthKey: true },
-    distinct: ["monthKey"],
+  const reservations = await prisma.reservation.findMany({
+    where: { detailsFilled: false },
+    include: { property: { select: { id: true, name: true, color: true } } },
+    orderBy: { checkIn: "desc" },
   });
-  const currentMonth = monthKeyFor(new Date());
-  const monthSet = new Set<string>([currentMonth]);
-  for (const r of monthsRaw) if (r.monthKey) monthSet.add(r.monthKey);
-  const monthOpts = [...monthSet]
-    .sort()
-    .reverse()
-    .map((k) => ({ key: k, label: monthLabel(`${k}-01`, locale) }));
-  const selectedMonth =
-    sp.month && monthSet.has(sp.month) ? sp.month : currentMonth;
-
-  const [reservations, propertyOptions] = await Promise.all([
-    prisma.reservation.findMany({
-      where: { monthKey: selectedMonth },
-      include: { property: { select: { id: true, name: true, color: true } } },
-      orderBy: { checkIn: "desc" },
-    }),
-    prisma.property.findMany({
-      select: { id: true, name: true, color: true },
-      orderBy: { name: "asc" },
-    }),
-  ]);
 
   const t = await getTranslations({ locale, namespace: "admin" });
   const tCommon = await getTranslations({ locale, namespace: "common" });
 
   return (
-    <ReservationsView
+    <IncompleteReservationsView
       locale={locale as Locale}
-      properties={propertyOptions}
-      monthOptions={monthOpts}
-      selectedMonth={selectedMonth}
-      basePath={`/${locale}/admin/reservations`}
+      backHref={`/${locale}/admin/reservations`}
       items={reservations.map((r) => ({
         id: r.id,
         propertyId: r.propertyId,
@@ -101,14 +73,9 @@ export default async function ReservationsAdminPage({
         notes: tCommon("notes"),
         save: t("saveDetails"),
         cancel: tCommon("cancel"),
-        newReservation: t("newReservation"),
-        newReservationHint: t("newReservationHint"),
         fillDetails: t("fillDetails"),
         delete: tCommon("delete"),
         currency: tCommon("currency"),
-        all: tCommon("all"),
-        syncNow: tCommon("syncNow"),
-        syncing: tCommon("syncing"),
       }}
     />
   );

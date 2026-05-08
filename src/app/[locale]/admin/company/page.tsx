@@ -81,12 +81,6 @@ export default async function SuperAdminDashboard({
   const selectedMonth =
     sp.month && monthSet.has(sp.month) ? sp.month : currentMonth;
 
-  // OwnerPayment doesn't carry a monthKey — derive a date range from the
-  // selected month so we can filter cash-out events to the same window.
-  const [yy, mm] = selectedMonth.split("-").map(Number);
-  const monthStart = new Date(Date.UTC(yy, mm - 1, 1));
-  const monthEnd = new Date(Date.UTC(yy, mm, 1));
-
   // === Aggregations (all scoped to the selected month) ===
   const [
     propertyAggs,
@@ -113,7 +107,7 @@ export default async function SuperAdminDashboard({
     }),
     prisma.ownerPayment.groupBy({
       by: ["propertyId"],
-      where: { date: { gte: monthStart, lt: monthEnd } },
+      where: { monthKey: selectedMonth },
       _sum: { amount: true },
     }),
     prisma.companyExpense.groupBy({
@@ -140,7 +134,7 @@ export default async function SuperAdminDashboard({
   );
   const crossOwnerPayments = await prisma.ownerPayment.groupBy({
     by: ["ownerId"],
-    where: { propertyId: null, date: { gte: monthStart, lt: monthEnd } },
+    where: { propertyId: null, monthKey: selectedMonth },
     _sum: { amount: true },
   });
   const crossPaymentsByOwner = new Map(

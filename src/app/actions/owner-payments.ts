@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { pushToOwner } from "@/lib/push";
+import { monthKeyFor } from "@/lib/utils";
 
 const OwnerPaymentSchema = z.object({
   ownerId: z.string().min(1),
@@ -13,6 +14,11 @@ const OwnerPaymentSchema = z.object({
   method: z.string().max(60).optional().or(z.literal("")),
   reference: z.string().max(120).optional().or(z.literal("")),
   notes: z.string().max(2000).optional().or(z.literal("")),
+  monthKey: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional()
+    .or(z.literal("")),
 });
 
 export type OwnerPaymentState =
@@ -33,6 +39,7 @@ export async function createOwnerPaymentAction(
     method: formData.get("method") || "",
     reference: formData.get("reference") || "",
     notes: formData.get("notes") || "",
+    monthKey: (formData.get("monthKey") as string | null) ?? "",
   });
   if (!parsed.success) {
     return {
@@ -55,6 +62,7 @@ export async function createOwnerPaymentAction(
         method: v.method || null,
         reference: v.reference || null,
         notes: v.notes || null,
+        monthKey: v.monthKey || monthKeyFor(date),
         recordedById: session.userId,
       },
     });
