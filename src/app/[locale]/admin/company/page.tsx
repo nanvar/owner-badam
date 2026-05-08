@@ -52,7 +52,7 @@ export default async function SuperAdminDashboard({
   // Distinct months that actually have data, across all the month-bucketed
   // tables. The current month is always present so the picker has a sensible
   // default even on a fresh database.
-  const [resMonths, expMonths, coMonths] = await Promise.all([
+  const [resMonths, expMonths, coMonths, payMonths] = await Promise.all([
     prisma.reservation.findMany({
       where: { monthKey: { not: null } },
       select: { monthKey: true },
@@ -68,16 +68,22 @@ export default async function SuperAdminDashboard({
       select: { monthKey: true },
       distinct: ["monthKey"],
     }),
+    prisma.ownerPayment.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
   ]);
   const currentMonth = monthKeyFor(new Date());
   const monthSet = new Set<string>([currentMonth]);
   for (const r of resMonths) if (r.monthKey) monthSet.add(r.monthKey);
   for (const r of expMonths) if (r.monthKey) monthSet.add(r.monthKey);
   for (const r of coMonths) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const r of payMonths) if (r.monthKey) monthSet.add(r.monthKey);
   const monthOpts = [...monthSet]
     .sort()
     .reverse()
-    .map((k) => ({ key: k, label: monthLabel(`${k}-01`, loc) }));
+    .map((k) => ({ key: k, label: monthLabel(k, loc) }));
   const selectedMonth =
     sp.month && monthSet.has(sp.month) ? sp.month : currentMonth;
 

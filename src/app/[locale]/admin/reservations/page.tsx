@@ -28,7 +28,7 @@ export default async function ReservationsAdminPage({
   const monthOpts = [...monthSet]
     .sort()
     .reverse()
-    .map((k) => ({ key: k, label: monthLabel(`${k}-01`, locale) }));
+    .map((k) => ({ key: k, label: monthLabel(k, locale) }));
   const selectedMonth =
     sp.month && monthSet.has(sp.month) ? sp.month : currentMonth;
 
