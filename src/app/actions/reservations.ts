@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
+import { monthKeyFor } from "@/lib/utils";
 
 const ReservationSchema = z.object({
   id: z.string().min(1),
@@ -21,6 +22,12 @@ const ReservationSchema = z.object({
   currency: z.string().default("AED"),
   notes: z.string().max(2000).optional().or(z.literal("")),
   upcoming: z.coerce.boolean().optional(),
+  paid: z.coerce.boolean().optional(),
+  monthKey: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional()
+    .or(z.literal("")),
 });
 
 export type ReservationState =
@@ -50,11 +57,23 @@ export async function updateReservationAction(
     currency: (formData.get("currency") as string) || "AED",
     notes: formData.get("notes") || "",
     upcoming: formData.get("upcoming") === "on" || formData.get("upcoming") === "true",
+    paid: formData.get("paid") === "on" || formData.get("paid") === "true",
+    monthKey: (formData.get("monthKey") as string | null) ?? "",
   });
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
   const data = parsed.data;
+  // Form sends the explicit billing month; if omitted (older clients),
+  // fall back to the reservation's checkIn month.
+  let monthKey: string | null = data.monthKey || null;
+  if (!monthKey) {
+    const existing = await prisma.reservation.findUnique({
+      where: { id: data.id },
+      select: { checkIn: true },
+    });
+    monthKey = existing ? monthKeyFor(existing.checkIn) : null;
+  }
   await prisma.reservation.update({
     where: { id: data.id },
     data: {
@@ -73,6 +92,8 @@ export async function updateReservationAction(
       currency: data.currency,
       notes: data.notes || null,
       upcoming: data.upcoming ?? false,
+      paid: data.paid ?? false,
+      monthKey,
       detailsFilled: true,
     },
   });
@@ -104,6 +125,12 @@ const CompanyReservationSchema = z.object({
   currency: z.string().default("AED"),
   notes: z.string().max(2000).optional().or(z.literal("")),
   upcoming: z.coerce.boolean().optional(),
+  paid: z.coerce.boolean().optional(),
+  monthKey: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional()
+    .or(z.literal("")),
 });
 
 export async function createCompanyReservationAction(
@@ -128,6 +155,8 @@ export async function createCompanyReservationAction(
     currency: (formData.get("currency") as string) || "AED",
     notes: formData.get("notes") || "",
     upcoming: formData.get("upcoming") === "on" || formData.get("upcoming") === "true",
+    paid: formData.get("paid") === "on" || formData.get("paid") === "true",
+    monthKey: (formData.get("monthKey") as string | null) ?? "",
   });
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -177,6 +206,8 @@ export async function createCompanyReservationAction(
       currency: data.currency,
       notes: data.notes || null,
       upcoming: data.upcoming ?? false,
+      paid: data.paid ?? false,
+      monthKey: data.monthKey || monthKeyFor(checkIn),
       detailsFilled: true,
     },
   });

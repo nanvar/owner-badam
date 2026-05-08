@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { COMPANY_EXPENSE_CATEGORIES } from "@/lib/company-expense-types";
+import { monthKeyFor } from "@/lib/utils";
 
 // Discriminated schema covers EXPENSE (with category, no property),
 // PROFIT (with property + description), and DEPOSIT (with property + amount;
@@ -20,6 +21,11 @@ const Schema = z
       .or(z.literal("")),
     description: z.string().max(500).optional().or(z.literal("")),
     amount: z.coerce.number().nonnegative(),
+    monthKey: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/)
+      .optional()
+      .or(z.literal("")),
   })
   .refine(
     (v) =>
@@ -65,6 +71,7 @@ export async function upsertCompanyExpenseAction(
     category: (formData.get("category") as string | null) || "",
     description: (formData.get("description") as string | null) ?? "",
     amount: formData.get("amount") || 0,
+    monthKey: (formData.get("monthKey") as string | null) ?? "",
   });
   if (!parsed.success) {
     return {
@@ -84,6 +91,7 @@ export async function upsertCompanyExpenseAction(
       ? (v.category as (typeof COMPANY_EXPENSE_CATEGORIES)[number])
       : null,
     propertyId: isExpense ? null : v.propertyId || null,
+    monthKey: v.monthKey || monthKeyFor(date),
   };
   if (v.id) {
     await prisma.companyExpense.update({

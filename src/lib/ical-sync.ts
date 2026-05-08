@@ -3,6 +3,7 @@
 // DESCRIPTION), so a ~50-line parser is reliable enough and avoids pulling
 // in node-ical + temporal-polyfill + their native bindings on prod.
 import { prisma } from "./prisma";
+import { monthKeyFor } from "./utils";
 
 export type SyncOutcome = {
   propertyId: string;
@@ -256,6 +257,7 @@ export async function syncProperty(propertyId: string): Promise<SyncOutcome> {
             currency: "AED",
             rawSummary: ev.summary,
             rawDescription: ev.description,
+            monthKey: monthKeyFor(ev.start),
             detailsFilled: false,
           },
         });

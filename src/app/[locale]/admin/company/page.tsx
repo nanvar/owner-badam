@@ -14,8 +14,8 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
-import { formatCurrency } from "@/lib/utils";
-import { CombinedUpcomingTile } from "./combined-upcoming-tile";
+import { formatCurrency, monthKeyFor, monthLabel } from "@/lib/utils";
+import { MonthSelector } from "./month-selector";
 
 type PropertyAgg = {
   id: string;
@@ -32,32 +32,64 @@ type PropertyAgg = {
   ownerNet: number;
   paymentsToOwner: number;
   companyExtraProfit: number;
-  upcomingBookings: number;
-  upcomingRevenue: number;
-  upcomingAgency: number;
-  upcomingPortal: number;
-  upcomingPayout: number;
 };
 
 export default async function SuperAdminDashboard({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ month?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
   await requireRole("SUPERADMIN");
+  const sp = await searchParams;
 
   const loc = locale as Locale;
 
-  // === Aggregations ===
-  // Per-property: realized + upcoming reservation sums, property expenses,
-  // owner payments (per-property only — null-property settlements are
-  // pro-rated separately at owner level), and company-side extra profit.
+  // Distinct months that actually have data, across all the month-bucketed
+  // tables. The current month is always present so the picker has a sensible
+  // default even on a fresh database.
+  const [resMonths, expMonths, coMonths] = await Promise.all([
+    prisma.reservation.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+    prisma.expense.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+    prisma.companyExpense.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+  ]);
+  const currentMonth = monthKeyFor(new Date());
+  const monthSet = new Set<string>([currentMonth]);
+  for (const r of resMonths) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const r of expMonths) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const r of coMonths) if (r.monthKey) monthSet.add(r.monthKey);
+  const monthOpts = [...monthSet]
+    .sort()
+    .reverse()
+    .map((k) => ({ key: k, label: monthLabel(`${k}-01`, loc) }));
+  const selectedMonth =
+    sp.month && monthSet.has(sp.month) ? sp.month : currentMonth;
+
+  // OwnerPayment doesn't carry a monthKey — derive a date range from the
+  // selected month so we can filter cash-out events to the same window.
+  const [yy, mm] = selectedMonth.split("-").map(Number);
+  const monthStart = new Date(Date.UTC(yy, mm - 1, 1));
+  const monthEnd = new Date(Date.UTC(yy, mm, 1));
+
+  // === Aggregations (all scoped to the selected month) ===
   const [
     propertyAggs,
-    upcomingAggs,
     expenseAggs,
     paymentAggs,
     companyProfitAggs,
@@ -65,18 +97,7 @@ export default async function SuperAdminDashboard({
   ] = await Promise.all([
     prisma.reservation.groupBy({
       by: ["propertyId"],
-      where: { upcoming: false },
-      _count: { _all: true },
-      _sum: {
-        totalPrice: true,
-        agencyCommission: true,
-        portalCommission: true,
-        payout: true,
-      },
-    }),
-    prisma.reservation.groupBy({
-      by: ["propertyId"],
-      where: { upcoming: true },
+      where: { monthKey: selectedMonth },
       _count: { _all: true },
       _sum: {
         totalPrice: true,
@@ -87,15 +108,17 @@ export default async function SuperAdminDashboard({
     }),
     prisma.expense.groupBy({
       by: ["propertyId"],
+      where: { monthKey: selectedMonth },
       _sum: { amount: true },
     }),
     prisma.ownerPayment.groupBy({
       by: ["propertyId"],
+      where: { date: { gte: monthStart, lt: monthEnd } },
       _sum: { amount: true },
     }),
     prisma.companyExpense.groupBy({
       by: ["propertyId"],
-      where: { kind: "PROFIT" },
+      where: { kind: "PROFIT", monthKey: selectedMonth },
       _sum: { amount: true },
     }),
     prisma.property.findMany({
@@ -104,24 +127,20 @@ export default async function SuperAdminDashboard({
   ]);
 
   const realizedByProp = new Map(propertyAggs.map((a) => [a.propertyId, a]));
-  const upcomingByProp = new Map(upcomingAggs.map((a) => [a.propertyId, a]));
   const expenseByProp = new Map(
     expenseAggs.map((a) => [a.propertyId, a._sum.amount ?? 0]),
   );
   const profitByProp = new Map(
     companyProfitAggs.map((a) => [a.propertyId ?? "", a._sum.amount ?? 0]),
   );
-  // Per-property owner payments (with explicit propertyId set on the row).
   const directPaymentsByProp = new Map(
     paymentAggs
       .filter((a) => !!a.propertyId)
       .map((a) => [a.propertyId as string, a._sum.amount ?? 0]),
   );
-  // Cross-property settlements: those with propertyId = null — sum per
-  // owner so we can pro-rate them across that owner's properties below.
   const crossOwnerPayments = await prisma.ownerPayment.groupBy({
     by: ["ownerId"],
-    where: { propertyId: null },
+    where: { propertyId: null, date: { gte: monthStart, lt: monthEnd } },
     _sum: { amount: true },
   });
   const crossPaymentsByOwner = new Map(
@@ -132,12 +151,8 @@ export default async function SuperAdminDashboard({
   // up, even ones with no activity in the period — easier to spot zeros).
   const baseTable = properties.map((p) => {
     const a = realizedByProp.get(p.id);
-    const u = upcomingByProp.get(p.id);
     const expenses = expenseByProp.get(p.id) ?? 0;
     const payout = a?._sum.payout ?? 0;
-    // No Math.max clamp — when expenses exceed payout the owner's net is
-    // negative and the dashboard should reflect that (otherwise overspent
-    // properties silently disappear from the outstanding list).
     const ownerNet = payout - expenses;
     return {
       id: p.id,
@@ -154,11 +169,6 @@ export default async function SuperAdminDashboard({
       ownerNet,
       paymentsToOwner: directPaymentsByProp.get(p.id) ?? 0,
       companyExtraProfit: profitByProp.get(p.id) ?? 0,
-      upcomingBookings: u?._count._all ?? 0,
-      upcomingRevenue: u?._sum.totalPrice ?? 0,
-      upcomingAgency: u?._sum.agencyCommission ?? 0,
-      upcomingPortal: u?._sum.portalCommission ?? 0,
-      upcomingPayout: u?._sum.payout ?? 0,
     } satisfies PropertyAgg;
   });
 
@@ -189,12 +199,12 @@ export default async function SuperAdminDashboard({
   const [companyEntryAggs, activeDeposits] = await Promise.all([
     prisma.companyExpense.groupBy({
       by: ["kind"],
-      where: { kind: { in: ["EXPENSE", "PROFIT"] } },
+      where: { kind: { in: ["EXPENSE", "PROFIT"] }, monthKey: selectedMonth },
       _sum: { amount: true },
       _count: { _all: true },
     }),
     prisma.companyExpense.aggregate({
-      where: { kind: "DEPOSIT", refundedAt: null },
+      where: { kind: "DEPOSIT", refundedAt: null, monthKey: selectedMonth },
       _sum: { amount: true },
       _count: { _all: true },
     }),
@@ -202,10 +212,8 @@ export default async function SuperAdminDashboard({
   const expenseRow = companyEntryAggs.find((r) => r.kind === "EXPENSE");
   const profitRow = companyEntryAggs.find((r) => r.kind === "PROFIT");
   const totalCompanyExpenses = expenseRow?._sum.amount ?? 0;
-  const companyExpenseCount = expenseRow?._count._all ?? 0;
   const totalCompanyExtraProfit = profitRow?._sum.amount ?? 0;
   const totalActiveDeposits = activeDeposits._sum.amount ?? 0;
-  const activeDepositsCount = activeDeposits._count._all;
 
   // Outstanding owner debt = realized payout − property expenses − payments
   // already made. Per-property payments come from `paymentsToOwner` (incl.
@@ -225,40 +233,32 @@ export default async function SuperAdminDashboard({
         p.companyExtraProfit > 0,
     );
 
-  // All / Live / Done reservation counts. "All" includes upcoming-flag rows;
-  // "Live" and "Done" only consider realized rows since upcoming are still
-  // pipeline and haven't actually started or finished.
+  // Reservation counts within the selected month.
   const today = new Date();
-  const [allReservationsCount, activeReservationsCount, doneReservationsCount] =
-    await Promise.all([
-      prisma.reservation.count(),
-      prisma.reservation.count({
-        where: {
-          upcoming: false,
-          checkIn: { lte: today },
-          checkOut: { gt: today },
-        },
-      }),
-      prisma.reservation.count({
-        where: { upcoming: false, checkOut: { lte: today } },
-      }),
-    ]);
+  const [
+    allReservationsCount,
+    activeReservationsCount,
+    doneReservationsCount,
+    upcomingReservationsCount,
+  ] = await Promise.all([
+    prisma.reservation.count({ where: { monthKey: selectedMonth } }),
+    prisma.reservation.count({
+      where: {
+        monthKey: selectedMonth,
+        checkIn: { lte: today },
+        checkOut: { gt: today },
+      },
+    }),
+    prisma.reservation.count({
+      where: { monthKey: selectedMonth, checkOut: { lte: today } },
+    }),
+    prisma.reservation.count({
+      where: { monthKey: selectedMonth, checkIn: { gt: today } },
+    }),
+  ]);
 
   // KPIs
   const totalAgency = propertyTable.reduce((s, p) => s + p.agencyEarnings, 0);
-  const totalPortal = propertyTable.reduce((s, p) => s + p.portalCommissions, 0);
-  const totalUpcomingAgency = propertyTable.reduce(
-    (s, p) => s + p.upcomingAgency,
-    0,
-  );
-  const totalUpcomingPayout = propertyTable.reduce(
-    (s, p) => s + p.upcomingPayout,
-    0,
-  );
-  const totalUpcomingBookings = propertyTable.reduce(
-    (s, p) => s + p.upcomingBookings,
-    0,
-  );
   // Outstanding-only view: drop properties whose balance is essentially
   // zero, but keep both signs — positive (we owe the owner) and negative
   // (the owner owes us). Larger |debt| comes first.
@@ -269,15 +269,18 @@ export default async function SuperAdminDashboard({
     (s, p) => s + p.ownerDebt,
     0,
   );
-  const distinctOwners = new Set(debtTable.map((p) => p.ownerId)).size;
-  // Profit and revenue tiles use realized only. Upcoming is split out
-  // into its own tile (clickable for the per-property breakdown).
   const companyNet =
     totalAgency + totalCompanyExtraProfit - totalCompanyExpenses;
 
   return (
     <div>
       <PageHeader title="Dashboard" />
+
+      <MonthSelector
+        options={monthOpts}
+        selected={selectedMonth}
+        basePath={`/${loc}/admin/company`}
+      />
 
       {/* Top row — 4 single-value tiles */}
       <div className="grid auto-rows-fr grid-cols-2 gap-3 *:h-full md:grid-cols-4">
@@ -311,25 +314,8 @@ export default async function SuperAdminDashboard({
         />
       </div>
 
-      {/* Bottom row — 3 multi-purpose tiles */}
-      <div className="mt-3 grid auto-rows-fr grid-cols-1 gap-3 *:h-full md:grid-cols-3">
-        <CombinedUpcomingTile
-          locale={loc}
-          companyAmount={totalUpcomingAgency}
-          ownerAmount={totalUpcomingPayout}
-          totalBookings={totalUpcomingBookings}
-          rows={propertyTable.map((p) => ({
-            id: p.id,
-            name: p.name,
-            color: p.color,
-            ownerName: p.ownerName,
-            upcomingBookings: p.upcomingBookings,
-            upcomingRevenue: p.upcomingRevenue,
-            upcomingAgency: p.upcomingAgency,
-            upcomingPortal: p.upcomingPortal,
-            upcomingPayout: p.upcomingPayout,
-          }))}
-        />
+      {/* Bottom row */}
+      <div className="mt-3 grid auto-rows-fr grid-cols-1 gap-3 *:h-full md:grid-cols-2">
         <KpiTile
           label="Owner payout"
           value={formatCurrency(totalOwnerOutstanding, "AED", loc)}
@@ -344,7 +330,7 @@ export default async function SuperAdminDashboard({
             { label: "All", value: String(allReservationsCount) },
             { label: "Live", value: String(activeReservationsCount) },
             { label: "Done", value: String(doneReservationsCount) },
-            { label: "Upcoming", value: String(totalUpcomingBookings) },
+            { label: "Upcoming", value: String(upcomingReservationsCount) },
           ]}
         />
       </div>

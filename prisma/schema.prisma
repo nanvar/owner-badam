@@ -131,10 +131,18 @@ model Reservation {
   // dashboard accounts these separately so management can see realized
   // revenue vs pipeline. Owner reports ignore this flag.
   upcoming          Boolean           @default(false)
+  // Whether the reservation has been paid. Tracked independently of
+  // `upcoming` so an admin can mark a past stay as still unpaid (and
+  // chase the payment), or a future-flagged one as already paid.
+  paid              Boolean           @default(false)
   // Once a reservation is bundled into an owner report it's "closed" and
   // no longer appears in the report builder's pickable list.
   reportId          String?
   report            OwnerReport?      @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  // Billing month "YYYY-MM" the row belongs to for monthly reporting.
+  // Defaults to the checkIn month; admins can flip the form's
+  // "Next month" checkbox to roll the row into the following month.
+  monthKey          String?           @db.VarChar(7)
   syncedAt          DateTime          @default(now())
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
@@ -144,6 +152,8 @@ model Reservation {
   @@index([checkIn])
   @@index([checkOut])
   @@index([reportId])
+  @@index([monthKey])
+  @@index([paid])
 }
 
 enum ExpenseType {
@@ -167,12 +177,16 @@ model Expense {
   amount      Float       // positive — represented as a deduction in reports
   reportId    String?
   report      OwnerReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  // Billing month "YYYY-MM" the expense belongs to. Defaults to the
+  // expense date's month; admins can flip "Next month" in the form.
+  monthKey    String?     @db.VarChar(7)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
   @@index([propertyId])
   @@index([date])
   @@index([reportId])
+  @@index([monthKey])
 }
 
 model Advance {
@@ -250,12 +264,17 @@ model CompanyExpense {
   // still held; populated values mean the company has paid it back.
   refundedAt      DateTime?
   refundedAmount  Float?
+  // Billing month "YYYY-MM" — used for monthly company-finance reports.
+  // Same convention as Reservation/Expense: defaults to the entry date,
+  // bumped by one month when the form's "Next month" checkbox is on.
+  monthKey        String?                 @db.VarChar(7)
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
 
   @@index([date])
   @@index([kind])
   @@index([propertyId])
+  @@index([monthKey])
 }
 
 // A curated bundle of one property's reservations + expenses, prepared by

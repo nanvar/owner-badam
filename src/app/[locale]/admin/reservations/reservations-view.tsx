@@ -25,7 +25,13 @@ import { Input, Field, Textarea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Sheet } from "@/components/ui/sheet";
 import { PageHeader } from "@/components/app-shell";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import {
+  formatCurrency,
+  formatDate,
+  monthOptions,
+  monthLabel,
+  monthKeyFor,
+} from "@/lib/utils";
 import {
   updateReservationAction,
   deleteReservationAction,
@@ -60,6 +66,7 @@ type Item = {
   notes: string | null;
   detailsFilled: boolean;
   upcoming: boolean;
+  paid: boolean;
   rawSummary: string | null;
 };
 
@@ -187,7 +194,7 @@ export function ReservationsView({
           />
         </div>
         <div className="ml-auto flex rounded-xl border border-[var(--color-border)] bg-white p-1">
-          {(["incomplete", "complete", "upcoming"] as const).map((f) => (
+          {(["complete", "upcoming", "incomplete"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
@@ -252,7 +259,11 @@ export function ReservationsView({
                     )}
                     <tr
                       onClick={() => setEditing(r)}
-                      className="cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
+                      className={`cursor-pointer border-t border-[var(--color-border)] ${
+                        !r.paid && !r.upcoming
+                          ? "bg-amber-500/10 hover:bg-amber-500/15"
+                          : "hover:bg-[var(--color-surface-2)]/60"
+                      }`}
                     >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -310,6 +321,15 @@ export function ReservationsView({
                           }
                           return null;
                         })()}
+                        {r.paid ? (
+                          <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                            Paid
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                            Unpaid
+                          </span>
+                        )}
                       </div>
                     </td>
                     </tr>
@@ -391,6 +411,17 @@ function ReservationEditor({
   const [upcoming, setUpcoming] = useState<boolean>(
     reservation?.upcoming ?? false,
   );
+  const [paid, setPaid] = useState<boolean>(reservation?.paid ?? false);
+  // 12-month "Bill into" picker. Defaults to the reservation's checkIn
+  // month so the existing billing window is preserved unless admin
+  // explicitly moves the entry.
+  const monthOpts = monthOptions();
+  const defaultMonth = reservation
+    ? monthKeyFor(reservation.checkIn)
+    : monthOpts.find((o) => o.label === monthLabel(new Date()))?.key ??
+      monthOpts[6]?.key ??
+      "";
+  const [monthKey, setMonthKey] = useState<string>(defaultMonth);
 
   useEffect(() => {
     if (state?.status === "ok") {
@@ -428,31 +459,74 @@ function ReservationEditor({
           name="upcoming"
           value={upcoming ? "true" : "false"}
         />
+        <input
+          type="hidden"
+          name="paid"
+          value={paid ? "true" : "false"}
+        />
 
-        <label
-          className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
-            upcoming
-              ? "border-sky-500/40 bg-sky-500/10"
-              : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
-          }`}
-        >
-          <input
-            type="checkbox"
-            checked={upcoming}
-            onChange={(e) => setUpcoming(e.target.checked)}
-            className="mt-1 h-4 w-4 accent-sky-500"
-          />
-          <div className="flex-1 text-sm">
-            <div className="flex items-center gap-1.5 font-semibold">
-              <Clock className="h-3.5 w-3.5 text-sky-500" />
-              {labels.upcoming ?? "Upcoming"}
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
+              upcoming
+                ? "border-sky-500/40 bg-sky-500/10"
+                : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={upcoming}
+              onChange={(e) => setUpcoming(e.target.checked)}
+              className="mt-1 h-4 w-4 accent-sky-500"
+            />
+            <div className="flex-1 text-sm">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <Clock className="h-3.5 w-3.5 text-sky-500" />
+                {labels.upcoming ?? "Upcoming"}
+              </div>
+              <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+                {labels.upcomingHint ??
+                  "Mark as future / not yet paid."}
+              </div>
             </div>
-            <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-              {labels.upcomingHint ??
-                "Mark as future / not yet paid. Counted as pipeline (not realized) revenue."}
+          </label>
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
+              paid
+                ? "border-emerald-500/40 bg-emerald-500/10"
+                : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={paid}
+              onChange={(e) => setPaid(e.target.checked)}
+              className="mt-1 h-4 w-4 accent-emerald-500"
+            />
+            <div className="flex-1 text-sm">
+              <div className="font-semibold">Paid</div>
+              <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+                Payment received from the guest / portal.
+              </div>
             </div>
-          </div>
-        </label>
+          </label>
+        </div>
+
+        <Field label="Bill into" htmlFor="bill-resv">
+          <select
+            id="bill-resv"
+            name="monthKey"
+            value={monthKey}
+            onChange={(e) => setMonthKey(e.target.value)}
+            className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
+          >
+            {monthOpts.map((o) => (
+              <option key={o.key} value={o.key}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Field>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label={labels.guestName} htmlFor="guestName">
@@ -566,43 +640,6 @@ function ReservationEditor({
               {formatCurrency(portalCommission, reservation.currency || "AED", locale)}
             </div>
           </div>
-          <div className="text-xs">
-            <div className="font-medium text-[var(--color-muted)]">
-              {labels.advancedFees ?? "Advanced fees (cleaning, taxes…)"}
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-3">
-              <Field label={`${labels.cleaningFee} (${labels.currency})`} htmlFor="cleaningFee">
-                <Input
-                  id="cleaningFee"
-                  name="cleaningFee"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  defaultValue={reservation.cleaningFee || ""}
-                />
-              </Field>
-              <Field label={`${labels.serviceFee} (${labels.currency})`} htmlFor="serviceFee">
-                <Input
-                  id="serviceFee"
-                  name="serviceFee"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  defaultValue={reservation.serviceFee || ""}
-                />
-              </Field>
-              <Field label={`${labels.taxes} (${labels.currency})`} htmlFor="taxes">
-                <Input
-                  id="taxes"
-                  name="taxes"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  defaultValue={reservation.taxes || ""}
-                />
-              </Field>
-            </div>
-          </div>
         </div>
 
         <Field label={labels.notes} htmlFor="notes">
@@ -675,6 +712,13 @@ function CompanyReservationCreator({
   const agencyCommission = parseFloat(agencyCommissionStr) || 0;
   const portalCommission = parseFloat(portalCommissionStr) || 0;
   const [upcoming, setUpcoming] = useState(false);
+  const [paid, setPaid] = useState(false);
+  const monthOpts = monthOptions();
+  const currentMonthKey =
+    monthOpts.find((o) => o.label === monthLabel(new Date()))?.key ??
+    monthOpts[6]?.key ??
+    "";
+  const [monthKey, setMonthKey] = useState<string>(currentMonthKey);
 
   useEffect(() => {
     if (state?.status === "ok") {
@@ -713,6 +757,11 @@ function CompanyReservationCreator({
           type="hidden"
           name="upcoming"
           value={upcoming ? "true" : "false"}
+        />
+        <input
+          type="hidden"
+          name="paid"
+          value={paid ? "true" : "false"}
         />
 
         <Field label={labels.property ?? "Property"} htmlFor="propertyId">
@@ -866,74 +915,69 @@ function CompanyReservationCreator({
               </span>
             </div>
           </div>
-          <div className="text-xs">
-            <div className="font-medium text-[var(--color-muted)]">
-              {labels.advancedFees ?? "Advanced fees (cleaning, taxes…)"}
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-3">
-              <Field
-                label={`${labels.cleaningFee} (${labels.currency})`}
-                htmlFor="cr-cleaningFee"
-              >
-                <Input
-                  id="cr-cleaningFee"
-                  name="cleaningFee"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  defaultValue=""
-                />
-              </Field>
-              <Field
-                label={`${labels.serviceFee} (${labels.currency})`}
-                htmlFor="cr-serviceFee"
-              >
-                <Input
-                  id="cr-serviceFee"
-                  name="serviceFee"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  defaultValue=""
-                />
-              </Field>
-              <Field label={`${labels.taxes} (${labels.currency})`} htmlFor="cr-taxes">
-                <Input
-                  id="cr-taxes"
-                  name="taxes"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  defaultValue=""
-                />
-              </Field>
-            </div>
-          </div>
         </div>
 
-        <label
-          className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
-            upcoming
-              ? "border-sky-500/40 bg-sky-500/10"
-              : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
-          }`}
-        >
-          <input
-            type="checkbox"
-            checked={upcoming}
-            onChange={(e) => setUpcoming(e.target.checked)}
-            className="mt-1 h-4 w-4 accent-sky-500"
-          />
-          <div className="flex-1 text-sm">
-            <div className="flex items-center gap-1.5 font-semibold">
-              <Clock className="h-3.5 w-3.5 text-sky-500" />
-              {labels.upcoming ?? "Upcoming"}
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
+              upcoming
+                ? "border-sky-500/40 bg-sky-500/10"
+                : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={upcoming}
+              onChange={(e) => setUpcoming(e.target.checked)}
+              className="mt-1 h-4 w-4 accent-sky-500"
+            />
+            <div className="flex-1 text-sm">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <Clock className="h-3.5 w-3.5 text-sky-500" />
+                {labels.upcoming ?? "Upcoming"}
+              </div>
+              <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+                {labels.upcomingHint}
+              </div>
             </div>
-            <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-              {labels.upcomingHint}
+          </label>
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
+              paid
+                ? "border-emerald-500/40 bg-emerald-500/10"
+                : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={paid}
+              onChange={(e) => setPaid(e.target.checked)}
+              className="mt-1 h-4 w-4 accent-emerald-500"
+            />
+            <div className="flex-1 text-sm">
+              <div className="font-semibold">Paid</div>
+              <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+                Payment received from the guest.
+              </div>
             </div>
-          </div>
-        </label>
+          </label>
+        </div>
+
+        <Field label="Bill into" htmlFor="bill-cr">
+          <select
+            id="bill-cr"
+            name="monthKey"
+            value={monthKey}
+            onChange={(e) => setMonthKey(e.target.value)}
+            className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
+          >
+            {monthOpts.map((o) => (
+              <option key={o.key} value={o.key}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Field>
 
         <Field label={labels.notes} htmlFor="cr-notes">
           <Textarea

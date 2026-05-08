@@ -74,3 +74,43 @@ export function addDays(d: Date, days: number) {
   r.setDate(r.getDate() + days);
   return r;
 }
+
+// "YYYY-MM" billing-month key for monthly reporting. Pass nextMonth=true
+// to roll a transaction into the following month — kept for legacy
+// callers; new code uses monthOptions/monthLabel directly.
+export function monthKeyFor(date: Date | string, nextMonth = false): string {
+  const d = typeof date === "string" ? new Date(date) : new Date(date);
+  if (nextMonth) d.setUTCMonth(d.getUTCMonth() + 1);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+// 12 month options centred on the current month: 6 past, current, 5
+// future. Returned newest-first so the dropdown reads top-to-bottom from
+// most recent past to furthest future. Useful for billing-month pickers.
+export function monthOptions(
+  now: Date = new Date(),
+  past = 6,
+  future = 5,
+): { key: string; label: string }[] {
+  const opts: { key: string; label: string }[] = [];
+  for (let i = -past; i <= future; i++) {
+    const d = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1),
+    );
+    opts.push({ key: monthKeyFor(d), label: monthLabel(d) });
+  }
+  return opts;
+}
+
+// Friendly label like "May 2026" for a Date or "YYYY-MM" key.
+export function monthLabel(input: Date | string, locale = "en"): string {
+  const d =
+    typeof input === "string"
+      ? new Date(`${input}-01T00:00:00Z`)
+      : new Date(input);
+  return d.toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}

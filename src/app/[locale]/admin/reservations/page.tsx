@@ -56,6 +56,7 @@ export default async function ReservationsAdminPage({
         notes: r.notes,
         detailsFilled: r.detailsFilled,
         upcoming: r.upcoming,
+        paid: r.paid,
         rawSummary: r.rawSummary,
       }))}
       labels={{

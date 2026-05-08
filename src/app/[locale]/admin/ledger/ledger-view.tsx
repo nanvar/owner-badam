@@ -8,7 +8,13 @@ import { Card, CardBody } from "@/components/ui/card";
 import { Input, Field, Textarea } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
 import { PageHeader } from "@/components/app-shell";
-import { formatCurrency, formatDate, cn } from "@/lib/utils";
+import {
+  formatCurrency,
+  formatDate,
+  cn,
+  monthOptions,
+  monthLabel,
+} from "@/lib/utils";
 import {
   upsertExpenseAction,
   deleteExpenseAction,
@@ -323,6 +329,7 @@ function ExpenseEditor({
             placeholder="Paid Outstanding DEWA Bill — Address Opera 2001"
           />
         </Field>
+        <MonthPicker />
         {state?.status === "error" && (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
             {state.message}
@@ -338,6 +345,33 @@ function ExpenseEditor({
         </div>
       </form>
     </Sheet>
+  );
+}
+
+function MonthPicker({
+  name = "monthKey",
+  defaultValue,
+}: {
+  name?: string;
+  defaultValue?: string;
+}) {
+  const opts = monthOptions();
+  const current = opts.find((o) => o.label === monthLabel(new Date()))?.key;
+  return (
+    <Field label="Bill into" htmlFor={`bill-${name}`}>
+      <select
+        id={`bill-${name}`}
+        name={name}
+        defaultValue={defaultValue ?? current}
+        className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
+      >
+        {opts.map((o) => (
+          <option key={o.key} value={o.key}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </Field>
   );
 }
 
