@@ -6,7 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, monthKeyFor, monthLabel } from "@/lib/utils";
+import { MonthSelector } from "../month-selector";
 import { ReportingFilter } from "./reporting-filter";
 
 export default async function ReportingPage({
@@ -16,8 +17,7 @@ export default async function ReportingPage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{
     ownerId?: string;
-    from?: string;
-    to?: string;
+    month?: string;
   }>;
 }) {
   const { locale } = await params;
@@ -28,33 +28,44 @@ export default async function ReportingPage({
   const loc = locale as Locale;
   const sp = await searchParams;
   const filterOwnerId = sp.ownerId || "";
-  const fromStr = sp.from || "";
-  const toStr = sp.to || "";
-  const fromDate = fromStr ? new Date(fromStr) : null;
-  const toDate = toStr ? new Date(toStr) : null;
-  const toEndOfDay =
-    toDate && !Number.isNaN(toDate.getTime())
-      ? new Date(toDate.getTime() + 24 * 60 * 60 * 1000 - 1)
-      : null;
 
-  // Two date filters because reservations key off `checkIn` while expenses,
-  // payments and CompanyExpense rows have their own `date` field.
-  const reservationDateFilter =
-    fromDate && toEndOfDay
-      ? { checkIn: { gte: fromDate, lte: toEndOfDay } }
-      : fromDate
-        ? { checkIn: { gte: fromDate } }
-        : toEndOfDay
-          ? { checkIn: { lte: toEndOfDay } }
-          : {};
-  const dateFilter =
-    fromDate && toEndOfDay
-      ? { date: { gte: fromDate, lte: toEndOfDay } }
-      : fromDate
-        ? { date: { gte: fromDate } }
-        : toEndOfDay
-          ? { date: { lte: toEndOfDay } }
-          : {};
+  // Same union the dashboard / finances surface so the picker reads
+  // identically across the admin section.
+  const [resMonths, expMonths, coMonths, payMonths] = await Promise.all([
+    prisma.reservation.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+    prisma.expense.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+    prisma.companyExpense.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+    prisma.ownerPayment.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+  ]);
+  const currentMonth = monthKeyFor(new Date());
+  const monthSet = new Set<string>([currentMonth]);
+  for (const r of resMonths) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const r of expMonths) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const r of coMonths) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const r of payMonths) if (r.monthKey) monthSet.add(r.monthKey);
+  const monthOpts = [...monthSet]
+    .sort()
+    .reverse()
+    .map((k) => ({ key: k, label: monthLabel(k, locale) }));
+  const selectedMonth =
+    sp.month && monthSet.has(sp.month) ? sp.month : currentMonth;
+
   const propertyOwnerFilter = filterOwnerId
     ? { property: { ownerId: filterOwnerId } }
     : {};
@@ -69,7 +80,7 @@ export default async function ReportingPage({
   ] = await Promise.all([
     prisma.reservation.groupBy({
       by: ["propertyId"],
-      where: { upcoming: false, ...reservationDateFilter, ...propertyOwnerFilter },
+      where: { monthKey: selectedMonth, ...propertyOwnerFilter },
       _sum: {
         totalPrice: true,
         agencyCommission: true,
@@ -79,12 +90,12 @@ export default async function ReportingPage({
     }),
     prisma.expense.groupBy({
       by: ["propertyId"],
-      where: { ...dateFilter, ...propertyOwnerFilter },
+      where: { monthKey: selectedMonth, ...propertyOwnerFilter },
       _sum: { amount: true },
     }),
     prisma.companyExpense.groupBy({
       by: ["propertyId"],
-      where: { kind: "PROFIT", ...dateFilter, ...propertyOwnerFilter },
+      where: { kind: "PROFIT", monthKey: selectedMonth, ...propertyOwnerFilter },
       _sum: { amount: true },
     }),
     prisma.property.findMany({
@@ -160,6 +171,12 @@ export default async function ReportingPage({
 
   return (
     <div>
+      <MonthSelector
+        options={monthOpts}
+        selected={selectedMonth}
+        basePath={basePath}
+      />
+
       <PageHeader title="Reporting" />
 
       <ReportingFilter
@@ -168,8 +185,7 @@ export default async function ReportingPage({
           name: o.name ?? o.email,
         }))}
         ownerId={filterOwnerId}
-        from={fromStr}
-        to={toStr}
+        selectedMonth={selectedMonth}
         basePath={basePath}
       />
 

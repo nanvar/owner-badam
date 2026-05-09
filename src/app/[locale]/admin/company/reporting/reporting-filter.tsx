@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { Calendar, User2, X, Filter } from "lucide-react";
+import { User2, X, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type Owner = { id: string; name: string };
@@ -10,29 +10,24 @@ type Owner = { id: string; name: string };
 export function ReportingFilter({
   owners,
   ownerId,
-  from,
-  to,
+  selectedMonth,
   basePath,
 }: {
   owners: Owner[];
   ownerId: string;
-  from: string;
-  to: string;
+  selectedMonth: string;
   basePath: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const hasActive = !!(ownerId || from || to);
+  const hasActive = !!ownerId;
 
   const submit = (form: HTMLFormElement) => {
     const fd = new FormData(form);
     const params = new URLSearchParams();
     const o = (fd.get("ownerId") as string) || "";
-    const f = (fd.get("from") as string) || "";
-    const t = (fd.get("to") as string) || "";
     if (o) params.set("ownerId", o);
-    if (f) params.set("from", f);
-    if (t) params.set("to", t);
+    params.set("month", selectedMonth);
     const qs = params.toString();
     start(() => {
       router.push(qs ? `${basePath}?${qs}` : basePath);
@@ -51,7 +46,7 @@ export function ReportingFilter({
         <Filter className="h-3.5 w-3.5" />
         Filter
       </div>
-      <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+      <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
         <Field label="Owner" icon={<User2 className="h-3.5 w-3.5" />}>
           <select
             name="ownerId"
@@ -66,25 +61,6 @@ export function ReportingFilter({
             ))}
           </select>
         </Field>
-        <Field label="Date range" icon={<Calendar className="h-3.5 w-3.5" />}>
-          <div className="flex flex-1 items-center gap-1">
-            <input
-              type="date"
-              name="from"
-              defaultValue={from}
-              aria-label="From"
-              className="h-10 flex-1 bg-transparent text-sm font-medium focus:outline-none"
-            />
-            <span className="text-xs text-[var(--color-muted)]">→</span>
-            <input
-              type="date"
-              name="to"
-              defaultValue={to}
-              aria-label="To"
-              className="h-10 flex-1 bg-transparent text-sm font-medium focus:outline-none"
-            />
-          </div>
-        </Field>
         <div className="flex items-end gap-2">
           <Button type="submit" loading={pending}>
             Apply
@@ -92,11 +68,13 @@ export function ReportingFilter({
           {hasActive && (
             <button
               type="button"
-              onClick={() =>
+              onClick={() => {
+                const params = new URLSearchParams();
+                params.set("month", selectedMonth);
                 start(() => {
-                  router.push(basePath);
-                })
-              }
+                  router.push(`${basePath}?${params.toString()}`);
+                });
+              }}
               className="inline-flex h-10 items-center gap-1 rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium text-[var(--color-muted)] transition-colors hover:border-[var(--color-brand)] hover:text-[var(--color-foreground)]"
             >
               <X className="h-3.5 w-3.5" />
