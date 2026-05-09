@@ -99,9 +99,12 @@ export default async function SuperAdminDashboard({
     extensionRows,
     properties,
   ] = await Promise.all([
+    // Realized revenue / profit / payout only count paid reservations.
+    // Unpaid rows still surface via the dedicated Unpaid card so admins
+    // can chase them, but they don't inflate the KPIs.
     prisma.reservation.groupBy({
       by: ["propertyId"],
-      where: monthWhere,
+      where: { ...monthWhere, paid: true },
       _count: { _all: true },
       _sum: {
         totalPrice: true,
@@ -179,10 +182,14 @@ export default async function SuperAdminDashboard({
       pending: 0,
       unpaid: 0,
     };
-    cur.total += e.totalPrice;
-    cur.agency += e.agencyCommission;
-    cur.portal += e.portalCommission;
-    cur.payout += e.payout;
+    // Same paid-only rule as reservations: KPIs reflect realized money,
+    // unpaid extensions still appear in their dedicated drawers.
+    if (e.paid) {
+      cur.total += e.totalPrice;
+      cur.agency += e.agencyCommission;
+      cur.portal += e.portalCommission;
+      cur.payout += e.payout;
+    }
     cur.count += 1;
     if (!e.detailsFilled || e.totalPrice <= 0) cur.pending += 1;
     if (!e.paid && e.totalPrice > 0) cur.unpaid += 1;
