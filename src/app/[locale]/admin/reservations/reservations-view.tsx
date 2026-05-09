@@ -130,18 +130,16 @@ export function ReservationsView({
 
   return (
     <div>
-      <div className="mb-4">
-        <MonthSelector
-          options={monthOpts}
-          selected={selectedMonth}
-          basePath={basePath}
-        />
-      </div>
-
       <PageHeader
         title={labels.title}
         right={
           <div className="flex items-center gap-2">
+            <MonthSelector
+              options={monthOpts}
+              selected={selectedMonth}
+              basePath={basePath}
+              allowAll
+            />
             <Button onClick={() => setCreating(true)}>
               <Plus className="h-4 w-4" />
               {labels.newReservation ?? "New reservation"}

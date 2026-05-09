@@ -2,7 +2,7 @@ import { setRequestLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
-import { monthKeyFor, monthLabel } from "@/lib/utils";
+import { monthLabel } from "@/lib/utils";
 import { ReservationsView } from "./reservations-view";
 
 export default async function ReservationsAdminPage({
@@ -41,8 +41,7 @@ export default async function ReservationsAdminPage({
       distinct: ["monthKey"],
     }),
   ]);
-  const currentMonth = monthKeyFor(new Date());
-  const monthSet = new Set<string>([currentMonth]);
+  const monthSet = new Set<string>();
   for (const r of resMonths) if (r.monthKey) monthSet.add(r.monthKey);
   for (const r of expMonths) if (r.monthKey) monthSet.add(r.monthKey);
   for (const r of coMonths) if (r.monthKey) monthSet.add(r.monthKey);
@@ -52,11 +51,12 @@ export default async function ReservationsAdminPage({
     .reverse()
     .map((k) => ({ key: k, label: monthLabel(k, locale) }));
   const selectedMonth =
-    sp.month && monthSet.has(sp.month) ? sp.month : currentMonth;
+    sp.month && monthSet.has(sp.month) ? sp.month : "";
+  const monthWhere = selectedMonth ? { monthKey: selectedMonth } : {};
 
   const [reservations, propertyOptions] = await Promise.all([
     prisma.reservation.findMany({
-      where: { monthKey: selectedMonth },
+      where: monthWhere,
       include: { property: { select: { id: true, name: true, color: true } } },
       orderBy: { checkIn: "desc" },
     }),
