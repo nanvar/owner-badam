@@ -15,13 +15,12 @@ import {
   Receipt,
   TrendingUp,
   Wallet,
-  Calendar,
-  X,
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
   RotateCcw,
 } from "lucide-react";
+import { MonthSelector } from "../month-selector";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Field, Textarea } from "@/components/ui/input";
@@ -70,8 +69,9 @@ type PropertyOption = { id: string; name: string; color: string };
 export function CompanyFinancesView({
   locale,
   tab,
-  from,
-  to,
+  monthOptions: monthOpts,
+  selectedMonth,
+  basePath,
   page,
   totalPages,
   counts,
@@ -82,8 +82,9 @@ export function CompanyFinancesView({
 }: {
   locale: Locale;
   tab: Kind;
-  from: string;
-  to: string;
+  monthOptions: { key: string; label: string }[];
+  selectedMonth: string;
+  basePath: string;
   page: number;
   totalPages: number;
   counts: Record<Kind, number>;
@@ -107,19 +108,16 @@ export function CompanyFinancesView({
   const [unrefundPending, startUnrefund] = useTransition();
   const [, startNav] = useTransition();
 
-  const goTo = (next: Partial<{ tab: Kind; from: string; to: string; page: number }>) => {
+  const goTo = (next: Partial<{ tab: Kind; page: number }>) => {
     const params = new URLSearchParams();
     const t = next.tab ?? tab;
     if (t !== "EXPENSE") params.set("tab", t);
-    const f = next.from ?? from;
-    const e = next.to ?? to;
-    if (f) params.set("from", f);
-    if (e) params.set("to", e);
+    params.set("month", selectedMonth);
     const p = next.page ?? 1;
     if (p > 1) params.set("page", String(p));
     const qs = params.toString();
     startNav(() => {
-      router.push(`/${locale}/admin/company/expenses${qs ? `?${qs}` : ""}`);
+      router.push(`${basePath}${qs ? `?${qs}` : ""}`);
     });
   };
 
@@ -200,11 +198,10 @@ export function CompanyFinancesView({
         </Button>
       </div>
 
-      {/* Date filter */}
-      <DateFilter
-        from={from}
-        to={to}
-        onApply={(f, t) => goTo({ from: f, to: t, page: 1 })}
+      <MonthSelector
+        options={monthOpts}
+        selected={selectedMonth}
+        basePath={basePath}
       />
 
       {entries.length === 0 ? (
@@ -433,81 +430,6 @@ export function CompanyFinancesView({
         onClose={() => setRefunding(null)}
       />
     </div>
-  );
-}
-
-function DateFilter({
-  from,
-  to,
-  onApply,
-}: {
-  from: string;
-  to: string;
-  onApply: (from: string, to: string) => void;
-}) {
-  const [f, setF] = useState(from);
-  const [t, setT] = useState(to);
-  const hasActive = !!(from || to);
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        onApply(f, t);
-      }}
-      className="mb-4 rounded-2xl border-2 border-[var(--color-border)] bg-white p-4 shadow-sm"
-    >
-      <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[var(--color-muted)]">
-        <Calendar className="h-3.5 w-3.5" />
-        Date filter
-      </div>
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="block flex-1 min-w-[180px]">
-          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-            From
-          </span>
-          <span className="flex h-10 items-center rounded-xl border-2 border-[var(--color-border)] bg-white px-3 transition-colors focus-within:border-[var(--color-brand)] focus-within:ring-[3px] focus-within:ring-[var(--color-brand)]/20 hover:border-[var(--color-border-strong,#cbd5d3)]">
-            <input
-              type="date"
-              value={f}
-              onChange={(e) => setF(e.target.value)}
-              aria-label="From"
-              className="h-full w-full bg-transparent text-sm font-medium focus:outline-none"
-            />
-          </span>
-        </label>
-        <label className="block flex-1 min-w-[180px]">
-          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-            To
-          </span>
-          <span className="flex h-10 items-center rounded-xl border-2 border-[var(--color-border)] bg-white px-3 transition-colors focus-within:border-[var(--color-brand)] focus-within:ring-[3px] focus-within:ring-[var(--color-brand)]/20 hover:border-[var(--color-border-strong,#cbd5d3)]">
-            <input
-              type="date"
-              value={t}
-              onChange={(e) => setT(e.target.value)}
-              aria-label="To"
-              className="h-full w-full bg-transparent text-sm font-medium focus:outline-none"
-            />
-          </span>
-        </label>
-        <div className="flex items-end gap-2">
-          <Button type="submit">Apply</Button>
-          {hasActive && (
-            <button
-              type="button"
-              onClick={() => {
-                setF("");
-                setT("");
-                onApply("", "");
-              }}
-              className="inline-flex h-10 items-center gap-1 rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium text-[var(--color-muted)] transition-colors hover:border-[var(--color-brand)] hover:text-[var(--color-foreground)]"
-            >
-              <X className="h-3.5 w-3.5" />
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
-    </form>
   );
 }
 

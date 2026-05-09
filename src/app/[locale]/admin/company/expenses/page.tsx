@@ -3,6 +3,7 @@ import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
+import { monthKeyFor, monthLabel } from "@/lib/utils";
 import { CompanyFinancesView } from "./company-expenses-view";
 
 const PAGE_SIZE = 25;
@@ -14,8 +15,7 @@ export default async function SuperAdminFinancesPage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{
     tab?: string;
-    from?: string;
-    to?: string;
+    month?: string;
     page?: string;
   }>;
 }) {
@@ -27,26 +27,28 @@ export default async function SuperAdminFinancesPage({
   const sp = await searchParams;
   const tab =
     sp.tab === "PROFIT" || sp.tab === "DEPOSIT" ? sp.tab : "EXPENSE";
-  const fromStr = sp.from || "";
-  const toStr = sp.to || "";
   const page = Math.max(1, parseInt(sp.page || "1", 10) || 1);
-  const fromDate = fromStr ? new Date(fromStr) : null;
-  const toDate = toStr ? new Date(toStr) : null;
-  const toEndOfDay =
-    toDate && !Number.isNaN(toDate.getTime())
-      ? new Date(toDate.getTime() + 24 * 60 * 60 * 1000 - 1)
-      : null;
-  const dateFilter =
-    fromDate && toEndOfDay
-      ? { date: { gte: fromDate, lte: toEndOfDay } }
-      : fromDate
-        ? { date: { gte: fromDate } }
-        : toEndOfDay
-          ? { date: { lte: toEndOfDay } }
-          : {};
 
-  // Always read counts for all 3 kinds so the tab badges stay accurate
-  // regardless of which tab is currently active.
+  // Distinct months CompanyExpense rows are bucketed into so the picker
+  // only ever surfaces real periods. Current month is always included so
+  // a fresh DB still has a sensible default.
+  const monthsRaw = await prisma.companyExpense.findMany({
+    where: { monthKey: { not: null } },
+    select: { monthKey: true },
+    distinct: ["monthKey"],
+  });
+  const currentMonth = monthKeyFor(new Date());
+  const monthSet = new Set<string>([currentMonth]);
+  for (const r of monthsRaw) if (r.monthKey) monthSet.add(r.monthKey);
+  const monthOpts = [...monthSet]
+    .sort()
+    .reverse()
+    .map((k) => ({ key: k, label: monthLabel(k, locale) }));
+  const selectedMonth =
+    sp.month && monthSet.has(sp.month) ? sp.month : currentMonth;
+
+  // All counts/lists scoped to the selected billing month. Active-deposit
+  // tile also obeys the month filter so the page reads consistently.
   const [
     expenseCount,
     profitCount,
@@ -56,16 +58,16 @@ export default async function SuperAdminFinancesPage({
     properties,
   ] = await Promise.all([
     prisma.companyExpense.count({
-      where: { kind: "EXPENSE", ...dateFilter },
+      where: { kind: "EXPENSE", monthKey: selectedMonth },
     }),
     prisma.companyExpense.count({
-      where: { kind: "PROFIT", ...dateFilter },
+      where: { kind: "PROFIT", monthKey: selectedMonth },
     }),
     prisma.companyExpense.count({
-      where: { kind: "DEPOSIT", ...dateFilter },
+      where: { kind: "DEPOSIT", monthKey: selectedMonth },
     }),
     prisma.companyExpense.findMany({
-      where: { kind: tab, ...dateFilter },
+      where: { kind: tab, monthKey: selectedMonth },
       include: {
         property: { select: { id: true, name: true, color: true } },
       },
@@ -74,7 +76,7 @@ export default async function SuperAdminFinancesPage({
       take: PAGE_SIZE,
     }),
     prisma.companyExpense.aggregate({
-      where: { kind: "DEPOSIT", refundedAt: null },
+      where: { kind: "DEPOSIT", refundedAt: null, monthKey: selectedMonth },
       _sum: { amount: true },
       _count: { _all: true },
     }),
@@ -96,8 +98,9 @@ export default async function SuperAdminFinancesPage({
     <CompanyFinancesView
       locale={locale as Locale}
       tab={tab}
-      from={fromStr}
-      to={toStr}
+      monthOptions={monthOpts}
+      selectedMonth={selectedMonth}
+      basePath={`/${locale}/admin/company/expenses`}
       page={page}
       totalPages={totalPages}
       counts={{

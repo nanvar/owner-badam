@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 import { Calendar } from "lucide-react";
 
@@ -17,6 +17,7 @@ export function MonthSelector({
   basePath: string;
 }) {
   const router = useRouter();
+  const search = useSearchParams();
   const [pending, start] = useTransition();
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -29,8 +30,11 @@ export function MonthSelector({
           value={selected}
           onChange={(e) => {
             const v = e.target.value;
-            const params = new URLSearchParams();
+            // Preserve unrelated params (active tab, search, etc.) but
+            // reset pagination since the row set changes.
+            const params = new URLSearchParams(search.toString());
             params.set("month", v);
+            params.delete("page");
             start(() => router.push(`${basePath}?${params.toString()}`));
           }}
           disabled={pending || options.length === 0}
