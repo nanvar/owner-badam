@@ -9,6 +9,7 @@ import {
   Users,
   TrendingUp,
   CalendarDays,
+  AlertCircle,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
@@ -233,13 +234,14 @@ export default async function SuperAdminDashboard({
         p.companyExtraProfit > 0,
     );
 
-  // Reservation counts within the selected month.
+  // Reservation counts within the selected month, plus the unpaid total
+  // so the dashboard surfaces guest-side receivables that haven't landed.
   const today = new Date();
   const [
     allReservationsCount,
     activeReservationsCount,
     doneReservationsCount,
-    upcomingReservationsCount,
+    unpaidAgg,
   ] = await Promise.all([
     prisma.reservation.count({ where: { monthKey: selectedMonth } }),
     prisma.reservation.count({
@@ -252,10 +254,14 @@ export default async function SuperAdminDashboard({
     prisma.reservation.count({
       where: { monthKey: selectedMonth, checkOut: { lte: today } },
     }),
-    prisma.reservation.count({
-      where: { monthKey: selectedMonth, checkIn: { gt: today } },
+    prisma.reservation.aggregate({
+      where: { monthKey: selectedMonth, paid: false },
+      _sum: { totalPrice: true },
+      _count: { _all: true },
     }),
   ]);
+  const unpaidTotal = unpaidAgg._sum.totalPrice ?? 0;
+  const unpaidCount = unpaidAgg._count._all;
 
   // KPIs
   const totalAgency = propertyTable.reduce((s, p) => s + p.agencyEarnings, 0);
@@ -315,7 +321,13 @@ export default async function SuperAdminDashboard({
       </div>
 
       {/* Bottom row */}
-      <div className="mt-3 grid auto-rows-fr grid-cols-1 gap-3 *:h-full md:grid-cols-2">
+      <div className="mt-3 grid auto-rows-fr grid-cols-1 gap-3 *:h-full md:grid-cols-3">
+        <KpiTile
+          label={`Unpaid · ${unpaidCount}`}
+          value={formatCurrency(unpaidTotal, "AED", loc)}
+          accent="rose"
+          icon={<AlertCircle className="h-4 w-4" />}
+        />
         <KpiTile
           label="Owner payout"
           value={formatCurrency(totalOwnerOutstanding, "AED", loc)}
@@ -330,7 +342,6 @@ export default async function SuperAdminDashboard({
             { label: "All", value: String(allReservationsCount) },
             { label: "Live", value: String(activeReservationsCount) },
             { label: "Done", value: String(doneReservationsCount) },
-            { label: "Upcoming", value: String(upcomingReservationsCount) },
           ]}
         />
       </div>
