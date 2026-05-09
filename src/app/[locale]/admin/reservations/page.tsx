@@ -17,14 +17,36 @@ export default async function ReservationsAdminPage({
   setRequestLocale(locale);
   const sp = await searchParams;
 
-  const monthsRaw = await prisma.reservation.findMany({
-    where: { monthKey: { not: null } },
-    select: { monthKey: true },
-    distinct: ["monthKey"],
-  });
+  // Union of every monthKey across the bookkeeping tables so the picker
+  // matches the dashboard / finances pages exactly.
+  const [resMonths, expMonths, coMonths, payMonths] = await Promise.all([
+    prisma.reservation.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+    prisma.expense.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+    prisma.companyExpense.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+    prisma.ownerPayment.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+  ]);
   const currentMonth = monthKeyFor(new Date());
   const monthSet = new Set<string>([currentMonth]);
-  for (const r of monthsRaw) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const r of resMonths) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const r of expMonths) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const r of coMonths) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const r of payMonths) if (r.monthKey) monthSet.add(r.monthKey);
   const monthOpts = [...monthSet]
     .sort()
     .reverse()

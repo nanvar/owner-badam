@@ -130,6 +130,12 @@ export function ReservationsView({
 
   return (
     <div>
+      <MonthSelector
+        options={monthOpts}
+        selected={selectedMonth}
+        basePath={basePath}
+      />
+
       <PageHeader
         title={labels.title}
         right={
@@ -167,12 +173,6 @@ export function ReservationsView({
           {syncState.message}
         </div>
       )}
-
-      <MonthSelector
-        options={monthOpts}
-        selected={selectedMonth}
-        basePath={basePath}
-      />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[180px] max-w-md">

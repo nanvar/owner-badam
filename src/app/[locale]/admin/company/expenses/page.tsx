@@ -32,14 +32,37 @@ export default async function SuperAdminFinancesPage({
   // Distinct months CompanyExpense rows are bucketed into so the picker
   // only ever surfaces real periods. Current month is always included so
   // a fresh DB still has a sensible default.
-  const monthsRaw = await prisma.companyExpense.findMany({
-    where: { monthKey: { not: null } },
-    select: { monthKey: true },
-    distinct: ["monthKey"],
-  });
+  // Same union the dashboard surfaces, so the picker reads identically
+  // across the admin section regardless of which table actually holds
+  // the data for a given month.
+  const [resMonths, expMonths, coMonths, payMonths] = await Promise.all([
+    prisma.reservation.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+    prisma.expense.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+    prisma.companyExpense.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+    prisma.ownerPayment.findMany({
+      where: { monthKey: { not: null } },
+      select: { monthKey: true },
+      distinct: ["monthKey"],
+    }),
+  ]);
   const currentMonth = monthKeyFor(new Date());
   const monthSet = new Set<string>([currentMonth]);
-  for (const r of monthsRaw) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const r of resMonths) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const r of expMonths) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const r of coMonths) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const r of payMonths) if (r.monthKey) monthSet.add(r.monthKey);
   const monthOpts = [...monthSet]
     .sort()
     .reverse()

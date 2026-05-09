@@ -129,6 +129,12 @@ export function CompanyFinancesView({
 
   return (
     <div>
+      <MonthSelector
+        options={monthOpts}
+        selected={selectedMonth}
+        basePath={basePath}
+      />
+
       <PageHeader title="Company finances" />
 
       {/* Active deposits summary so admins can see at a glance how much is
@@ -197,12 +203,6 @@ export function CompanyFinancesView({
               : "Add deposit"}
         </Button>
       </div>
-
-      <MonthSelector
-        options={monthOpts}
-        selected={selectedMonth}
-        basePath={basePath}
-      />
 
       {entries.length === 0 ? (
         <Card className="grid place-items-center px-6 py-16 text-center">

@@ -280,13 +280,13 @@ export default async function SuperAdminDashboard({
 
   return (
     <div>
-      <PageHeader title="Dashboard" />
-
       <MonthSelector
         options={monthOpts}
         selected={selectedMonth}
         basePath={`/${loc}/admin/company`}
       />
+
+      <PageHeader title="Dashboard" />
 
       {/* Top row — 4 single-value tiles */}
       <div className="grid auto-rows-fr grid-cols-2 gap-3 *:h-full md:grid-cols-4">
