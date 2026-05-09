@@ -18,6 +18,7 @@ import {
   Wallet,
   MoreHorizontal,
   ExternalLink,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -105,6 +106,8 @@ export function PropertiesView({
   hideTitle,
   expenses,
   payments,
+  forceTable,
+  searchable,
 }: {
   locale: Locale;
   properties: Property[];
@@ -114,6 +117,12 @@ export function PropertiesView({
   hideTitle?: boolean;
   expenses?: ExpenseEntry[];
   payments?: PaymentEntry[];
+  // Force the row-based table layout (used by the top-level Properties
+  // page so it reads like the owner-detail listing instead of the cards
+  // grid).
+  forceTable?: boolean;
+  // Render a search input that filters by name / address / owner.
+  searchable?: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<Property | null | undefined>(undefined);
@@ -123,6 +132,17 @@ export function PropertiesView({
   const [deletePending, startDelete] = useTransition();
   const [expensesProperty, setExpensesProperty] = useState<Property | null>(null);
   const [paymentsProperty, setPaymentsProperty] = useState<Property | null>(null);
+  const [search, setSearch] = useState("");
+  const filteredProperties = searchable && search.trim()
+    ? properties.filter((p) => {
+        const q = search.toLowerCase();
+        return (
+          p.name.toLowerCase().includes(q) ||
+          (p.address ?? "").toLowerCase().includes(q) ||
+          (p.ownerName ?? "").toLowerCase().includes(q)
+        );
+      })
+    : properties;
 
   const expensesByProperty = (expenses ?? []).reduce<Record<string, ExpenseEntry[]>>(
     (acc, e) => {
@@ -196,11 +216,30 @@ export function PropertiesView({
         </div>
       )}
 
+      {searchable && properties.length > 0 && (
+        <div className="mb-3 flex items-center gap-2">
+          <div className="relative flex-1 max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted)]" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search property, address or owner"
+              className="pl-9"
+            />
+          </div>
+          <span className="text-xs text-[var(--color-muted)]">
+            {filteredProperties.length} / {properties.length}
+          </span>
+        </div>
+      )}
+
       {properties.length === 0 ? (
         <EmptyState label={labels.noProperties} />
-      ) : lockedOwnerId ? (
+      ) : filteredProperties.length === 0 ? (
+        <EmptyState label="No properties match your search." />
+      ) : lockedOwnerId || forceTable ? (
         <PropertyTable
-          properties={properties}
+          properties={filteredProperties}
           labels={labels}
           locale={locale}
           expensesByProperty={expensesByProperty}
@@ -214,7 +253,7 @@ export function PropertiesView({
         />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {properties.map((p) => (
+          {filteredProperties.map((p) => (
             <PropertyCard
               key={p.id}
               property={p}

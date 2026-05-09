@@ -59,10 +59,25 @@ export default async function AdminLayout({
                 label: "Reporting",
                 icon: <BarChart3 className="h-4 w-4" />,
               },
+              {
+                href: `/${locale}/admin/staff`,
+                label: "Staff",
+                icon: <ShieldCheck className="h-4 w-4" />,
+              },
+              {
+                href: `/${locale}/admin/settings`,
+                label: tCommon("settings"),
+                icon: <SettingsIcon className="h-4 w-4" />,
+              },
             ],
           },
         ]
       : []),
+    {
+      href: `/${locale}/admin/properties`,
+      label: tCommon("properties"),
+      icon: <Building2 className="h-4 w-4" />,
+    },
     {
       href: `/${locale}/admin/reservations`,
       label: t("navReservations"),
@@ -73,20 +88,17 @@ export default async function AdminLayout({
       label: t("navOwners"),
       icon: <Users className="h-4 w-4" />,
     },
-    ...(isSuperadmin
+    // Non-SUPERADMIN admins still need direct access to Settings since
+    // the Company dropdown is gated to SUPERADMIN only.
+    ...(!isSuperadmin
       ? [
           {
-            href: `/${locale}/admin/staff`,
-            label: "Staff",
-            icon: <ShieldCheck className="h-4 w-4" />,
+            href: `/${locale}/admin/settings`,
+            label: tCommon("settings"),
+            icon: <SettingsIcon className="h-4 w-4" />,
           },
         ]
       : []),
-    {
-      href: `/${locale}/admin/settings`,
-      label: tCommon("settings"),
-      icon: <SettingsIcon className="h-4 w-4" />,
-    },
   ];
 
   return (
