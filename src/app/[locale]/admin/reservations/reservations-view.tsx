@@ -432,45 +432,6 @@ export function ReservationEditor({
         <input type="hidden" name="payout" value={ownerPayout.toFixed(2)} />
         <input type="hidden" name="currency" value={reservation.currency || "AED"} />
 
-        <Field
-          label={`Paid by guest (${labels.currency})`}
-          htmlFor="paidAmount"
-          hint={
-            totalPrice <= 0
-              ? "Set the amount once the total price is filled in"
-              : outstanding <= 0
-                ? "Fully paid"
-                : `Outstanding ${formatCurrency(outstanding, reservation.currency || "AED", locale)}`
-          }
-        >
-          <Input
-            id="paidAmount"
-            name="paidAmount"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="0"
-            value={paidAmountStr}
-            onChange={(e) => setPaidAmountStr(e.target.value)}
-          />
-        </Field>
-
-        <Field label="Bill into" htmlFor="bill-resv">
-          <select
-            id="bill-resv"
-            name="monthKey"
-            value={monthKey}
-            onChange={(e) => setMonthKey(e.target.value)}
-            className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
-          >
-            {monthOpts.map((o) => (
-              <option key={o.key} value={o.key}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-
         <div className="grid grid-cols-2 gap-3">
           <Field label={labels.guestName} htmlFor="guestName">
             <Input
@@ -584,6 +545,45 @@ export function ReservationEditor({
             </div>
           </div>
         </div>
+
+        <Field
+          label={`Paid by guest (${labels.currency})`}
+          htmlFor="paidAmount"
+          hint={
+            totalPrice <= 0
+              ? "Set the amount once the total price is filled in"
+              : outstanding <= 0
+                ? "Fully paid"
+                : `Outstanding ${formatCurrency(outstanding, reservation.currency || "AED", locale)}`
+          }
+        >
+          <Input
+            id="paidAmount"
+            name="paidAmount"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="0"
+            value={paidAmountStr}
+            onChange={(e) => setPaidAmountStr(e.target.value)}
+          />
+        </Field>
+
+        <Field label="Bill into" htmlFor="bill-resv">
+          <select
+            id="bill-resv"
+            name="monthKey"
+            value={monthKey}
+            onChange={(e) => setMonthKey(e.target.value)}
+            className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
+          >
+            {monthOpts.map((o) => (
+              <option key={o.key} value={o.key}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Field>
 
         <Field label={labels.notes} htmlFor="notes">
           <Textarea
