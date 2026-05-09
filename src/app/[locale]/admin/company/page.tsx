@@ -2,21 +2,20 @@ import { setRequestLocale } from "next-intl/server";
 import { Fragment } from "react";
 import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import {
   Wallet,
   Receipt,
   Users,
   TrendingUp,
   CalendarDays,
-  AlertCircle,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
-import { formatCurrency, monthKeyFor, monthLabel } from "@/lib/utils";
+import { formatCurrency, monthLabel } from "@/lib/utils";
 import { MonthSelector } from "./month-selector";
+import { UnpaidCard } from "./unpaid-card";
 
 type PropertyAgg = {
   id: string;
@@ -51,8 +50,8 @@ export default async function SuperAdminDashboard({
   const loc = locale as Locale;
 
   // Distinct months that actually have data, across all the month-bucketed
-  // tables. The current month is always present so the picker has a sensible
-  // default even on a fresh database.
+  // tables. Empty default ("All months") so the dashboard reads as a global
+  // snapshot until the admin opts into a specific period.
   const [resMonths, expMonths, coMonths, payMonths] = await Promise.all([
     prisma.reservation.findMany({
       where: { monthKey: { not: null } },
@@ -75,8 +74,7 @@ export default async function SuperAdminDashboard({
       distinct: ["monthKey"],
     }),
   ]);
-  const currentMonth = monthKeyFor(new Date());
-  const monthSet = new Set<string>([currentMonth]);
+  const monthSet = new Set<string>();
   for (const r of resMonths) if (r.monthKey) monthSet.add(r.monthKey);
   for (const r of expMonths) if (r.monthKey) monthSet.add(r.monthKey);
   for (const r of coMonths) if (r.monthKey) monthSet.add(r.monthKey);
@@ -86,9 +84,12 @@ export default async function SuperAdminDashboard({
     .reverse()
     .map((k) => ({ key: k, label: monthLabel(k, loc) }));
   const selectedMonth =
-    sp.month && monthSet.has(sp.month) ? sp.month : currentMonth;
+    sp.month && monthSet.has(sp.month) ? sp.month : "";
+  // Filter clause reused on every aggregation: empty selectedMonth means
+  // "all months" so we drop the constraint entirely.
+  const monthWhere = selectedMonth ? { monthKey: selectedMonth } : {};
 
-  // === Aggregations (all scoped to the selected month) ===
+  // === Aggregations (scoped to the selected month, or all months) ===
   const [
     propertyAggs,
     expenseAggs,
@@ -98,7 +99,7 @@ export default async function SuperAdminDashboard({
   ] = await Promise.all([
     prisma.reservation.groupBy({
       by: ["propertyId"],
-      where: { monthKey: selectedMonth },
+      where: monthWhere,
       _count: { _all: true },
       _sum: {
         totalPrice: true,
@@ -109,17 +110,17 @@ export default async function SuperAdminDashboard({
     }),
     prisma.expense.groupBy({
       by: ["propertyId"],
-      where: { monthKey: selectedMonth },
+      where: monthWhere,
       _sum: { amount: true },
     }),
     prisma.ownerPayment.groupBy({
       by: ["propertyId"],
-      where: { monthKey: selectedMonth },
+      where: monthWhere,
       _sum: { amount: true },
     }),
     prisma.companyExpense.groupBy({
       by: ["propertyId"],
-      where: { kind: "PROFIT", monthKey: selectedMonth },
+      where: { kind: "PROFIT", ...monthWhere },
       _sum: { amount: true },
     }),
     prisma.property.findMany({
@@ -141,7 +142,7 @@ export default async function SuperAdminDashboard({
   );
   const crossOwnerPayments = await prisma.ownerPayment.groupBy({
     by: ["ownerId"],
-    where: { propertyId: null, monthKey: selectedMonth },
+    where: { propertyId: null, ...monthWhere },
     _sum: { amount: true },
   });
   const crossPaymentsByOwner = new Map(
@@ -182,17 +183,15 @@ export default async function SuperAdminDashboard({
       (ownerNetTotalsForCross.get(p.ownerId) ?? 0) + p.ownerNet,
     );
   }
-  const propertyTable: PropertyAgg[] = baseTable
-    .map((p) => {
-      const ownerNetTotal = ownerNetTotalsForCross.get(p.ownerId) ?? 0;
-      const cross = crossPaymentsByOwner.get(p.ownerId) ?? 0;
-      const share =
-        ownerNetTotal > 0 && cross > 0
-          ? (p.ownerNet / ownerNetTotal) * cross
-          : 0;
-      return { ...p, paymentsToOwner: p.paymentsToOwner + share };
-    })
-    .sort((a, b) => b.agencyEarnings - a.agencyEarnings);
+  const propertyTable: PropertyAgg[] = baseTable.map((p) => {
+    const ownerNetTotal = ownerNetTotalsForCross.get(p.ownerId) ?? 0;
+    const cross = crossPaymentsByOwner.get(p.ownerId) ?? 0;
+    const share =
+      ownerNetTotal > 0 && cross > 0
+        ? (p.ownerNet / ownerNetTotal) * cross
+        : 0;
+    return { ...p, paymentsToOwner: p.paymentsToOwner + share };
+  });
 
   // Company expense + profit totals (filtered). Stored together in
   // CompanyExpense with a `kind` discriminator. Net = profit − expenses
@@ -200,12 +199,12 @@ export default async function SuperAdminDashboard({
   const [companyEntryAggs, activeDeposits] = await Promise.all([
     prisma.companyExpense.groupBy({
       by: ["kind"],
-      where: { kind: { in: ["EXPENSE", "PROFIT"] }, monthKey: selectedMonth },
+      where: { kind: { in: ["EXPENSE", "PROFIT"] }, ...monthWhere },
       _sum: { amount: true },
       _count: { _all: true },
     }),
     prisma.companyExpense.aggregate({
-      where: { kind: "DEPOSIT", refundedAt: null, monthKey: selectedMonth },
+      where: { kind: "DEPOSIT", refundedAt: null, ...monthWhere },
       _sum: { amount: true },
       _count: { _all: true },
     }),
@@ -216,77 +215,81 @@ export default async function SuperAdminDashboard({
   const totalCompanyExtraProfit = profitRow?._sum.amount ?? 0;
   const totalActiveDeposits = activeDeposits._sum.amount ?? 0;
 
-  // Outstanding owner debt = realized payout − property expenses − payments
-  // already made. Per-property payments come from `paymentsToOwner` (incl.
-  // pro-rated cross-property settlements computed earlier). No clamp —
-  // negative means the owner owes the company (overspent expenses or
-  // overpaid payouts).
-  const reportingTable = propertyTable
-    .map((p) => ({
-      ...p,
-      ownerDebt: p.ownerNet - p.paymentsToOwner,
-    }))
-    .filter(
-      (p) =>
-        p.bookings > 0 ||
-        p.propertyExpenses > 0 ||
-        p.paymentsToOwner > 0 ||
-        p.companyExtraProfit > 0,
-    );
+  // Outstanding to owners (sum across every property where the company
+  // still owes the owner money). Drops the table that used to render this
+  // breakdown — we keep the running KPI total only.
+  const totalOwnerOutstanding = propertyTable.reduce(
+    (s, p) => s + (p.ownerNet - p.paymentsToOwner),
+    0,
+  );
 
-  // Reservation counts within the selected month, plus the unpaid total
-  // so the dashboard surfaces guest-side receivables that haven't landed.
+  // Reservation counts within the selected period, plus the per-row
+  // unpaid list so the dashboard can surface receivables in a drawer.
+  // Unpaid rows are anything with totalPrice > paidAmount; skipping
+  // totalPrice = 0 hides synced-but-not-yet-priced Airbnb placeholders.
   const today = new Date();
   const [
     allReservationsCount,
     activeReservationsCount,
     doneReservationsCount,
-    unpaidAgg,
+    pricedRows,
   ] = await Promise.all([
-    prisma.reservation.count({ where: { monthKey: selectedMonth } }),
+    prisma.reservation.count({ where: monthWhere }),
     prisma.reservation.count({
       where: {
-        monthKey: selectedMonth,
+        ...monthWhere,
         checkIn: { lte: today },
         checkOut: { gt: today },
       },
     }),
     prisma.reservation.count({
-      where: { monthKey: selectedMonth, checkOut: { lte: today } },
+      where: { ...monthWhere, checkOut: { lte: today } },
     }),
-    prisma.reservation.aggregate({
-      where: { monthKey: selectedMonth, paid: false },
-      _sum: { totalPrice: true },
-      _count: { _all: true },
+    prisma.reservation.findMany({
+      where: { ...monthWhere, totalPrice: { gt: 0 } },
+      include: {
+        property: { select: { name: true, color: true } },
+      },
+      orderBy: { checkIn: "desc" },
     }),
   ]);
-  const unpaidTotal = unpaidAgg._sum.totalPrice ?? 0;
-  const unpaidCount = unpaidAgg._count._all;
+  const unpaidReservations = pricedRows
+    .filter((r) => r.paidAmount < r.totalPrice)
+    .map((r) => ({
+      id: r.id,
+      propertyName: r.property.name,
+      propertyColor: r.property.color,
+      guestName: r.guestName,
+      checkIn: r.checkIn.toISOString(),
+      checkOut: r.checkOut.toISOString(),
+      totalPrice: r.totalPrice,
+      paidAmount: r.paidAmount,
+      currency: r.currency,
+    }));
+  const unpaidTotal = unpaidReservations.reduce(
+    (s, r) => s + (r.totalPrice - r.paidAmount),
+    0,
+  );
+  const unpaidCount = unpaidReservations.length;
 
   // KPIs
   const totalAgency = propertyTable.reduce((s, p) => s + p.agencyEarnings, 0);
-  // Outstanding-only view: drop properties whose balance is essentially
-  // zero, but keep both signs — positive (we owe the owner) and negative
-  // (the owner owes us). Larger |debt| comes first.
-  const debtTable = reportingTable
-    .filter((p) => Math.abs(p.ownerDebt) > 0.005)
-    .sort((a, b) => Math.abs(b.ownerDebt) - Math.abs(a.ownerDebt));
-  const totalOwnerOutstanding = debtTable.reduce(
-    (s, p) => s + p.ownerDebt,
-    0,
-  );
   const companyNet =
     totalAgency + totalCompanyExtraProfit - totalCompanyExpenses;
 
   return (
     <div>
-      <MonthSelector
-        options={monthOpts}
-        selected={selectedMonth}
-        basePath={`/${loc}/admin/company`}
+      <PageHeader
+        title="Dashboard"
+        right={
+          <MonthSelector
+            options={monthOpts}
+            selected={selectedMonth}
+            basePath={`/${loc}/admin/company`}
+            allowAll
+          />
+        }
       />
-
-      <PageHeader title="Dashboard" />
 
       {/* Top row — 4 single-value tiles */}
       <div className="grid auto-rows-fr grid-cols-2 gap-3 *:h-full md:grid-cols-4">
@@ -322,11 +325,11 @@ export default async function SuperAdminDashboard({
 
       {/* Bottom row */}
       <div className="mt-3 grid auto-rows-fr grid-cols-1 gap-3 *:h-full md:grid-cols-3">
-        <KpiTile
-          label={`Unpaid · ${unpaidCount}`}
-          value={formatCurrency(unpaidTotal, "AED", loc)}
-          accent="rose"
-          icon={<AlertCircle className="h-4 w-4" />}
+        <UnpaidCard
+          locale={loc}
+          total={unpaidTotal}
+          count={unpaidCount}
+          reservations={unpaidReservations}
         />
         <KpiTile
           label="Owner payout"
@@ -345,96 +348,6 @@ export default async function SuperAdminDashboard({
           ]}
         />
       </div>
-
-      {/* Outstanding owner debts — only properties where the company still
-          owes the owner money. If a property is settled it falls off the
-          list, so what's on screen is exactly the open balance. */}
-      <h2 className="mt-8 mb-3 text-base font-bold tracking-tight">
-        Outstanding to owners
-      </h2>
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="grid-table w-full text-sm">
-            <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold">Property</th>
-                <th className="px-4 py-3 text-left font-semibold">Owner</th>
-                <th className="w-32 px-4 py-3 text-right font-semibold">
-                  Reservations
-                </th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  Owner payout
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {debtTable.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={4}
-                    className="px-4 py-12 text-center text-sm text-[var(--color-muted)]"
-                  >
-                    All settled — no outstanding balances.
-                  </td>
-                </tr>
-              ) : (
-                debtTable.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="h-5 w-1 shrink-0 rounded-full"
-                          style={{ background: p.color }}
-                        />
-                        <span className="font-semibold">{p.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/${loc}/admin/owners/${p.ownerId}`}
-                        className="text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-brand)] hover:underline"
-                      >
-                        {p.ownerName}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      <span className="inline-flex min-w-[2rem] items-center justify-center rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-xs font-semibold">
-                        {p.bookings}
-                      </span>
-                    </td>
-                    <td
-                      className={`px-4 py-3 text-right font-bold tabular-nums ${p.ownerDebt >= 0 ? "text-amber-700" : "text-rose-600"}`}
-                    >
-                      {formatCurrency(p.ownerDebt, "AED", loc)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-            {debtTable.length > 0 && (
-              <tfoot className="bg-[var(--color-surface-2)]/60">
-                <tr className="border-t border-[var(--color-border)]">
-                  <td
-                    colSpan={3}
-                    className="px-4 py-4 text-sm font-bold uppercase tracking-wider"
-                  >
-                    Total
-                  </td>
-                  <td
-                    className={`px-4 py-4 text-right tabular-nums text-base font-bold ${totalOwnerOutstanding >= 0 ? "text-amber-700" : "text-rose-600"}`}
-                  >
-                    {formatCurrency(totalOwnerOutstanding, "AED", loc)}
-                  </td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      </Card>
-
     </div>
   );
 }

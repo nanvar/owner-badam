@@ -171,11 +171,13 @@ export default async function ReportingPage({
 
   return (
     <div>
-      <MonthSelector
-        options={monthOpts}
-        selected={selectedMonth}
-        basePath={basePath}
-      />
+      <div className="mb-4">
+        <MonthSelector
+          options={monthOpts}
+          selected={selectedMonth}
+          basePath={basePath}
+        />
+      </div>
 
       <PageHeader title="Reporting" />
 

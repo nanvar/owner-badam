@@ -131,10 +131,9 @@ model Reservation {
   // dashboard accounts these separately so management can see realized
   // revenue vs pipeline. Owner reports ignore this flag.
   upcoming          Boolean           @default(false)
-  // Whether the reservation has been paid. Tracked independently of
-  // `upcoming` so an admin can mark a past stay as still unpaid (and
-  // chase the payment), or a future-flagged one as already paid.
-  paid              Boolean           @default(false)
+  // How much the guest has paid against `totalPrice`. Outstanding =
+  // totalPrice − paidAmount. Fully paid when paidAmount >= totalPrice.
+  paidAmount        Float             @default(0)
   // Once a reservation is bundled into an owner report it's "closed" and
   // no longer appears in the report builder's pickable list.
   reportId          String?
@@ -153,7 +152,6 @@ model Reservation {
   @@index([checkOut])
   @@index([reportId])
   @@index([monthKey])
-  @@index([paid])
 }
 
 enum ExpenseType {

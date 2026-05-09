@@ -66,7 +66,7 @@ export type ReservationItem = {
   currency: string;
   notes: string | null;
   detailsFilled: boolean;
-  paid: boolean;
+  paidAmount: number;
   rawSummary: string | null;
 };
 
@@ -130,11 +130,13 @@ export function ReservationsView({
 
   return (
     <div>
-      <MonthSelector
-        options={monthOpts}
-        selected={selectedMonth}
-        basePath={basePath}
-      />
+      <div className="mb-4">
+        <MonthSelector
+          options={monthOpts}
+          selected={selectedMonth}
+          basePath={basePath}
+        />
+      </div>
 
       <PageHeader
         title={labels.title}
@@ -231,7 +233,7 @@ export function ReservationsView({
                     <tr
                       onClick={() => setEditing(r)}
                       className={`cursor-pointer border-t border-[var(--color-border)] ${
-                        !r.paid
+                        r.paidAmount < r.totalPrice
                           ? "bg-amber-500/10 hover:bg-amber-500/15"
                           : "hover:bg-[var(--color-surface-2)]/60"
                       }`}
@@ -285,15 +287,31 @@ export function ReservationsView({
                           }
                           return null;
                         })()}
-                        {r.paid ? (
-                          <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                            Paid
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
-                            Unpaid
-                          </span>
-                        )}
+                        {(() => {
+                          const outstanding = r.totalPrice - r.paidAmount;
+                          if (r.totalPrice <= 0 || outstanding <= 0) {
+                            return (
+                              <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                                Paid
+                              </span>
+                            );
+                          }
+                          if (r.paidAmount > 0) {
+                            return (
+                              <span
+                                className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700"
+                                title={`Paid ${formatCurrency(r.paidAmount, r.currency || "AED", locale)} of ${formatCurrency(r.totalPrice, r.currency || "AED", locale)}`}
+                              >
+                                Partial · {formatCurrency(outstanding, r.currency || "AED", locale)} due
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="inline-flex items-center rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-600">
+                              Unpaid
+                            </span>
+                          );
+                        })()}
                       </div>
                     </td>
                     </tr>
@@ -369,7 +387,11 @@ export function ReservationEditor({
   const totalPrice = parseFloat(totalPriceStr) || 0;
   const agencyCommission = parseFloat(agencyCommissionStr) || 0;
   const portalCommission = parseFloat(portalCommissionStr) || 0;
-  const [paid, setPaid] = useState<boolean>(reservation?.paid ?? false);
+  const [paidAmountStr, setPaidAmountStr] = useState<string>(
+    reservation?.paidAmount ? String(reservation.paidAmount) : "",
+  );
+  const paidAmount = parseFloat(paidAmountStr) || 0;
+  const outstanding = Math.max(0, totalPrice - paidAmount);
   const monthOpts = monthOptions();
   const defaultMonth = reservation
     ? monthKeyFor(reservation.checkIn)
@@ -409,32 +431,29 @@ export function ReservationEditor({
         />
         <input type="hidden" name="payout" value={ownerPayout.toFixed(2)} />
         <input type="hidden" name="currency" value={reservation.currency || "AED"} />
-        <input
-          type="hidden"
-          name="paid"
-          value={paid ? "true" : "false"}
-        />
 
-        <label
-          className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
-            paid
-              ? "border-emerald-500/40 bg-emerald-500/10"
-              : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
-          }`}
+        <Field
+          label={`Paid by guest (${labels.currency})`}
+          htmlFor="paidAmount"
+          hint={
+            totalPrice <= 0
+              ? "Set the amount once the total price is filled in"
+              : outstanding <= 0
+                ? "Fully paid"
+                : `Outstanding ${formatCurrency(outstanding, reservation.currency || "AED", locale)}`
+          }
         >
-          <input
-            type="checkbox"
-            checked={paid}
-            onChange={(e) => setPaid(e.target.checked)}
-            className="mt-1 h-4 w-4 accent-emerald-500"
+          <Input
+            id="paidAmount"
+            name="paidAmount"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="0"
+            value={paidAmountStr}
+            onChange={(e) => setPaidAmountStr(e.target.value)}
           />
-          <div className="flex-1 text-sm">
-            <div className="font-semibold">Paid</div>
-            <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-              Payment received from the guest / portal.
-            </div>
-          </div>
-        </label>
+        </Field>
 
         <Field label="Bill into" htmlFor="bill-resv">
           <select
@@ -635,7 +654,9 @@ function CompanyReservationCreator({
   const totalPrice = parseFloat(totalPriceStr) || 0;
   const agencyCommission = parseFloat(agencyCommissionStr) || 0;
   const portalCommission = parseFloat(portalCommissionStr) || 0;
-  const [paid, setPaid] = useState(false);
+  const [paidAmountStr, setPaidAmountStr] = useState("");
+  const paidAmount = parseFloat(paidAmountStr) || 0;
+  const outstanding = Math.max(0, totalPrice - paidAmount);
   const monthOpts = monthOptions();
   const currentMonthKey =
     monthOpts.find((o) => o.label === monthLabel(new Date()))?.key ??
@@ -676,12 +697,6 @@ function CompanyReservationCreator({
       }
     >
       <form action={action} className="space-y-4">
-        <input
-          type="hidden"
-          name="paid"
-          value={paid ? "true" : "false"}
-        />
-
         <Field label={labels.property ?? "Property"} htmlFor="propertyId">
           <select
             id="propertyId"
@@ -835,26 +850,28 @@ function CompanyReservationCreator({
           </div>
         </div>
 
-        <label
-          className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
-            paid
-              ? "border-emerald-500/40 bg-emerald-500/10"
-              : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
-          }`}
+        <Field
+          label={`Paid by guest (${labels.currency})`}
+          htmlFor="cr-paidAmount"
+          hint={
+            totalPrice <= 0
+              ? "Set the amount once the total price is filled in"
+              : outstanding <= 0
+                ? "Fully paid"
+                : `Outstanding ${formatCurrency(outstanding, "AED", locale)}`
+          }
         >
-          <input
-            type="checkbox"
-            checked={paid}
-            onChange={(e) => setPaid(e.target.checked)}
-            className="mt-1 h-4 w-4 accent-emerald-500"
+          <Input
+            id="cr-paidAmount"
+            name="paidAmount"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="0"
+            value={paidAmountStr}
+            onChange={(e) => setPaidAmountStr(e.target.value)}
           />
-          <div className="flex-1 text-sm">
-            <div className="font-semibold">Paid</div>
-            <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-              Payment received from the guest.
-            </div>
-          </div>
-        </label>
+        </Field>
 
         <Field label="Bill into" htmlFor="bill-cr">
           <select
