@@ -20,8 +20,6 @@ import {
   Plus,
   AlertCircle,
   CalendarPlus,
-  Edit3,
-  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -41,11 +39,6 @@ import {
   createCompanyReservationAction,
   type ReservationState,
 } from "@/app/actions/reservations";
-import {
-  upsertReservationExtensionAction,
-  deleteReservationExtensionAction,
-  type ReservationExtensionState,
-} from "@/app/actions/reservation-extensions";
 import { syncAllAction, type SyncState } from "@/app/actions/sync";
 import { SyncSummary } from "../properties-view";
 import { MonthSelector } from "../company/month-selector";
@@ -580,13 +573,6 @@ export function ReservationEditor({
           </div>
         </label>
 
-        <ExtensionsSection
-          reservationId={reservation.id}
-          extensions={reservation.extensions}
-          locale={locale}
-          currency={reservation.currency || "AED"}
-        />
-
         <Field label="Bill into" htmlFor="bill-resv">
           <select
             id="bill-resv"
@@ -611,6 +597,22 @@ export function ReservationEditor({
             placeholder="Internal notes about this reservation..."
           />
         </Field>
+
+        <Link
+          href={`/${locale}/admin/reservations/${reservation.id}/extensions`}
+          className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm transition-colors hover:border-[var(--color-brand)]/40 hover:bg-[var(--color-brand-soft)]"
+        >
+          <span className="flex items-center gap-2">
+            <CalendarPlus className="h-4 w-4 text-[var(--color-brand)]" />
+            <span className="font-semibold">Manage extensions</span>
+            {reservation.extensions.length > 0 && (
+              <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-700">
+                {reservation.extensions.length}
+              </span>
+            )}
+          </span>
+          <span className="text-xs text-[var(--color-muted)]">Open page →</span>
+        </Link>
 
         {state?.status === "error" && (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
@@ -931,353 +933,3 @@ function CompanyReservationCreator({
   );
 }
 
-// Lists every extension attached to a reservation. iCal-created rows
-// are surfaced as "needs pricing" so the admin can fill in the same
-// fields a normal reservation has (amount, commissions, paid, notes,
-// bill-into month) via the sub-sheet.
-function ExtensionsSection({
-  reservationId,
-  extensions,
-  locale,
-  currency,
-}: {
-  reservationId: string;
-  extensions: ReservationExtensionItem[];
-  locale: Locale;
-  currency: string;
-}) {
-  const router = useRouter();
-  const [editing, setEditing] = useState<
-    ReservationExtensionItem | null | undefined
-  >(undefined);
-  const [deletePending, startDelete] = useTransition();
-  return (
-    <div className="space-y-2 rounded-2xl border border-[var(--color-border)] bg-white p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm font-semibold">Extensions</div>
-          <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-            Add-on nights captured separately so reports stay clean.
-          </div>
-        </div>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => setEditing(null)}
-        >
-          <CalendarPlus className="h-4 w-4" />
-          Add extension
-        </Button>
-      </div>
-
-      {extensions.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[var(--color-border)] px-3 py-6 text-center text-xs text-[var(--color-muted)]">
-          No extensions yet.
-        </div>
-      ) : (
-        <ul className="space-y-2">
-          {extensions.map((ext) => {
-            const needsDetails = !ext.detailsFilled || ext.totalPrice <= 0;
-            return (
-              <li
-                key={ext.id}
-                className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 ${
-                  needsDetails
-                    ? "border-amber-500/30 bg-amber-500/5"
-                    : "border-[var(--color-border)] bg-white"
-                }`}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
-                    {formatDate(ext.checkIn, locale)} →{" "}
-                    {formatDate(ext.checkOut, locale)}
-                    <span className="text-xs font-normal text-[var(--color-muted)]">
-                      · {ext.nights} {ext.nights === 1 ? "night" : "nights"}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
-                    {ext.totalPrice > 0 ? (
-                      <span className="font-semibold text-[var(--color-foreground)]">
-                        {formatCurrency(ext.totalPrice, ext.currency || "AED", locale)}
-                      </span>
-                    ) : (
-                      <span className="font-semibold text-amber-700">
-                        Needs pricing
-                      </span>
-                    )}
-                    {ext.paid ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Paid
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
-                        Unpaid
-                      </span>
-                    )}
-                    {ext.monthKey && (
-                      <span className="text-[10px] text-[var(--color-muted)]">
-                        · {ext.monthKey}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setEditing(ext)}
-                    aria-label="Edit extension"
-                    className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]"
-                  >
-                    <Edit3 className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={deletePending}
-                    onClick={() => {
-                      if (!confirm("Delete this extension?")) return;
-                      startDelete(async () => {
-                        await deleteReservationExtensionAction(ext.id);
-                        router.refresh();
-                      });
-                    }}
-                    aria-label="Delete extension"
-                    className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-rose-500/10 hover:text-rose-600 disabled:opacity-50"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      <ExtensionEditor
-        key={editing === undefined ? "closed" : editing?.id ?? "new"}
-        open={editing !== undefined}
-        reservationId={reservationId}
-        extension={editing ?? null}
-        currency={currency}
-        locale={locale}
-        onClose={() => setEditing(undefined)}
-      />
-    </div>
-  );
-}
-
-function ExtensionEditor({
-  open,
-  reservationId,
-  extension,
-  currency,
-  locale,
-  onClose,
-}: {
-  open: boolean;
-  reservationId: string;
-  extension: ReservationExtensionItem | null;
-  currency: string;
-  locale: Locale;
-  onClose: () => void;
-}) {
-  const router = useRouter();
-  const [state, action, pending] = useActionState<
-    ReservationExtensionState | undefined,
-    FormData
-  >(upsertReservationExtensionAction, undefined);
-
-  const [totalPriceStr, setTotalPriceStr] = useState<string>(
-    extension?.totalPrice ? String(extension.totalPrice) : "",
-  );
-  const [agencyCommissionStr, setAgencyCommissionStr] = useState<string>(
-    extension?.agencyCommission ? String(extension.agencyCommission) : "",
-  );
-  const [portalCommissionStr, setPortalCommissionStr] = useState<string>(
-    extension?.portalCommission ? String(extension.portalCommission) : "",
-  );
-  const [paid, setPaid] = useState<boolean>(extension?.paid ?? false);
-  const monthOpts = monthOptions();
-  const defaultMonth =
-    extension?.monthKey ??
-    (extension
-      ? monthKeyFor(extension.checkIn)
-      : monthOpts.find((o) => o.label === monthLabel(new Date()))?.key ??
-        monthOpts[6]?.key ??
-        "");
-  const [monthKey, setMonthKey] = useState<string>(defaultMonth);
-
-  useEffect(() => {
-    if (state?.status === "ok") {
-      router.refresh();
-      onClose();
-    }
-  }, [state, onClose, router]);
-
-  const totalPrice = parseFloat(totalPriceStr) || 0;
-  const agencyCommission = parseFloat(agencyCommissionStr) || 0;
-  const portalCommission = parseFloat(portalCommissionStr) || 0;
-  const ownerPayout = Math.max(
-    0,
-    totalPrice - agencyCommission - portalCommission,
-  );
-
-  return (
-    <Sheet
-      open={open}
-      onClose={onClose}
-      title={extension ? "Edit extension" : "New extension"}
-      description={
-        extension
-          ? `${formatDate(extension.checkIn, locale)} → ${formatDate(extension.checkOut, locale)} · ${extension.nights} nights`
-          : "Add-on stay window — captures the extra nights only."
-      }
-    >
-      <form action={action} className="space-y-4">
-        {extension && (
-          <input type="hidden" name="id" value={extension.id} />
-        )}
-        <input type="hidden" name="reservationId" value={reservationId} />
-        <input type="hidden" name="currency" value={currency} />
-        <input type="hidden" name="paid" value={paid ? "true" : "false"} />
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Check-in" htmlFor="ext-checkIn">
-            <Input
-              id="ext-checkIn"
-              name="checkIn"
-              type="date"
-              required
-              defaultValue={extension?.checkIn.slice(0, 10) ?? ""}
-            />
-          </Field>
-          <Field label="Check-out" htmlFor="ext-checkOut">
-            <Input
-              id="ext-checkOut"
-              name="checkOut"
-              type="date"
-              required
-              defaultValue={extension?.checkOut.slice(0, 10) ?? ""}
-            />
-          </Field>
-        </div>
-
-        <div className="space-y-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4">
-          <Field label={`Amount (${currency})`} htmlFor="ext-totalPrice">
-            <Input
-              id="ext-totalPrice"
-              name="totalPrice"
-              type="number"
-              step="0.01"
-              min="0"
-              required
-              value={totalPriceStr}
-              onChange={(e) => setTotalPriceStr(e.target.value)}
-            />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              label={`Agency commission (${currency})`}
-              htmlFor="ext-agencyCommission"
-            >
-              <Input
-                id="ext-agencyCommission"
-                name="agencyCommission"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0"
-                value={agencyCommissionStr}
-                onChange={(e) => setAgencyCommissionStr(e.target.value)}
-              />
-            </Field>
-            <Field
-              label={`Portal commission (${currency})`}
-              htmlFor="ext-portalCommission"
-            >
-              <Input
-                id="ext-portalCommission"
-                name="portalCommission"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0"
-                value={portalCommissionStr}
-                onChange={(e) => setPortalCommissionStr(e.target.value)}
-              />
-            </Field>
-          </div>
-          <div className="rounded-xl bg-[var(--color-brand-soft)] px-3 py-2.5 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--color-brand)]">Owner payout</span>
-              <span className="text-base font-bold text-[var(--color-brand)]">
-                {formatCurrency(ownerPayout, currency, locale)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <label
-          className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-colors ${
-            paid
-              ? "border-emerald-500/40 bg-emerald-500/10"
-              : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]/40"
-          }`}
-        >
-          <input
-            type="checkbox"
-            checked={paid}
-            onChange={(e) => setPaid(e.target.checked)}
-            className="mt-1 h-4 w-4 accent-emerald-500"
-          />
-          <div className="flex-1 text-sm">
-            <div className="font-semibold">Paid</div>
-            <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-              Tick once the guest has paid for this extension.
-            </div>
-          </div>
-        </label>
-
-        <Field label="Bill into" htmlFor="ext-monthKey">
-          <select
-            id="ext-monthKey"
-            name="monthKey"
-            value={monthKey}
-            onChange={(e) => setMonthKey(e.target.value)}
-            className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium transition-colors hover:border-[#cbd5d3] focus:border-[var(--color-brand)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-brand)]/25"
-          >
-            {monthOpts.map((o) => (
-              <option key={o.key} value={o.key}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="Notes" htmlFor="ext-notes">
-          <Textarea
-            id="ext-notes"
-            name="notes"
-            defaultValue={extension?.notes ?? ""}
-            placeholder="Internal notes about this extension..."
-          />
-        </Field>
-
-        {state?.status === "error" && (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
-            {state.message}
-          </div>
-        )}
-
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" loading={pending}>
-            Save
-          </Button>
-        </div>
-      </form>
-    </Sheet>
-  );
-}
