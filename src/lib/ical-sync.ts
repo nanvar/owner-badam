@@ -225,6 +225,42 @@ export async function syncProperty(propertyId: string): Promise<SyncOutcome> {
         where: { propertyId_externalId: { propertyId, externalId } },
       });
       if (existing) {
+        // Detect a stay extension: the feed pushed a checkOut later than
+        // what we stored. We keep the original reservation window intact
+        // (so reports for the period it was already attributed to don't
+        // shift) and record the added nights as a separate extension
+        // row that the admin prices manually.
+        if (
+          ev.end.getTime() > existing.checkOut.getTime() &&
+          ev.start.getTime() === existing.checkIn.getTime()
+        ) {
+          const extCheckIn = existing.checkOut;
+          const extCheckOut = ev.end;
+          const extNights = nightsBetween(extCheckIn, extCheckOut);
+          // Avoid creating duplicate extensions on repeated syncs by
+          // looking up whether one already covers this exact window.
+          const dupe = await prisma.reservationExtension.findFirst({
+            where: {
+              reservationId: existing.id,
+              checkIn: extCheckIn,
+              checkOut: extCheckOut,
+            },
+            select: { id: true },
+          });
+          if (!dupe) {
+            await prisma.reservationExtension.create({
+              data: {
+                reservationId: existing.id,
+                checkIn: extCheckIn,
+                checkOut: extCheckOut,
+                nights: extNights,
+                currency: existing.currency,
+                monthKey: monthKeyFor(extCheckIn),
+                detailsFilled: false,
+              },
+            });
+          }
+        }
         await prisma.reservation.update({
           where: { id: existing.id },
           data: {

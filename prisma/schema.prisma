@@ -131,9 +131,10 @@ model Reservation {
   // dashboard accounts these separately so management can see realized
   // revenue vs pipeline. Owner reports ignore this flag.
   upcoming          Boolean           @default(false)
-  // How much the guest has paid against `totalPrice`. Outstanding =
-  // totalPrice − paidAmount. Fully paid when paidAmount >= totalPrice.
-  paidAmount        Float             @default(0)
+  // Whether the guest has fully paid for this reservation. Extensions
+  // (when iCal lengthens an existing stay) carry their own `paid` flag
+  // on the ReservationExtension row.
+  paid              Boolean           @default(false)
   // Once a reservation is bundled into an owner report it's "closed" and
   // no longer appears in the report builder's pickable list.
   reportId          String?
@@ -146,12 +147,48 @@ model Reservation {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
+  extensions        ReservationExtension[]
+
   @@unique([propertyId, externalId])
   @@index([propertyId])
   @@index([checkIn])
   @@index([checkOut])
   @@index([reportId])
   @@index([monthKey])
+  @@index([paid])
+}
+
+// Stay extensions captured from iCal — when Airbnb pushes a longer
+// checkOut for a reservation we already track, we leave the original
+// reservation alone and record the extra nights here so reports keep
+// the original window separate from the add-on. Admins fill in
+// price / commissions / paid flag the same way as a reservation.
+model ReservationExtension {
+  id               String      @id @default(cuid())
+  reservationId    String
+  reservation      Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  // The added window. checkIn typically equals the previous checkOut.
+  checkIn          DateTime
+  checkOut         DateTime
+  nights           Int
+  totalPrice       Float       @default(0)
+  agencyCommission Float       @default(0)
+  portalCommission Float       @default(0)
+  payout           Float       @default(0)
+  currency         String      @default("AED")
+  notes            String?     @db.Text
+  paid             Boolean     @default(false)
+  // Billing month — admins flip this to the next month if the extension
+  // hasn't been paid by the time the original reservation's owner
+  // report is generated.
+  monthKey         String?     @db.VarChar(7)
+  detailsFilled    Boolean     @default(false)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@index([reservationId])
+  @@index([monthKey])
+  @@index([paid])
 }
 
 enum ExpenseType {

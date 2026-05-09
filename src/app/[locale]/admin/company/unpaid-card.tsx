@@ -9,19 +9,18 @@ import type { Locale } from "@/i18n/config";
 
 export type UnpaidReservation = {
   id: string;
+  kind: "reservation" | "extension";
   propertyName: string;
   propertyColor: string;
   guestName: string | null;
   checkIn: string;
   checkOut: string;
   totalPrice: number;
-  paidAmount: number;
   currency: string;
 };
 
 // Clickable KPI tile for outstanding receivables. Opens a side drawer
-// that lists every reservation that still has money owed so the admin
-// can pick out who to chase.
+// that lists every reservation + extension that still has money owed.
 export function UnpaidCard({
   locale,
   total,
@@ -62,7 +61,7 @@ export function UnpaidCard({
         onClose={() => setOpen(false)}
         side="right"
         title="Outstanding reservations"
-        description={`${count} reservation${count === 1 ? "" : "s"} · ${formatCurrency(total, "AED", locale)} owed`}
+        description={`${count} item${count === 1 ? "" : "s"} · ${formatCurrency(total, "AED", locale)} owed`}
       >
         {reservations.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white px-4 py-10 text-center text-sm text-[var(--color-muted)]">
@@ -70,44 +69,41 @@ export function UnpaidCard({
           </p>
         ) : (
           <ul className="space-y-2">
-            {reservations.map((r) => {
-              const outstanding = Math.max(0, r.totalPrice - r.paidAmount);
-              const partial = r.paidAmount > 0;
-              return (
-                <li
-                  key={r.id}
-                  className="flex items-start gap-3 rounded-2xl border border-[var(--color-border)] bg-white px-3 py-2.5"
-                >
-                  <span
-                    className="mt-1 h-7 w-1 shrink-0 rounded-full"
-                    style={{ background: r.propertyColor }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold">
+            {reservations.map((r) => (
+              <li
+                key={`${r.kind}-${r.id}`}
+                className="flex items-start gap-3 rounded-2xl border border-[var(--color-border)] bg-white px-3 py-2.5"
+              >
+                <span
+                  className="mt-1 h-7 w-1 shrink-0 rounded-full"
+                  style={{ background: r.propertyColor }}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-semibold">
                       {r.propertyName}
-                    </div>
-                    <div className="mt-0.5 truncate text-xs text-[var(--color-muted)]">
-                      {r.guestName ?? "—"} · {formatDate(r.checkIn, locale)} →{" "}
-                      {formatDate(r.checkOut, locale)}
-                    </div>
-                    {partial && (
-                      <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-amber-700">
-                        Paid {formatCurrency(r.paidAmount, r.currency || "AED", locale)} of{" "}
-                        {formatCurrency(r.totalPrice, r.currency || "AED", locale)}
-                      </div>
+                    </span>
+                    {r.kind === "extension" && (
+                      <span className="rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-700">
+                        Ext
+                      </span>
                     )}
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-bold tabular-nums text-rose-600">
-                      {formatCurrency(outstanding, r.currency || "AED", locale)}
-                    </div>
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-                      {partial ? "Outstanding" : "Unpaid"}
-                    </div>
+                  <div className="mt-0.5 truncate text-xs text-[var(--color-muted)]">
+                    {r.guestName ?? "—"} · {formatDate(r.checkIn, locale)} →{" "}
+                    {formatDate(r.checkOut, locale)}
                   </div>
-                </li>
-              );
-            })}
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-bold tabular-nums text-rose-600">
+                    {formatCurrency(r.totalPrice, r.currency || "AED", locale)}
+                  </div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+                    Unpaid
+                  </div>
+                </div>
+              </li>
+            ))}
           </ul>
         )}
       </Sheet>

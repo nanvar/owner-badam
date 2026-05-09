@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/app-shell";
 import { formatCurrency, monthLabel } from "@/lib/utils";
 import { MonthSelector } from "./month-selector";
 import { UnpaidCard } from "./unpaid-card";
+import { PendingExtensionsCard } from "./pending-extensions-card";
 
 type PropertyAgg = {
   id: string;
@@ -95,6 +96,7 @@ export default async function SuperAdminDashboard({
     expenseAggs,
     paymentAggs,
     companyProfitAggs,
+    extensionRows,
     properties,
   ] = await Promise.all([
     prisma.reservation.groupBy({
@@ -123,6 +125,22 @@ export default async function SuperAdminDashboard({
       where: { kind: "PROFIT", ...monthWhere },
       _sum: { amount: true },
     }),
+    // Extensions live on a side table — no `groupBy` because we need the
+    // owning property via the relation. Aggregating in JS is fine since
+    // monthly volumes are tiny.
+    prisma.reservationExtension.findMany({
+      where: monthWhere,
+      include: {
+        reservation: {
+          select: {
+            propertyId: true,
+            guestName: true,
+            property: { select: { name: true, color: true } },
+          },
+        },
+      },
+      orderBy: { checkIn: "desc" },
+    }),
     prisma.property.findMany({
       include: { owner: { select: { id: true, name: true, email: true } } },
     }),
@@ -135,6 +153,41 @@ export default async function SuperAdminDashboard({
   const profitByProp = new Map(
     companyProfitAggs.map((a) => [a.propertyId ?? "", a._sum.amount ?? 0]),
   );
+
+  // Extension contributions, bucketed by owning property, so the rest of
+  // the dashboard math (revenue / profit / owner payout) naturally
+  // includes them — extensions are real revenue, just split off so the
+  // original reservation window stays untouched.
+  type ExtBucket = {
+    total: number;
+    agency: number;
+    portal: number;
+    payout: number;
+    count: number;
+    pending: number;
+    unpaid: number;
+  };
+  const extByProp = new Map<string, ExtBucket>();
+  for (const e of extensionRows) {
+    const pid = e.reservation.propertyId;
+    const cur = extByProp.get(pid) ?? {
+      total: 0,
+      agency: 0,
+      portal: 0,
+      payout: 0,
+      count: 0,
+      pending: 0,
+      unpaid: 0,
+    };
+    cur.total += e.totalPrice;
+    cur.agency += e.agencyCommission;
+    cur.portal += e.portalCommission;
+    cur.payout += e.payout;
+    cur.count += 1;
+    if (!e.detailsFilled || e.totalPrice <= 0) cur.pending += 1;
+    if (!e.paid && e.totalPrice > 0) cur.unpaid += 1;
+    extByProp.set(pid, cur);
+  }
   const directPaymentsByProp = new Map(
     paymentAggs
       .filter((a) => !!a.propertyId)
@@ -151,10 +204,13 @@ export default async function SuperAdminDashboard({
 
   // Build the per-property base table (all of the owner's properties show
   // up, even ones with no activity in the period — easier to spot zeros).
+  // Extensions roll into agency / portal / payout / revenue so the
+  // dashboard KPIs reflect the full picture without a separate path.
   const baseTable = properties.map((p) => {
     const a = realizedByProp.get(p.id);
+    const ext = extByProp.get(p.id);
     const expenses = expenseByProp.get(p.id) ?? 0;
-    const payout = a?._sum.payout ?? 0;
+    const payout = (a?._sum.payout ?? 0) + (ext?.payout ?? 0);
     const ownerNet = payout - expenses;
     return {
       id: p.id,
@@ -163,9 +219,10 @@ export default async function SuperAdminDashboard({
       ownerId: p.owner.id,
       ownerName: p.owner.name ?? p.owner.email,
       bookings: a?._count._all ?? 0,
-      totalRevenue: a?._sum.totalPrice ?? 0,
-      agencyEarnings: a?._sum.agencyCommission ?? 0,
-      portalCommissions: a?._sum.portalCommission ?? 0,
+      totalRevenue: (a?._sum.totalPrice ?? 0) + (ext?.total ?? 0),
+      agencyEarnings: (a?._sum.agencyCommission ?? 0) + (ext?.agency ?? 0),
+      portalCommissions:
+        (a?._sum.portalCommission ?? 0) + (ext?.portal ?? 0),
       ownerPayout: payout,
       propertyExpenses: expenses,
       ownerNet,
@@ -223,16 +280,16 @@ export default async function SuperAdminDashboard({
     0,
   );
 
-  // Reservation counts within the selected period, plus the per-row
-  // unpaid list so the dashboard can surface receivables in a drawer.
-  // Unpaid rows are anything with totalPrice > paidAmount; skipping
-  // totalPrice = 0 hides synced-but-not-yet-priced Airbnb placeholders.
+  // Reservation counts within the selected period, plus the unpaid
+  // list (reservations + extensions) so the dashboard surfaces every
+  // outstanding receivable in a drawer. We skip totalPrice = 0 rows so
+  // synced-but-not-yet-priced placeholders don't pollute the count.
   const today = new Date();
   const [
     allReservationsCount,
     activeReservationsCount,
     doneReservationsCount,
-    pricedRows,
+    unpaidReservationRows,
   ] = await Promise.all([
     prisma.reservation.count({ where: monthWhere }),
     prisma.reservation.count({
@@ -246,31 +303,62 @@ export default async function SuperAdminDashboard({
       where: { ...monthWhere, checkOut: { lte: today } },
     }),
     prisma.reservation.findMany({
-      where: { ...monthWhere, totalPrice: { gt: 0 } },
+      where: { ...monthWhere, paid: false, totalPrice: { gt: 0 } },
       include: {
         property: { select: { name: true, color: true } },
       },
       orderBy: { checkIn: "desc" },
     }),
   ]);
-  const unpaidReservations = pricedRows
-    .filter((r) => r.paidAmount < r.totalPrice)
-    .map((r) => ({
+  // Extensions are derived from the already-loaded `extensionRows` so we
+  // don't issue duplicate queries.
+  const unpaidReservations = [
+    ...unpaidReservationRows.map((r) => ({
       id: r.id,
+      kind: "reservation" as const,
       propertyName: r.property.name,
       propertyColor: r.property.color,
       guestName: r.guestName,
       checkIn: r.checkIn.toISOString(),
       checkOut: r.checkOut.toISOString(),
       totalPrice: r.totalPrice,
-      paidAmount: r.paidAmount,
       currency: r.currency,
-    }));
+    })),
+    ...extensionRows
+      .filter((e) => !e.paid && e.totalPrice > 0)
+      .map((e) => ({
+        id: e.id,
+        kind: "extension" as const,
+        propertyName: e.reservation.property.name,
+        propertyColor: e.reservation.property.color,
+        guestName: e.reservation.guestName,
+        checkIn: e.checkIn.toISOString(),
+        checkOut: e.checkOut.toISOString(),
+        totalPrice: e.totalPrice,
+        currency: e.currency,
+      })),
+  ].sort((a, b) => (a.checkIn < b.checkIn ? 1 : -1));
   const unpaidTotal = unpaidReservations.reduce(
-    (s, r) => s + (r.totalPrice - r.paidAmount),
+    (s, r) => s + r.totalPrice,
     0,
   );
   const unpaidCount = unpaidReservations.length;
+
+  // Extension stats — the count of extensions in the period and the
+  // sub-set that still needs pricing (iCal placeholders).
+  const totalExtensionsCount = extensionRows.length;
+  const pendingExtensions = extensionRows
+    .filter((e) => !e.detailsFilled || e.totalPrice <= 0)
+    .map((e) => ({
+      id: e.id,
+      propertyName: e.reservation.property.name,
+      propertyColor: e.reservation.property.color,
+      guestName: e.reservation.guestName,
+      checkIn: e.checkIn.toISOString(),
+      checkOut: e.checkOut.toISOString(),
+      nights: e.nights,
+    }));
+  const pendingExtensionsCount = pendingExtensions.length;
 
   // KPIs
   const totalAgency = propertyTable.reduce((s, p) => s + p.agencyEarnings, 0);
@@ -324,12 +412,17 @@ export default async function SuperAdminDashboard({
       </div>
 
       {/* Bottom row */}
-      <div className="mt-3 grid auto-rows-fr grid-cols-1 gap-3 *:h-full md:grid-cols-3">
+      <div className="mt-3 grid auto-rows-fr grid-cols-1 gap-3 *:h-full md:grid-cols-2 lg:grid-cols-4">
         <UnpaidCard
           locale={loc}
           total={unpaidTotal}
           count={unpaidCount}
           reservations={unpaidReservations}
+        />
+        <PendingExtensionsCard
+          locale={loc}
+          count={pendingExtensionsCount}
+          extensions={pendingExtensions}
         />
         <KpiTile
           label="Owner payout"
@@ -345,6 +438,7 @@ export default async function SuperAdminDashboard({
             { label: "All", value: String(allReservationsCount) },
             { label: "Live", value: String(activeReservationsCount) },
             { label: "Done", value: String(doneReservationsCount) },
+            { label: "Ext", value: String(totalExtensionsCount) },
           ]}
         />
       </div>

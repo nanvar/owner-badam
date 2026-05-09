@@ -15,7 +15,10 @@ export default async function IncompleteReservationsPage({
 
   const reservations = await prisma.reservation.findMany({
     where: { detailsFilled: false },
-    include: { property: { select: { id: true, name: true, color: true } } },
+    include: {
+      property: { select: { id: true, name: true, color: true } },
+      extensions: { orderBy: { checkIn: "asc" } },
+    },
     orderBy: { checkIn: "desc" },
   });
 
@@ -49,8 +52,24 @@ export default async function IncompleteReservationsPage({
         currency: r.currency,
         notes: r.notes,
         detailsFilled: r.detailsFilled,
-        paidAmount: r.paidAmount,
+        paid: r.paid,
         rawSummary: r.rawSummary,
+        extensions: r.extensions.map((e) => ({
+          id: e.id,
+          reservationId: e.reservationId,
+          checkIn: e.checkIn.toISOString(),
+          checkOut: e.checkOut.toISOString(),
+          nights: e.nights,
+          totalPrice: e.totalPrice,
+          agencyCommission: e.agencyCommission,
+          portalCommission: e.portalCommission,
+          payout: e.payout,
+          currency: e.currency,
+          notes: e.notes,
+          paid: e.paid,
+          monthKey: e.monthKey,
+          detailsFilled: e.detailsFilled,
+        })),
       }))}
       labels={{
         title: tCommon("reservations"),

@@ -21,7 +21,7 @@ const ReservationSchema = z.object({
   payout: z.coerce.number().nonnegative(),
   currency: z.string().default("AED"),
   notes: z.string().max(2000).optional().or(z.literal("")),
-  paidAmount: z.coerce.number().nonnegative().default(0),
+  paid: z.coerce.boolean().optional(),
   monthKey: z
     .string()
     .regex(/^\d{4}-\d{2}$/)
@@ -55,15 +55,13 @@ export async function updateReservationAction(
     payout: formData.get("payout") || 0,
     currency: (formData.get("currency") as string) || "AED",
     notes: formData.get("notes") || "",
-    paidAmount: formData.get("paidAmount") || 0,
+    paid: formData.get("paid") === "on" || formData.get("paid") === "true",
     monthKey: (formData.get("monthKey") as string | null) ?? "",
   });
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
   const data = parsed.data;
-  // Clamp to totalPrice so accidental overpayment doesn't skew reports.
-  const paidAmount = Math.min(data.paidAmount, data.totalPrice);
   // Form sends the explicit billing month; if omitted (older clients),
   // fall back to the reservation's checkIn month.
   let monthKey: string | null = data.monthKey || null;
@@ -92,7 +90,7 @@ export async function updateReservationAction(
       currency: data.currency,
       notes: data.notes || null,
       upcoming: false,
-      paidAmount,
+      paid: data.paid ?? false,
       monthKey,
       detailsFilled: true,
     },
@@ -124,7 +122,7 @@ const CompanyReservationSchema = z.object({
   taxes: z.coerce.number().nonnegative().default(0),
   currency: z.string().default("AED"),
   notes: z.string().max(2000).optional().or(z.literal("")),
-  paidAmount: z.coerce.number().nonnegative().default(0),
+  paid: z.coerce.boolean().optional(),
   monthKey: z
     .string()
     .regex(/^\d{4}-\d{2}$/)
@@ -153,14 +151,13 @@ export async function createCompanyReservationAction(
     taxes: formData.get("taxes") || 0,
     currency: (formData.get("currency") as string) || "AED",
     notes: formData.get("notes") || "",
-    paidAmount: formData.get("paidAmount") || 0,
+    paid: formData.get("paid") === "on" || formData.get("paid") === "true",
     monthKey: (formData.get("monthKey") as string | null) ?? "",
   });
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
   const data = parsed.data;
-  const paidAmount = Math.min(data.paidAmount, data.totalPrice);
   const checkIn = new Date(data.checkIn);
   const checkOut = new Date(data.checkOut);
   if (Number.isNaN(checkIn.getTime()) || Number.isNaN(checkOut.getTime())) {
@@ -205,7 +202,7 @@ export async function createCompanyReservationAction(
       currency: data.currency,
       notes: data.notes || null,
       upcoming: false,
-      paidAmount,
+      paid: data.paid ?? false,
       monthKey: data.monthKey || monthKeyFor(checkIn),
       detailsFilled: true,
     },
