@@ -16,7 +16,7 @@ export default async function AdminPropertiesPage({
   setRequestLocale(locale);
   await requireRole("ADMIN");
 
-  const [properties, owners] = await Promise.all([
+  const [properties, owners, expenses, payments] = await Promise.all([
     prisma.property.findMany({
       include: {
         owner: { select: { id: true, name: true, email: true } },
@@ -28,6 +28,15 @@ export default async function AdminPropertiesPage({
       where: { role: "OWNER" },
       select: { id: true, name: true, email: true },
       orderBy: [{ name: "asc" }, { email: "asc" }],
+    }),
+    prisma.expense.findMany({
+      orderBy: { date: "desc" },
+    }),
+    // Per-property settlements only — cross-property (propertyId = null)
+    // payouts are recorded against owners and surface on the owner page.
+    prisma.ownerPayment.findMany({
+      where: { propertyId: { not: null } },
+      orderBy: { date: "desc" },
     }),
   ]);
 
@@ -61,6 +70,23 @@ export default async function AdminPropertiesPage({
           createdAt: p.createdAt.toISOString(),
         }))}
         owners={owners}
+        expenses={expenses.map((e) => ({
+          id: e.id,
+          propertyId: e.propertyId,
+          date: e.date.toISOString(),
+          type: e.type,
+          description: e.description,
+          amount: e.amount,
+        }))}
+        payments={payments.map((p) => ({
+          id: p.id,
+          propertyId: p.propertyId,
+          date: p.date.toISOString(),
+          amount: p.amount,
+          method: p.method,
+          reference: p.reference,
+          notes: p.notes,
+        }))}
         labels={{
           title: tCommon("properties"),
           addProperty: tAdmin("addProperty"),
