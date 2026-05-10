@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
-import { formatCurrency, monthKeyFor, monthLabel } from "@/lib/utils";
+import { formatCurrency, monthLabel } from "@/lib/utils";
 import { MonthSelector } from "../month-selector";
 import { ReportingFilter } from "./reporting-filter";
 
@@ -53,8 +53,7 @@ export default async function ReportingPage({
       distinct: ["monthKey"],
     }),
   ]);
-  const currentMonth = monthKeyFor(new Date());
-  const monthSet = new Set<string>([currentMonth]);
+  const monthSet = new Set<string>();
   for (const r of resMonths) if (r.monthKey) monthSet.add(r.monthKey);
   for (const r of expMonths) if (r.monthKey) monthSet.add(r.monthKey);
   for (const r of coMonths) if (r.monthKey) monthSet.add(r.monthKey);
@@ -64,7 +63,9 @@ export default async function ReportingPage({
     .reverse()
     .map((k) => ({ key: k, label: monthLabel(k, locale) }));
   const selectedMonth =
-    sp.month && monthSet.has(sp.month) ? sp.month : currentMonth;
+    sp.month && monthSet.has(sp.month) ? sp.month : "";
+  // Empty selectedMonth → "All months", drop the constraint.
+  const monthWhere = selectedMonth ? { monthKey: selectedMonth } : {};
 
   const propertyOwnerFilter = filterOwnerId
     ? { property: { ownerId: filterOwnerId } }
@@ -80,7 +81,7 @@ export default async function ReportingPage({
   ] = await Promise.all([
     prisma.reservation.groupBy({
       by: ["propertyId"],
-      where: { monthKey: selectedMonth, ...propertyOwnerFilter },
+      where: { ...monthWhere, ...propertyOwnerFilter },
       _sum: {
         totalPrice: true,
         agencyCommission: true,
@@ -90,12 +91,12 @@ export default async function ReportingPage({
     }),
     prisma.expense.groupBy({
       by: ["propertyId"],
-      where: { monthKey: selectedMonth, ...propertyOwnerFilter },
+      where: { ...monthWhere, ...propertyOwnerFilter },
       _sum: { amount: true },
     }),
     prisma.companyExpense.groupBy({
       by: ["propertyId"],
-      where: { kind: "PROFIT", monthKey: selectedMonth, ...propertyOwnerFilter },
+      where: { kind: "PROFIT", ...monthWhere, ...propertyOwnerFilter },
       _sum: { amount: true },
     }),
     prisma.property.findMany({
@@ -171,15 +172,17 @@ export default async function ReportingPage({
 
   return (
     <div>
-      <div className="mb-4">
-        <MonthSelector
-          options={monthOpts}
-          selected={selectedMonth}
-          basePath={basePath}
-        />
-      </div>
-
-      <PageHeader title="Reporting" />
+      <PageHeader
+        title="Reporting"
+        right={
+          <MonthSelector
+            options={monthOpts}
+            selected={selectedMonth}
+            basePath={basePath}
+            allowAll
+          />
+        }
+      />
 
       <ReportingFilter
         owners={ownersList.map((o) => ({

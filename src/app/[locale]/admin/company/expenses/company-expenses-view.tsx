@@ -129,15 +129,17 @@ export function CompanyFinancesView({
 
   return (
     <div>
-      <div className="mb-4">
-        <MonthSelector
-          options={monthOpts}
-          selected={selectedMonth}
-          basePath={basePath}
-        />
-      </div>
-
-      <PageHeader title="Company finances" />
+      <PageHeader
+        title="Company finances"
+        right={
+          <MonthSelector
+            options={monthOpts}
+            selected={selectedMonth}
+            basePath={basePath}
+            allowAll
+          />
+        }
+      />
 
       {/* Active deposits summary so admins can see at a glance how much is
           still being held on behalf of guests. */}

@@ -3,7 +3,7 @@ import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { monthKeyFor, monthLabel } from "@/lib/utils";
+import { monthLabel } from "@/lib/utils";
 import { CompanyFinancesView } from "./company-expenses-view";
 
 const PAGE_SIZE = 25;
@@ -57,8 +57,7 @@ export default async function SuperAdminFinancesPage({
       distinct: ["monthKey"],
     }),
   ]);
-  const currentMonth = monthKeyFor(new Date());
-  const monthSet = new Set<string>([currentMonth]);
+  const monthSet = new Set<string>();
   for (const r of resMonths) if (r.monthKey) monthSet.add(r.monthKey);
   for (const r of expMonths) if (r.monthKey) monthSet.add(r.monthKey);
   for (const r of coMonths) if (r.monthKey) monthSet.add(r.monthKey);
@@ -68,10 +67,14 @@ export default async function SuperAdminFinancesPage({
     .reverse()
     .map((k) => ({ key: k, label: monthLabel(k, locale) }));
   const selectedMonth =
-    sp.month && monthSet.has(sp.month) ? sp.month : currentMonth;
+    sp.month && monthSet.has(sp.month) ? sp.month : "";
+  // Empty selectedMonth = "All months" — drop the monthKey constraint
+  // so every period rolls into the visible list.
+  const monthWhere = selectedMonth ? { monthKey: selectedMonth } : {};
 
-  // All counts/lists scoped to the selected billing month. Active-deposit
-  // tile also obeys the month filter so the page reads consistently.
+  // All counts/lists scoped to the selected billing month (or all when
+  // no month is selected). Active-deposit tile obeys the same filter so
+  // the page reads consistently.
   const [
     expenseCount,
     profitCount,
@@ -81,16 +84,16 @@ export default async function SuperAdminFinancesPage({
     properties,
   ] = await Promise.all([
     prisma.companyExpense.count({
-      where: { kind: "EXPENSE", monthKey: selectedMonth },
+      where: { kind: "EXPENSE", ...monthWhere },
     }),
     prisma.companyExpense.count({
-      where: { kind: "PROFIT", monthKey: selectedMonth },
+      where: { kind: "PROFIT", ...monthWhere },
     }),
     prisma.companyExpense.count({
-      where: { kind: "DEPOSIT", monthKey: selectedMonth },
+      where: { kind: "DEPOSIT", ...monthWhere },
     }),
     prisma.companyExpense.findMany({
-      where: { kind: tab, monthKey: selectedMonth },
+      where: { kind: tab, ...monthWhere },
       include: {
         property: { select: { id: true, name: true, color: true } },
       },
@@ -99,7 +102,7 @@ export default async function SuperAdminFinancesPage({
       take: PAGE_SIZE,
     }),
     prisma.companyExpense.aggregate({
-      where: { kind: "DEPOSIT", refundedAt: null, monthKey: selectedMonth },
+      where: { kind: "DEPOSIT", refundedAt: null, ...monthWhere },
       _sum: { amount: true },
       _count: { _all: true },
     }),
