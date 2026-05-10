@@ -17,7 +17,6 @@ import {
   Unlock,
   MoreHorizontal,
   ExternalLink,
-  FileText,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
@@ -165,7 +164,6 @@ export function OwnersView({
                         owner={o}
                         canManage={canManage}
                         viewHref={`/${locale}/admin/owners/${o.id}`}
-                        reportsHref={`/${locale}/admin/owners/${o.id}/reports`}
                         blockPending={blockPending && pendingBlockId === o.id}
                         onEdit={() => setEditing(o)}
                         onDelete={() => setDeleting(o)}
@@ -327,7 +325,6 @@ function RowMenu({
   owner,
   canManage,
   viewHref,
-  reportsHref,
   blockPending,
   onEdit,
   onDelete,
@@ -336,7 +333,6 @@ function RowMenu({
   owner: OwnerRow;
   canManage: boolean;
   viewHref: string;
-  reportsHref: string;
   blockPending: boolean;
   onEdit: () => void;
   onDelete: () => void;
@@ -386,16 +382,6 @@ function RowMenu({
               <ExternalLink className="h-4 w-4" />
             </span>
             <span className="flex-1">View owner</span>
-          </Link>
-          <Link
-            href={reportsHref}
-            onClick={close}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--color-foreground)] transition-colors hover:bg-[var(--color-surface-2)]"
-          >
-            <span className="shrink-0 text-[var(--color-muted)]">
-              <FileText className="h-4 w-4" />
-            </span>
-            <span className="flex-1">Reports</span>
           </Link>
           {canManage && (
             <>

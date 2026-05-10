@@ -8,6 +8,7 @@ import {
   Settings as SettingsIcon,
   Building2,
   BarChart3,
+  FileText,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { requireRole } from "@/lib/auth";
@@ -84,9 +85,24 @@ export default async function AdminLayout({
       icon: <ListTree className="h-4 w-4" />,
     },
     {
+      // Parent dropdown — landing page is the owner list, but the
+      // dropdown surfaces Reports as a sibling so admins jump straight
+      // to bundling settlements.
       href: `/${locale}/admin/owners`,
       label: t("navOwners"),
       icon: <Users className="h-4 w-4" />,
+      children: [
+        {
+          href: `/${locale}/admin/owners`,
+          label: t("navOwners"),
+          icon: <Users className="h-4 w-4" />,
+        },
+        {
+          href: `/${locale}/admin/reports`,
+          label: "Reports",
+          icon: <FileText className="h-4 w-4" />,
+        },
+      ],
     },
     // Non-SUPERADMIN admins still need direct access to Settings since
     // the Company dropdown is gated to SUPERADMIN only.

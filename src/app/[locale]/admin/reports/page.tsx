@@ -9,23 +9,45 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { ReportsPropertyFilter } from "./property-filter";
 
 export default async function AdminReportsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ propertyId?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
   await requireRole("ADMIN");
   const loc = locale as Locale;
+  const sp = await searchParams;
+
+  const properties = await prisma.property.findMany({
+    select: {
+      id: true,
+      name: true,
+      color: true,
+      owner: { select: { name: true, email: true } },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const filterPropertyId =
+    sp.propertyId && properties.some((p) => p.id === sp.propertyId)
+      ? sp.propertyId
+      : "";
 
   const reports = await prisma.ownerReport.findMany({
+    where: filterPropertyId ? { propertyId: filterPropertyId } : undefined,
     include: {
       property: { select: { name: true, color: true } },
       owner: { select: { name: true, email: true } },
-      _count: { select: { reservations: true, expenses: true } },
+      _count: {
+        select: { reservations: true, extensions: true, expenses: true },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -44,11 +66,23 @@ export default async function AdminReportsPage({
         }
       />
 
+      <ReportsPropertyFilter
+        properties={properties.map((p) => ({
+          id: p.id,
+          name: p.name,
+          color: p.color,
+          ownerName: p.owner.name ?? p.owner.email,
+        }))}
+        selectedPropertyId={filterPropertyId}
+        basePath={`/${loc}/admin/reports`}
+      />
+
       {reports.length === 0 ? (
         <Card>
           <CardBody className="py-16 text-center text-sm text-[var(--color-muted)]">
-            No reports yet. Click "New report" to bundle reservations and
-            expenses for an owner.
+            {filterPropertyId
+              ? "No reports for this property yet."
+              : "No reports yet. Click \"New report\" to bundle reservations and expenses for an owner."}
           </CardBody>
         </Card>
       ) : (
@@ -99,7 +133,14 @@ export default async function AdminReportsPage({
                       {r.owner.name ?? r.owner.email}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-[var(--color-muted)]">
-                      {r._count.reservations} / {r._count.expenses}
+                      {r._count.reservations}
+                      {r._count.extensions > 0 && (
+                        <span className="text-sky-700">
+                          {" "}
+                          +{r._count.extensions}
+                        </span>
+                      )}{" "}
+                      / {r._count.expenses}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {formatCurrency(r.totalIncome, "AED", loc)}
