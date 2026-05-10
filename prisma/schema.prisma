@@ -183,12 +183,19 @@ model ReservationExtension {
   // report is generated.
   monthKey         String?     @db.VarChar(7)
   detailsFilled    Boolean     @default(false)
+  // Same bundling pattern as Reservation/Expense — once attached to an
+  // owner report the extension is "closed" and not offered to the
+  // builder again. Useful when the parent reservation went into a
+  // different month's report than the extension itself.
+  reportId         String?
+  report           OwnerReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
   @@index([reservationId])
   @@index([monthKey])
   @@index([paid])
+  @@index([reportId])
 }
 
 enum ExpenseType {
@@ -335,6 +342,7 @@ model OwnerReport {
 
   reservations  Reservation[]
   expenses      Expense[]
+  extensions    ReservationExtension[]
 
   @@index([ownerId])
   @@index([propertyId])

@@ -10,6 +10,7 @@ const CreateReportSchema = z.object({
   name: z.string().min(1).max(120),
   notes: z.string().max(2000).optional().or(z.literal("")),
   reservationIds: z.array(z.string().min(1)).default([]),
+  extensionIds: z.array(z.string().min(1)).default([]),
   expenseIds: z.array(z.string().min(1)).default([]),
 });
 
@@ -18,9 +19,9 @@ export type ReportState =
   | { status: "ok"; reportId: string }
   | { status: "error"; message: string };
 
-// Build a report by stamping selected reservations + expenses with the
-// new report's id. Items already attached to another report are rejected
-// — you can't bundle the same income twice.
+// Build a report by stamping selected reservations + extensions +
+// expenses with the new report's id. Items already attached to another
+// report are rejected — you can't bundle the same income twice.
 export async function createOwnerReportAction(
   _prev: ReportState | undefined,
   formData: FormData,
@@ -31,6 +32,7 @@ export async function createOwnerReportAction(
     name: formData.get("name"),
     notes: formData.get("notes") || "",
     reservationIds: formData.getAll("reservationIds"),
+    extensionIds: formData.getAll("extensionIds"),
     expenseIds: formData.getAll("expenseIds"),
   });
   if (!parsed.success) {
@@ -40,10 +42,14 @@ export async function createOwnerReportAction(
     };
   }
   const v = parsed.data;
-  if (v.reservationIds.length === 0 && v.expenseIds.length === 0) {
+  if (
+    v.reservationIds.length === 0 &&
+    v.extensionIds.length === 0 &&
+    v.expenseIds.length === 0
+  ) {
     return {
       status: "error",
-      message: "Pick at least one reservation or expense for the report.",
+      message: "Pick at least one reservation, extension, or expense.",
     };
   }
 
@@ -56,7 +62,7 @@ export async function createOwnerReportAction(
   }
 
   // Sanity-check the picked items: same property, not already in a report.
-  const [reservations, expenses] = await Promise.all([
+  const [reservations, extensions, expenses] = await Promise.all([
     v.reservationIds.length
       ? prisma.reservation.findMany({
           where: { id: { in: v.reservationIds } },
@@ -66,6 +72,18 @@ export async function createOwnerReportAction(
             reportId: true,
             payout: true,
             totalPrice: true,
+          },
+        })
+      : Promise.resolve([]),
+    v.extensionIds.length
+      ? prisma.reservationExtension.findMany({
+          where: { id: { in: v.extensionIds } },
+          select: {
+            id: true,
+            reportId: true,
+            payout: true,
+            totalPrice: true,
+            reservation: { select: { propertyId: true } },
           },
         })
       : Promise.resolve([]),
@@ -89,6 +107,14 @@ export async function createOwnerReportAction(
       return { status: "error", message: "One of the reservations is already in a report." };
     }
   }
+  for (const ext of extensions) {
+    if (ext.reservation.propertyId !== v.propertyId) {
+      return { status: "error", message: "Extension belongs to another property." };
+    }
+    if (ext.reportId) {
+      return { status: "error", message: "One of the extensions is already in a report." };
+    }
+  }
   for (const e of expenses) {
     if (e.propertyId !== v.propertyId) {
       return { status: "error", message: "Expense belongs to another property." };
@@ -99,7 +125,10 @@ export async function createOwnerReportAction(
   }
 
   // Snapshot totals so the report stays stable even if rows get edited.
-  const totalIncome = reservations.reduce((s, r) => s + r.payout, 0);
+  // Income = reservation payouts + extension payouts.
+  const totalIncome =
+    reservations.reduce((s, r) => s + r.payout, 0) +
+    extensions.reduce((s, e) => s + e.payout, 0);
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const netPayout = totalIncome - totalExpenses;
 
@@ -122,6 +151,12 @@ export async function createOwnerReportAction(
         data: { reportId: created.id },
       });
     }
+    if (v.extensionIds.length) {
+      await tx.reservationExtension.updateMany({
+        where: { id: { in: v.extensionIds } },
+        data: { reportId: created.id },
+      });
+    }
     if (v.expenseIds.length) {
       await tx.expense.updateMany({
         where: { id: { in: v.expenseIds } },
@@ -140,14 +175,18 @@ export async function createOwnerReportAction(
   return { status: "ok", reportId: report.id };
 }
 
-// Delete a report, releasing its items back into the picker. The DB-level
-// ON DELETE SET NULL already nulls reservation.reportId / expense.reportId,
-// but we do it explicitly inside a transaction so the behaviour is obvious
-// at the application layer too.
+// Delete a report, releasing its items (reservations / extensions /
+// expenses) back into the picker. The DB-level ON DELETE SET NULL
+// already nulls each child's reportId, but we do it explicitly inside a
+// transaction so the behaviour is obvious at the application layer too.
 export async function deleteOwnerReportAction(id: string) {
   await requireRole("ADMIN");
   await prisma.$transaction([
     prisma.reservation.updateMany({
+      where: { reportId: id },
+      data: { reportId: null },
+    }),
+    prisma.reservationExtension.updateMany({
       where: { reportId: id },
       data: { reportId: null },
     }),

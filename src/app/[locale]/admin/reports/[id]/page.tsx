@@ -53,6 +53,14 @@ export default async function AdminReportDetailPage({
         },
         createdBy: { select: { name: true, email: true } },
         reservations: { orderBy: { checkIn: "asc" } },
+        extensions: {
+          include: {
+            reservation: {
+              select: { externalId: true, guestName: true },
+            },
+          },
+          orderBy: { checkIn: "asc" },
+        },
         expenses: { orderBy: { date: "asc" } },
       },
     }),
@@ -74,6 +82,7 @@ export default async function AdminReportDetailPage({
     },
     reservations: report.reservations.map((r) => ({
       id: r.id,
+      externalId: r.externalId,
       checkIn: r.checkIn.toISOString(),
       checkOut: r.checkOut.toISOString(),
       nights: r.nights,
@@ -81,6 +90,17 @@ export default async function AdminReportDetailPage({
       totalPrice: r.totalPrice,
       payout: r.payout,
       currency: r.currency,
+    })),
+    extensions: report.extensions.map((e) => ({
+      id: e.id,
+      parentExternalId: e.reservation.externalId,
+      parentGuestName: e.reservation.guestName,
+      checkIn: e.checkIn.toISOString(),
+      checkOut: e.checkOut.toISOString(),
+      nights: e.nights,
+      totalPrice: e.totalPrice,
+      payout: e.payout,
+      currency: e.currency,
     })),
     expenses: report.expenses.map((e) => ({
       id: e.id,
@@ -195,6 +215,7 @@ export default async function AdminReportDetailPage({
               <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
                 <tr>
                   <th className="px-4 py-3 text-left font-semibold">Guest</th>
+                  <th className="px-4 py-3 text-left font-semibold">Airbnb ID</th>
                   <th className="px-4 py-3 text-left font-semibold">Stay</th>
                   <th className="px-4 py-3 text-right font-semibold">Nights</th>
                   <th className="px-4 py-3 text-right font-semibold">Total</th>
@@ -208,6 +229,9 @@ export default async function AdminReportDetailPage({
                     className="border-t border-[var(--color-border)]"
                   >
                     <td className="px-4 py-3">{r.guestName ?? "—"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[var(--color-muted)]">
+                      {r.externalId ?? "—"}
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap text-[var(--color-muted)]">
                       {formatDate(r.checkIn.toISOString(), loc)} →{" "}
                       {formatDate(r.checkOut.toISOString(), loc)}
@@ -227,6 +251,58 @@ export default async function AdminReportDetailPage({
             </table>
           </div>
         </Card>
+      )}
+
+      {report.extensions.length > 0 && (
+        <>
+          <h2 className="mt-8 mb-3 text-base font-bold tracking-tight">
+            Extensions ({report.extensions.length})
+          </h2>
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="grid-table w-full text-sm">
+                <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">Guest</th>
+                    <th className="px-4 py-3 text-left font-semibold">Airbnb ID</th>
+                    <th className="px-4 py-3 text-left font-semibold">Window</th>
+                    <th className="px-4 py-3 text-right font-semibold">Nights</th>
+                    <th className="px-4 py-3 text-right font-semibold">Total</th>
+                    <th className="px-4 py-3 text-right font-semibold">Payout</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.extensions.map((ext) => (
+                    <tr
+                      key={ext.id}
+                      className="border-t border-[var(--color-border)]"
+                    >
+                      <td className="px-4 py-3">
+                        {ext.reservation.guestName ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-[var(--color-muted)]">
+                        {ext.reservation.externalId ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-[var(--color-muted)]">
+                        {formatDate(ext.checkIn.toISOString(), loc)} →{" "}
+                        {formatDate(ext.checkOut.toISOString(), loc)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {ext.nights}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {formatCurrency(ext.totalPrice, ext.currency, loc)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold tabular-nums">
+                        {formatCurrency(ext.payout, ext.currency, loc)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
       )}
 
       <h2 className="mt-8 mb-3 text-base font-bold tracking-tight">

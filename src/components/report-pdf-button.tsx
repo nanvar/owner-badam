@@ -56,10 +56,22 @@ export type ReportPdfData = {
   };
   reservations: Array<{
     id: string;
+    externalId: string | null;
     checkIn: string;
     checkOut: string;
     nights: number;
     guestName: string | null;
+    totalPrice: number;
+    payout: number;
+    currency: string;
+  }>;
+  extensions: Array<{
+    id: string;
+    parentExternalId: string | null;
+    parentGuestName: string | null;
+    checkIn: string;
+    checkOut: string;
+    nights: number;
     totalPrice: number;
     payout: number;
     currency: string;
@@ -251,7 +263,13 @@ export function ReportPdfButton({
         styles: { halign: "right" as const },
       });
 
-      // Reservations
+      // Reservations — Airbnb id (externalId) shown so admins/owner can
+      // tie the row back to the source reservation, especially when the
+      // same guest spans an extension into a different report.
+      const reservationIncome = data.reservations.reduce(
+        (s, r) => s + r.payout,
+        0,
+      );
       sectionTitle("Reservations", y);
       autoTable(doc, {
         startY: y + 8,
@@ -260,6 +278,7 @@ export function ReportPdfButton({
         head: [
           [
             "Guest",
+            "Airbnb ID",
             "Stay",
             right("Nights"),
             right("Total"),
@@ -274,14 +293,16 @@ export function ReportPdfButton({
         },
         columnStyles: {
           0: { halign: "left" },
-          1: { halign: "left" },
-          2: { halign: "right" },
+          1: { halign: "left", cellWidth: 96 },
+          2: { halign: "left" },
           3: { halign: "right" },
           4: { halign: "right" },
+          5: { halign: "right" },
         },
         styles: baseStyles,
         body: data.reservations.map((r) => [
           r.guestName ?? "—",
+          r.externalId ?? "—",
           `${formatDate(r.checkIn, locale)} → ${formatDate(r.checkOut, locale)}`,
           String(r.nights),
           formatCurrency(r.totalPrice, r.currency, locale),
@@ -289,14 +310,70 @@ export function ReportPdfButton({
         ]),
         foot: [
           [
-            { content: "Total income", colSpan: 4, styles: baseFootStyles },
-            { content: fmt(data.totals.income), styles: { ...baseFootStyles, halign: "right" } },
+            { content: "Reservations subtotal", colSpan: 5, styles: baseFootStyles },
+            { content: fmt(reservationIncome), styles: { ...baseFootStyles, halign: "right" } },
           ],
         ],
       });
 
       // @ts-expect-error jspdf-autotable extends jsPDF internals
       y = (doc.lastAutoTable?.finalY ?? y + 60) + 24;
+
+      // Extensions — drawn as their own table so the original reservation
+      // and the add-on portion stay easy to tell apart on the report.
+      if (data.extensions.length > 0) {
+        const extensionIncome = data.extensions.reduce(
+          (s, e) => s + e.payout,
+          0,
+        );
+        sectionTitle("Extensions", y);
+        autoTable(doc, {
+          startY: y + 8,
+          margin: { left: margin, right: margin },
+          tableWidth: innerW,
+          head: [
+            [
+              "Guest",
+              "Airbnb ID",
+              "Window",
+              right("Nights"),
+              right("Total"),
+              right("Payout"),
+            ],
+          ],
+          theme: "grid",
+          headStyles: {
+            fillColor: [243, 247, 244],
+            textColor: [47, 90, 71],
+            fontStyle: "bold",
+          },
+          columnStyles: {
+            0: { halign: "left" },
+            1: { halign: "left", cellWidth: 96 },
+            2: { halign: "left" },
+            3: { halign: "right" },
+            4: { halign: "right" },
+            5: { halign: "right" },
+          },
+          styles: baseStyles,
+          body: data.extensions.map((e) => [
+            e.parentGuestName ?? "—",
+            e.parentExternalId ?? "—",
+            `${formatDate(e.checkIn, locale)} → ${formatDate(e.checkOut, locale)}`,
+            String(e.nights),
+            formatCurrency(e.totalPrice, e.currency, locale),
+            formatCurrency(e.payout, e.currency, locale),
+          ]),
+          foot: [
+            [
+              { content: "Extensions subtotal", colSpan: 5, styles: baseFootStyles },
+              { content: fmt(extensionIncome), styles: { ...baseFootStyles, halign: "right" } },
+            ],
+          ],
+        });
+        // @ts-expect-error jspdf-autotable extends jsPDF internals
+        y = (doc.lastAutoTable?.finalY ?? y + 60) + 24;
+      }
 
       // Expenses
       if (data.expenses.length > 0) {
