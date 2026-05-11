@@ -254,12 +254,17 @@ export function ReservationsView({
     for (const arr of extByParent.values()) {
       arr.sort((a, b) => a.checkIn.localeCompare(b.checkIn));
     }
-    // Split reservations: extension-bearing vs regular.
+    // Three sections — extension-bearing groups, then unpaid (no
+    // extensions), then paid. Extension wins over paid/unpaid when
+    // categorising so the group always stays at the top.
     const itemsWithExt: ReservationItem[] = [];
-    const itemsRegular: ReservationItem[] = [];
+    const itemsUnpaid: ReservationItem[] = [];
+    const itemsPaid: ReservationItem[] = [];
     for (const i of items) {
-      if ((extByParent.get(i.id)?.length ?? 0) > 0) itemsWithExt.push(i);
-      else itemsRegular.push(i);
+      const hasExt = (extByParent.get(i.id)?.length ?? 0) > 0;
+      if (hasExt) itemsWithExt.push(i);
+      else if (!i.paid) itemsUnpaid.push(i);
+      else itemsPaid.push(i);
     }
     const bucketSort = (arr: ReservationItem[]) =>
       arr
@@ -269,39 +274,42 @@ export function ReservationsView({
 
     const rows: BookingRow[] = [];
     const used = new Set<string>();
+    const pushSpacer = (id: string) => {
+      rows.push({ kind: "spacer", id, searchBlob: "" });
+    };
 
     // Extension-bearing groups first, each wrapped in spacers so the
     // block reads as a distinct unit from neighbouring rows.
     const sortedWithExt = bucketSort(itemsWithExt);
     sortedWithExt.forEach((item, idx) => {
-      // Leading spacer for every group except the very first row.
-      if (rows.length > 0) {
-        rows.push({
-          kind: "spacer",
-          id: `pre-${item.id}`,
-          searchBlob: "",
-        });
-      }
+      if (rows.length > 0) pushSpacer(`pre-${item.id}`);
       rows.push(buildResRow(item, true));
       for (const c of extByParent.get(item.id) ?? []) {
         rows.push(buildExtRow(c, true));
         used.add(c.id);
       }
-      // Trailing spacer between extension groups, or just before the
-      // regular reservations block — so the boundary is obvious.
       const isLastWithExt = idx === sortedWithExt.length - 1;
-      const hasMore = !isLastWithExt || itemsRegular.length > 0;
-      if (hasMore) {
-        rows.push({
-          kind: "spacer",
-          id: `post-${item.id}`,
-          searchBlob: "",
-        });
-      }
+      const hasMore =
+        !isLastWithExt || itemsUnpaid.length > 0 || itemsPaid.length > 0;
+      if (hasMore) pushSpacer(`post-${item.id}`);
     });
 
-    // Regular reservations afterwards.
-    for (const item of bucketSort(itemsRegular)) {
+    // Unpaid section — separated from the extension block above (or
+    // appears at top if no extensions). Internally bucket-sorted so
+    // Live unpaid stays on top.
+    const sortedUnpaid = bucketSort(itemsUnpaid);
+    if (sortedUnpaid.length > 0) {
+      if (rows.length > 0) pushSpacer(`pre-unpaid-${sortedUnpaid[0].id}`);
+      for (const item of sortedUnpaid) {
+        rows.push(buildResRow(item, false));
+      }
+      if (itemsPaid.length > 0) {
+        pushSpacer(`post-unpaid-${sortedUnpaid[sortedUnpaid.length - 1].id}`);
+      }
+    }
+
+    // Paid section — the rest. Bucket-sorted internally.
+    for (const item of bucketSort(itemsPaid)) {
       rows.push(buildResRow(item, false));
     }
 
@@ -326,16 +334,6 @@ export function ReservationsView({
       (b) => b.kind !== "spacer" && b.searchBlob.includes(q),
     );
   }, [bookings, search]);
-  const firstDoneIndex = useMemo(() => {
-    const now = Date.now();
-    return filtered.findIndex((b) => {
-      if (b.kind === "spacer") return false;
-      // Group children stay attached to their parent — never use them
-      // as the separator anchor.
-      if (b.kind === "extension" && b.groupChild) return false;
-      return new Date(b.checkOut).getTime() <= now;
-    });
-  }, [filtered]);
   const incompleteCount = useMemo(
     () =>
       bookings.filter((b) => b.kind !== "spacer" && !b.detailsFilled).length,
@@ -435,24 +433,19 @@ export function ReservationsView({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((b, idx) => {
+                {filtered.map((b) => {
                   if (b.kind === "spacer") {
                     return (
                       <tr key={`spacer-${b.id}`} aria-hidden>
                         <td
                           colSpan={8}
-                          className="h-6 border-x-0 border-b-0 bg-[var(--color-surface)]"
+                          className="h-10 border-x-0 border-b-0 bg-[var(--color-surface)]"
                         />
                       </tr>
                     );
                   }
                   return (
                   <Fragment key={`${b.kind}-${b.id}`}>
-                    {idx > 0 && idx === firstDoneIndex && (
-                      <tr aria-hidden>
-                        <td colSpan={8} className="h-6 border-x-0 border-b-0" />
-                      </tr>
-                    )}
                     <tr
                       onClick={() =>
                         b.kind === "reservation"
@@ -461,16 +454,14 @@ export function ReservationsView({
                       }
                       className={`cursor-pointer ${
                         b.kind === "extension" && b.groupChild
-                          ? // Child row stays visually tied to its parent
-                            // above with a thick colored left border so
-                            // the row screams "this is an extension".
-                            "border-b border-dashed border-sky-500/30 bg-sky-500/5 hover:bg-sky-500/15"
+                          ? // Child row sits inside the same green-
+                            // outlined group as its parent above.
+                            "border-x-2 border-b-2 border-emerald-500/60 bg-emerald-500/10 hover:bg-emerald-500/20"
                           : b.kind === "reservation" && b.hasChildren
-                            ? // Parent row of a group: same sky accent
-                              // band as its children, plus the row
-                              // background tint so the whole block reads
-                              // as one unit.
-                              "border-t-2 border-sky-500/40 bg-sky-500/5 hover:bg-sky-500/15"
+                            ? // Parent of a group: green outline on
+                              // top + sides, no bottom border because
+                              // the children continue the box.
+                              "border-x-2 border-t-2 border-emerald-500/60 bg-emerald-500/10 hover:bg-emerald-500/20"
                             : !b.paid
                               ? "border-t border-[var(--color-border)] bg-amber-500/10 hover:bg-amber-500/15"
                               : "border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
@@ -498,7 +489,7 @@ export function ReservationsView({
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span>{b.guestName ?? "—"}</span>
                         {b.kind === "extension" && !b.groupChild && (
-                          <span className="inline-flex items-center rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-700">
+                          <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
                             Extension
                           </span>
                         )}
