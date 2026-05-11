@@ -102,6 +102,8 @@ export type ReservationItem = {
 // Merged "booking" — reservation or extension — that the list view
 // renders as a single chronological feed. Extensions inherit their
 // parent's property + guest + Airbnb id so the row reads identically.
+// `spacer` rows are synthetic separators inserted around extension
+// groups so they read as their own block.
 type BookingRow =
   | {
       kind: "reservation";
@@ -120,6 +122,9 @@ type BookingRow =
       currency: string;
       detailsFilled: boolean;
       searchBlob: string;
+      // True for parent reservations whose extensions render
+      // immediately below — used to draw the group's visual cues.
+      hasChildren: boolean;
     }
   | {
       kind: "extension";
@@ -143,7 +148,8 @@ type BookingRow =
       // indented). False for orphan extensions whose parent isn't
       // in the current month filter.
       groupChild: boolean;
-    };
+    }
+  | { kind: "spacer"; id: string; searchBlob: string };
 
 export function ReservationsView({
   locale,
@@ -176,13 +182,18 @@ export function ReservationsView({
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const [syncPending, startSync] = useTransition();
 
-  // Grouped feed: each parent reservation is followed by its extensions
-  // (sorted by checkIn asc). Orphan extensions whose parent isn't in
-  // the current view fall to the bottom in their own bucket order. The
-  // result reads as "reservation, then its add-on nights below" so the
-  // relationship is obvious at a glance.
+  // Grouped feed: extension-bearing reservations float to the top of
+  // the table (and are surrounded by spacer rows for visual breathing
+  // room). Each parent reservation is followed by its extensions
+  // (sorted by checkIn asc). Regular reservations (no extensions)
+  // come after the grouped block in their bucket order. Orphan
+  // extensions whose parent isn't in the current view fall to the
+  // bottom in their own bucket order.
   const bookings = useMemo<BookingRow[]>(() => {
-    const buildResRow = (i: ReservationItem): BookingRow => ({
+    const buildResRow = (
+      i: ReservationItem,
+      hasChildren: boolean,
+    ): BookingRow => ({
       kind: "reservation",
       id: i.id,
       raw: i,
@@ -200,6 +211,7 @@ export function ReservationsView({
       detailsFilled: i.detailsFilled,
       searchBlob:
         `${i.guestName ?? ""} ${i.propertyName} ${i.rawSummary ?? ""} ${i.externalId ?? ""}`.toLowerCase(),
+      hasChildren,
     });
     const buildExtRow = (
       e: ReservationExtensionItem,
@@ -224,7 +236,6 @@ export function ReservationsView({
         `${e.parentGuestName ?? ""} ${e.propertyName} ${e.parentExternalId ?? ""}`.toLowerCase(),
       groupChild: child,
     });
-    // Bucket sort parents first so Live groups float to the top.
     const now = Date.now();
     const bucket = (ci: string, co: string) => {
       const ciMs = new Date(ci).getTime();
@@ -233,10 +244,6 @@ export function ReservationsView({
       if (coMs <= now) return 2; // done
       return 1; // future
     };
-    const sortedItems = items
-      .map((i, idx) => ({ i, idx, b: bucket(i.checkIn, i.checkOut) }))
-      .sort((a, b) => a.b - b.b || a.idx - b.idx)
-      .map(({ i }) => i);
     // Index extensions by their parent reservation id.
     const extByParent = new Map<string, ReservationExtensionItem[]>();
     for (const e of extensions) {
@@ -247,21 +254,60 @@ export function ReservationsView({
     for (const arr of extByParent.values()) {
       arr.sort((a, b) => a.checkIn.localeCompare(b.checkIn));
     }
-    const visibleIds = new Set(items.map((i) => i.id));
-    const used = new Set<string>();
-    const rows: BookingRow[] = [];
-    for (const item of sortedItems) {
-      rows.push(buildResRow(item));
-      const children = extByParent.get(item.id);
-      if (children) {
-        for (const c of children) {
-          rows.push(buildExtRow(c, true));
-          used.add(c.id);
-        }
-      }
+    // Split reservations: extension-bearing vs regular.
+    const itemsWithExt: ReservationItem[] = [];
+    const itemsRegular: ReservationItem[] = [];
+    for (const i of items) {
+      if ((extByParent.get(i.id)?.length ?? 0) > 0) itemsWithExt.push(i);
+      else itemsRegular.push(i);
     }
+    const bucketSort = (arr: ReservationItem[]) =>
+      arr
+        .map((i, idx) => ({ i, idx, b: bucket(i.checkIn, i.checkOut) }))
+        .sort((a, b) => a.b - b.b || a.idx - b.idx)
+        .map(({ i }) => i);
+
+    const rows: BookingRow[] = [];
+    const used = new Set<string>();
+
+    // Extension-bearing groups first, each wrapped in spacers so the
+    // block reads as a distinct unit from neighbouring rows.
+    const sortedWithExt = bucketSort(itemsWithExt);
+    sortedWithExt.forEach((item, idx) => {
+      // Leading spacer for every group except the very first row.
+      if (rows.length > 0) {
+        rows.push({
+          kind: "spacer",
+          id: `pre-${item.id}`,
+          searchBlob: "",
+        });
+      }
+      rows.push(buildResRow(item, true));
+      for (const c of extByParent.get(item.id) ?? []) {
+        rows.push(buildExtRow(c, true));
+        used.add(c.id);
+      }
+      // Trailing spacer between extension groups, or just before the
+      // regular reservations block — so the boundary is obvious.
+      const isLastWithExt = idx === sortedWithExt.length - 1;
+      const hasMore = !isLastWithExt || itemsRegular.length > 0;
+      if (hasMore) {
+        rows.push({
+          kind: "spacer",
+          id: `post-${item.id}`,
+          searchBlob: "",
+        });
+      }
+    });
+
+    // Regular reservations afterwards.
+    for (const item of bucketSort(itemsRegular)) {
+      rows.push(buildResRow(item, false));
+    }
+
     // Orphans: extensions whose parent isn't part of this view (e.g.
     // because the parent reservation's monthKey is filtered out).
+    const visibleIds = new Set(items.map((i) => i.id));
     const orphans = extensions
       .filter((e) => !used.has(e.id) && !visibleIds.has(e.reservationId))
       .map((e, idx) => ({ e, idx, b: bucket(e.checkIn, e.checkOut) }))
@@ -274,11 +320,16 @@ export function ReservationsView({
   const filtered = useMemo(() => {
     if (!search) return bookings;
     const q = search.toLowerCase();
-    return bookings.filter((b) => b.searchBlob.includes(q));
+    // Drop spacers when searching — they have nothing meaningful to
+    // match and would leave orphaned gaps in the filtered table.
+    return bookings.filter(
+      (b) => b.kind !== "spacer" && b.searchBlob.includes(q),
+    );
   }, [bookings, search]);
   const firstDoneIndex = useMemo(() => {
     const now = Date.now();
     return filtered.findIndex((b) => {
+      if (b.kind === "spacer") return false;
       // Group children stay attached to their parent — never use them
       // as the separator anchor.
       if (b.kind === "extension" && b.groupChild) return false;
@@ -286,7 +337,8 @@ export function ReservationsView({
     });
   }, [filtered]);
   const incompleteCount = useMemo(
-    () => bookings.filter((b) => !b.detailsFilled).length,
+    () =>
+      bookings.filter((b) => b.kind !== "spacer" && !b.detailsFilled).length,
     [bookings],
   );
 
@@ -383,7 +435,18 @@ export function ReservationsView({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((b, idx) => (
+                {filtered.map((b, idx) => {
+                  if (b.kind === "spacer") {
+                    return (
+                      <tr key={`spacer-${b.id}`} aria-hidden>
+                        <td
+                          colSpan={8}
+                          className="h-6 border-x-0 border-b-0 bg-[var(--color-surface)]"
+                        />
+                      </tr>
+                    );
+                  }
+                  return (
                   <Fragment key={`${b.kind}-${b.id}`}>
                     {idx > 0 && idx === firstDoneIndex && (
                       <tr aria-hidden>
@@ -399,12 +462,18 @@ export function ReservationsView({
                       className={`cursor-pointer ${
                         b.kind === "extension" && b.groupChild
                           ? // Child row stays visually tied to its parent
-                            // above — no top border so it reads as the
-                            // same group, plus a faint tint.
-                            "border-t border-dashed border-[var(--color-border)]/60 bg-sky-500/5 hover:bg-sky-500/10"
-                          : !b.paid
-                            ? "border-t border-[var(--color-border)] bg-amber-500/10 hover:bg-amber-500/15"
-                            : "border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
+                            // above with a thick colored left border so
+                            // the row screams "this is an extension".
+                            "border-b border-dashed border-sky-500/30 bg-sky-500/5 hover:bg-sky-500/15"
+                          : b.kind === "reservation" && b.hasChildren
+                            ? // Parent row of a group: same sky accent
+                              // band as its children, plus the row
+                              // background tint so the whole block reads
+                              // as one unit.
+                              "border-t-2 border-sky-500/40 bg-sky-500/5 hover:bg-sky-500/15"
+                            : !b.paid
+                              ? "border-t border-[var(--color-border)] bg-amber-500/10 hover:bg-amber-500/15"
+                              : "border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
                       }`}
                     >
                     <td className="px-4 py-3">
@@ -487,7 +556,8 @@ export function ReservationsView({
                     </td>
                     </tr>
                   </Fragment>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
