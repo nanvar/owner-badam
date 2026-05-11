@@ -254,15 +254,24 @@ export function ReservationsView({
     for (const arr of extByParent.values()) {
       arr.sort((a, b) => a.checkIn.localeCompare(b.checkIn));
     }
-    // Three sections — extension-bearing groups, then unpaid (no
-    // extensions), then paid. Extension wins over paid/unpaid when
-    // categorising so the group always stays at the top.
+    // Four sections — extension-bearing groups, then Live (someone is
+    // staying right now), then unpaid (not Live), then paid. Extension
+    // takes priority over Live/paid because the group sticks to the
+    // top regardless of stay status.
     const itemsWithExt: ReservationItem[] = [];
+    const itemsLive: ReservationItem[] = [];
     const itemsUnpaid: ReservationItem[] = [];
     const itemsPaid: ReservationItem[] = [];
     for (const i of items) {
       const hasExt = (extByParent.get(i.id)?.length ?? 0) > 0;
-      if (hasExt) itemsWithExt.push(i);
+      if (hasExt) {
+        itemsWithExt.push(i);
+        continue;
+      }
+      const ci = new Date(i.checkIn).getTime();
+      const co = new Date(i.checkOut).getTime();
+      const isLive = ci <= now && co > now;
+      if (isLive) itemsLive.push(i);
       else if (!i.paid) itemsUnpaid.push(i);
       else itemsPaid.push(i);
     }
@@ -278,32 +287,59 @@ export function ReservationsView({
       rows.push({ kind: "spacer", id, searchBlob: "" });
     };
 
-    // Extension-bearing groups first, each wrapped in spacers so the
-    // block reads as a distinct unit from neighbouring rows.
+    // Section pushers — each appends rows + a trailing spacer when
+    // any later section still has content, so the margin always sits
+    // at the bottom of the preceding block.
+    const remainingAfter = (
+      after: "ext" | "live" | "unpaid",
+    ): boolean => {
+      if (after === "ext")
+        return (
+          itemsLive.length > 0 ||
+          itemsUnpaid.length > 0 ||
+          itemsPaid.length > 0
+        );
+      if (after === "live")
+        return itemsUnpaid.length > 0 || itemsPaid.length > 0;
+      return itemsPaid.length > 0;
+    };
+
+    // Extension-bearing groups first.
     const sortedWithExt = bucketSort(itemsWithExt);
     sortedWithExt.forEach((item, idx) => {
-      if (rows.length > 0) pushSpacer(`pre-${item.id}`);
       rows.push(buildResRow(item, true));
       for (const c of extByParent.get(item.id) ?? []) {
         rows.push(buildExtRow(c, true));
         used.add(c.id);
       }
-      const isLastWithExt = idx === sortedWithExt.length - 1;
-      const hasMore =
-        !isLastWithExt || itemsUnpaid.length > 0 || itemsPaid.length > 0;
-      if (hasMore) pushSpacer(`post-${item.id}`);
+      const isLast = idx === sortedWithExt.length - 1;
+      if (!isLast || remainingAfter("ext")) {
+        pushSpacer(`post-ext-${item.id}`);
+      }
     });
 
-    // Unpaid section — separated from the extension block above (or
-    // appears at top if no extensions). Internally bucket-sorted so
-    // Live unpaid stays on top.
+    // Live section — someone is staying right now. Internally sorted
+    // by checkIn asc so the next checkout is at the top.
+    const sortedLive = [...itemsLive].sort((a, b) =>
+      a.checkIn.localeCompare(b.checkIn),
+    );
+    if (sortedLive.length > 0) {
+      for (const item of sortedLive) {
+        rows.push(buildResRow(item, false));
+      }
+      if (remainingAfter("live")) {
+        pushSpacer(`post-live-${sortedLive[sortedLive.length - 1].id}`);
+      }
+    }
+
+    // Unpaid section follows. Emit trailing spacer only when paid
+    // rows follow.
     const sortedUnpaid = bucketSort(itemsUnpaid);
     if (sortedUnpaid.length > 0) {
-      if (rows.length > 0) pushSpacer(`pre-unpaid-${sortedUnpaid[0].id}`);
       for (const item of sortedUnpaid) {
         rows.push(buildResRow(item, false));
       }
-      if (itemsPaid.length > 0) {
+      if (remainingAfter("unpaid")) {
         pushSpacer(`post-unpaid-${sortedUnpaid[sortedUnpaid.length - 1].id}`);
       }
     }
