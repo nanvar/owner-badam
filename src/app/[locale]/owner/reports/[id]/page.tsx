@@ -8,7 +8,7 @@ import { requireRole } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, extractBookingRef } from "@/lib/utils";
 import { ReportPdfButton, type ReportPdfData } from "@/components/report-pdf-button";
 
 async function fetchLogoAsDataUrl(url: string | null): Promise<string | null> {
@@ -44,7 +44,11 @@ export default async function OwnerReportDetailPage({
         extensions: {
           include: {
             reservation: {
-              select: { externalId: true, guestName: true },
+              select: {
+                externalId: true,
+                guestName: true,
+                rawDescription: true,
+              },
             },
           },
           orderBy: { checkIn: "asc" },
@@ -81,23 +85,27 @@ export default async function OwnerReportDetailPage({
     },
     reservations: report.reservations.map((r) => ({
       id: r.id,
-      externalId: r.externalId,
+      bookingRef: extractBookingRef(r.rawDescription),
       checkIn: r.checkIn.toISOString(),
       checkOut: r.checkOut.toISOString(),
       nights: r.nights,
       guestName: r.guestName,
       totalPrice: r.totalPrice,
+      agencyCommission: r.agencyCommission,
+      portalCommission: r.portalCommission,
       payout: r.payout,
       currency: r.currency,
     })),
     extensions: report.extensions.map((e) => ({
       id: e.id,
-      parentExternalId: e.reservation.externalId,
+      bookingRef: extractBookingRef(e.reservation.rawDescription),
       parentGuestName: e.reservation.guestName,
       checkIn: e.checkIn.toISOString(),
       checkOut: e.checkOut.toISOString(),
       nights: e.nights,
       totalPrice: e.totalPrice,
+      agencyCommission: e.agencyCommission,
+      portalCommission: e.portalCommission,
       payout: e.payout,
       currency: e.currency,
     })),
@@ -184,10 +192,12 @@ export default async function OwnerReportDetailPage({
           key: string;
           kind: "reservation" | "extension";
           guestName: string | null;
-          externalId: string | null;
+          bookingRef: string | null;
           checkIn: string;
           checkOut: string;
-          nights: number;
+          totalPrice: number;
+          agencyCommission: number;
+          portalCommission: number;
           payout: number;
           currency: string;
         };
@@ -196,10 +206,12 @@ export default async function OwnerReportDetailPage({
             key: `r-${r.id}`,
             kind: "reservation" as const,
             guestName: r.guestName,
-            externalId: r.externalId,
+            bookingRef: extractBookingRef(r.rawDescription),
             checkIn: r.checkIn.toISOString(),
             checkOut: r.checkOut.toISOString(),
-            nights: r.nights,
+            totalPrice: r.totalPrice,
+            agencyCommission: r.agencyCommission,
+            portalCommission: r.portalCommission,
             payout: r.payout,
             currency: r.currency,
           })),
@@ -207,14 +219,26 @@ export default async function OwnerReportDetailPage({
             key: `e-${e.id}`,
             kind: "extension" as const,
             guestName: e.reservation.guestName,
-            externalId: e.reservation.externalId,
+            bookingRef: extractBookingRef(e.reservation.rawDescription),
             checkIn: e.checkIn.toISOString(),
             checkOut: e.checkOut.toISOString(),
-            nights: e.nights,
+            totalPrice: e.totalPrice,
+            agencyCommission: e.agencyCommission,
+            portalCommission: e.portalCommission,
             payout: e.payout,
             currency: e.currency,
           })),
         ].sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+        const totalAgency = bookings.reduce(
+          (s, b) => s + b.agencyCommission,
+          0,
+        );
+        const totalPortal = bookings.reduce(
+          (s, b) => s + b.portalCommission,
+          0,
+        );
+        const totalRent = bookings.reduce((s, b) => s + b.totalPrice, 0);
+        const totalPayout = bookings.reduce((s, b) => s + b.payout, 0);
         return (
           <>
             <h2 className="mt-8 mb-3 text-base font-bold tracking-tight">
@@ -229,14 +253,16 @@ export default async function OwnerReportDetailPage({
             ) : (
               <Card className="overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
+                  <table className="w-full text-xs">
+                    <thead className="bg-[var(--color-surface-2)] text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
                       <tr>
-                        <th className="px-4 py-3 text-left font-semibold">Guest</th>
-                        <th className="px-4 py-3 text-left font-semibold">Airbnb ID</th>
-                        <th className="px-4 py-3 text-left font-semibold">Stay</th>
-                        <th className="px-4 py-3 text-right font-semibold">Nights</th>
-                        <th className="px-4 py-3 text-right font-semibold">Payout</th>
+                        <th className="px-3 py-2 text-left font-semibold">Guest</th>
+                        <th className="px-3 py-2 text-left font-semibold">Ref</th>
+                        <th className="px-3 py-2 text-left font-semibold">Dates</th>
+                        <th className="px-3 py-2 text-right font-semibold">Total rent</th>
+                        <th className="px-3 py-2 text-right font-semibold">Agency</th>
+                        <th className="px-3 py-2 text-right font-semibold">Portal</th>
+                        <th className="px-3 py-2 text-right font-semibold">Owner payout</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -245,30 +271,58 @@ export default async function OwnerReportDetailPage({
                           key={b.key}
                           className="border-t border-[var(--color-border)]"
                         >
-                          <td className="px-4 py-3">
+                          <td className="px-3 py-2">
                             <span className="block">{b.guestName ?? "—"}</span>
                             {b.kind === "extension" && (
-                              <span className="mt-0.5 inline-flex items-center rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-700">
+                              <span className="mt-0.5 inline-flex items-center rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-sky-700">
                                 Extension
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3 font-mono text-xs text-[var(--color-muted)]">
-                            {b.externalId ?? "—"}
+                          <td className="px-3 py-2 font-mono text-[10px] text-[var(--color-muted)]">
+                            {b.bookingRef ?? "—"}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-[var(--color-muted)]">
+                          <td className="px-3 py-2 whitespace-nowrap text-[var(--color-muted)]">
                             {formatDate(b.checkIn, loc)} →{" "}
                             {formatDate(b.checkOut, loc)}
                           </td>
-                          <td className="px-4 py-3 text-right tabular-nums">
-                            {b.nights}
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {formatCurrency(b.totalPrice, b.currency, loc)}
                           </td>
-                          <td className="px-4 py-3 text-right font-bold tabular-nums">
+                          <td className="px-3 py-2 text-right tabular-nums text-[var(--color-muted)]">
+                            {formatCurrency(b.agencyCommission, b.currency, loc)}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-[var(--color-muted)]">
+                            {formatCurrency(b.portalCommission, b.currency, loc)}
+                          </td>
+                          <td className="px-3 py-2 text-right font-bold tabular-nums">
                             {formatCurrency(b.payout, b.currency, loc)}
                           </td>
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot className="bg-[var(--color-surface-2)]/60">
+                      <tr className="border-t border-[var(--color-border)]">
+                        <td
+                          colSpan={3}
+                          className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider"
+                        >
+                          Totals
+                        </td>
+                        <td className="px-3 py-2 text-right font-bold tabular-nums">
+                          {formatCurrency(totalRent, "AED", loc)}
+                        </td>
+                        <td className="px-3 py-2 text-right font-bold tabular-nums">
+                          {formatCurrency(totalAgency, "AED", loc)}
+                        </td>
+                        <td className="px-3 py-2 text-right font-bold tabular-nums">
+                          {formatCurrency(totalPortal, "AED", loc)}
+                        </td>
+                        <td className="px-3 py-2 text-right font-bold tabular-nums">
+                          {formatCurrency(totalPayout, "AED", loc)}
+                        </td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               </Card>

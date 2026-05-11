@@ -56,23 +56,27 @@ export type ReportPdfData = {
   };
   reservations: Array<{
     id: string;
-    externalId: string | null;
+    bookingRef: string | null;
     checkIn: string;
     checkOut: string;
     nights: number;
     guestName: string | null;
     totalPrice: number;
+    agencyCommission: number;
+    portalCommission: number;
     payout: number;
     currency: string;
   }>;
   extensions: Array<{
     id: string;
-    parentExternalId: string | null;
+    bookingRef: string | null;
     parentGuestName: string | null;
     checkIn: string;
     checkOut: string;
     nights: number;
     totalPrice: number;
+    agencyCommission: number;
+    portalCommission: number;
     payout: number;
     currency: string;
   }>;
@@ -240,11 +244,12 @@ export function ReportPdfButton({
 
       const baseStyles = {
         font: FONT,
-        fontSize: 9,
-        cellPadding: 6,
+        fontSize: 7.5,
+        cellPadding: 4,
         lineColor: [200, 208, 204] as [number, number, number],
         lineWidth: 0.8,
         valign: "middle" as const,
+        overflow: "linebreak" as const,
       };
       const baseFootStyles = {
         font: FONT,
@@ -266,15 +271,17 @@ export function ReportPdfButton({
       // Reservations — extensions are folded in as additional rows in
       // the same table, marked "+ Extension" so the original booking
       // and its add-on portion are visible at a glance without a
-      // second section. Airbnb id ties each row to its source.
+      // second section. Booking ref (Airbnb confirmation code) ties
+      // each row to the source reservation.
       type PdfBookingRow = {
         kind: "reservation" | "extension";
         guestName: string | null;
-        externalId: string | null;
+        bookingRef: string | null;
         checkIn: string;
         checkOut: string;
-        nights: number;
         totalPrice: number;
+        agencyCommission: number;
+        portalCommission: number;
         payout: number;
         currency: string;
       };
@@ -282,26 +289,31 @@ export function ReportPdfButton({
         ...data.reservations.map((r) => ({
           kind: "reservation" as const,
           guestName: r.guestName,
-          externalId: r.externalId,
+          bookingRef: r.bookingRef,
           checkIn: r.checkIn,
           checkOut: r.checkOut,
-          nights: r.nights,
           totalPrice: r.totalPrice,
+          agencyCommission: r.agencyCommission,
+          portalCommission: r.portalCommission,
           payout: r.payout,
           currency: r.currency,
         })),
         ...data.extensions.map((e) => ({
           kind: "extension" as const,
           guestName: e.parentGuestName,
-          externalId: e.parentExternalId,
+          bookingRef: e.bookingRef,
           checkIn: e.checkIn,
           checkOut: e.checkOut,
-          nights: e.nights,
           totalPrice: e.totalPrice,
+          agencyCommission: e.agencyCommission,
+          portalCommission: e.portalCommission,
           payout: e.payout,
           currency: e.currency,
         })),
       ].sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+      const totalAgency = bookings.reduce((s, b) => s + b.agencyCommission, 0);
+      const totalPortal = bookings.reduce((s, b) => s + b.portalCommission, 0);
+      const totalRent = bookings.reduce((s, b) => s + b.totalPrice, 0);
       sectionTitle("Reservations", y);
       autoTable(doc, {
         startY: y + 8,
@@ -310,11 +322,12 @@ export function ReportPdfButton({
         head: [
           [
             "Guest",
-            "Airbnb ID",
-            "Stay",
-            right("Nights"),
-            right("Total"),
-            right("Payout"),
+            "Ref",
+            "Dates",
+            right("Total rent"),
+            right("Agency"),
+            right("Portal"),
+            right("Owner payout"),
           ],
         ],
         theme: "grid",
@@ -322,29 +335,35 @@ export function ReportPdfButton({
           fillColor: [243, 247, 244],
           textColor: [47, 90, 71],
           fontStyle: "bold",
+          fontSize: 7.5,
         },
         columnStyles: {
           0: { halign: "left" },
-          1: { halign: "left", cellWidth: 96 },
-          2: { halign: "left" },
+          1: { halign: "left", cellWidth: 56 },
+          2: { halign: "left", cellWidth: 110 },
           3: { halign: "right" },
           4: { halign: "right" },
           5: { halign: "right" },
+          6: { halign: "right" },
         },
         styles: baseStyles,
         body: bookings.map((b) => [
           b.kind === "extension"
             ? `${b.guestName ?? "—"}  (Extension)`
             : (b.guestName ?? "—"),
-          b.externalId ?? "—",
+          b.bookingRef ?? "—",
           `${formatDate(b.checkIn, locale)} → ${formatDate(b.checkOut, locale)}`,
-          String(b.nights),
           formatCurrency(b.totalPrice, b.currency, locale),
+          formatCurrency(b.agencyCommission, b.currency, locale),
+          formatCurrency(b.portalCommission, b.currency, locale),
           formatCurrency(b.payout, b.currency, locale),
         ]),
         foot: [
           [
-            { content: "Total income", colSpan: 5, styles: baseFootStyles },
+            { content: "Totals", colSpan: 3, styles: baseFootStyles },
+            { content: fmt(totalRent), styles: { ...baseFootStyles, halign: "right" } },
+            { content: fmt(totalAgency), styles: { ...baseFootStyles, halign: "right" } },
+            { content: fmt(totalPortal), styles: { ...baseFootStyles, halign: "right" } },
             { content: fmt(data.totals.income), styles: { ...baseFootStyles, halign: "right" } },
           ],
         ],

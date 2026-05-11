@@ -287,15 +287,17 @@ export default async function SuperAdminDashboard({
     0,
   );
 
-  // Reservation counts within the selected period, plus the unpaid
-  // list (reservations + extensions) so the dashboard surfaces every
-  // outstanding receivable in a drawer. We skip totalPrice = 0 rows so
-  // synced-but-not-yet-priced placeholders don't pollute the count.
+  // Bookings (reservations + extensions) drive the period counts.
+  // Extensions live in their own window since iCal no longer pushes
+  // the reservation's checkOut forward, so each side is counted by
+  // its own dates against `today`. Treating them as separate bookings
+  // matches how the lists already render them.
   const today = new Date();
+  const todayMs = today.getTime();
   const [
-    allReservationsCount,
-    activeReservationsCount,
-    doneReservationsCount,
+    reservationCount,
+    reservationLiveCount,
+    reservationDoneCount,
     unpaidReservationRows,
   ] = await Promise.all([
     prisma.reservation.count({ where: monthWhere }),
@@ -317,6 +319,20 @@ export default async function SuperAdminDashboard({
       orderBy: { checkIn: "desc" },
     }),
   ]);
+  // Extension contribution to Live / Done — already loaded above in
+  // `extensionRows`, so we just bucket them in JS rather than firing
+  // more queries.
+  let extensionLiveCount = 0;
+  let extensionDoneCount = 0;
+  for (const e of extensionRows) {
+    const ci = e.checkIn.getTime();
+    const co = e.checkOut.getTime();
+    if (ci <= todayMs && co > todayMs) extensionLiveCount += 1;
+    else if (co <= todayMs) extensionDoneCount += 1;
+  }
+  const allReservationsCount = reservationCount + extensionRows.length;
+  const activeReservationsCount = reservationLiveCount + extensionLiveCount;
+  const doneReservationsCount = reservationDoneCount + extensionDoneCount;
   // Extensions are derived from the already-loaded `extensionRows` so we
   // don't issue duplicate queries.
   const unpaidReservations = [

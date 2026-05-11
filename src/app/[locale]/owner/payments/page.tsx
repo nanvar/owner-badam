@@ -20,9 +20,24 @@ export default async function OwnerPaymentsPage({
   const loc = locale as Locale;
   const t = await getTranslations({ locale, namespace: "owner" });
 
-  const [upcomingAgg, payments] = await Promise.all([
+  // "Upcoming" payouts are bookings the owner hasn't been settled for
+  // yet — i.e. reservations + extensions whose check-in is still in the
+  // future. Counted across both since each is treated as an own booking.
+  const today = new Date();
+  const [pendingReservations, pendingExtensions, payments] = await Promise.all([
     prisma.reservation.aggregate({
-      where: { property: { ownerId: session.userId }, upcoming: true },
+      where: {
+        property: { ownerId: session.userId },
+        checkIn: { gt: today },
+      },
+      _count: { _all: true },
+      _sum: { payout: true },
+    }),
+    prisma.reservationExtension.aggregate({
+      where: {
+        reservation: { property: { ownerId: session.userId } },
+        checkIn: { gt: today },
+      },
       _count: { _all: true },
       _sum: { payout: true },
     }),
@@ -31,8 +46,11 @@ export default async function OwnerPaymentsPage({
       orderBy: { date: "desc" },
     }),
   ]);
-  const upcomingCount = upcomingAgg._count._all;
-  const upcomingPayout = upcomingAgg._sum.payout ?? 0;
+  const upcomingCount =
+    pendingReservations._count._all + pendingExtensions._count._all;
+  const upcomingPayout =
+    (pendingReservations._sum.payout ?? 0) +
+    (pendingExtensions._sum.payout ?? 0);
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0);
 
   return (

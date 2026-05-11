@@ -7,6 +7,7 @@ import {
   buildMonthlySeries,
   computeKpis,
   periodFromRange,
+  type ReservationLite,
 } from "@/lib/metrics";
 import { OwnerDashboardView } from "./dashboard-view";
 
@@ -27,14 +28,19 @@ export default async function OwnerDashboardPage({
 
   const ownerFilter =
     session.role === "OWNER" ? { property: { ownerId: session.userId } } : undefined;
+  const extensionOwnerFilter =
+    session.role === "OWNER"
+      ? { reservation: { property: { ownerId: session.userId } } }
+      : undefined;
   const propertyWhere =
     session.role === "OWNER" ? { ownerId: session.userId } : undefined;
 
-  // Realized reservations only — upcoming is shown on the Payments page so
-  // it doesn't skew dashboard KPIs (revenue, occupancy…).
-  const [reservations, propertyCount] = await Promise.all([
+  // Reservations + extensions are pulled together and treated as separate
+  // bookings by the KPI math — extensions have their own check-in/out and
+  // payout since iCal no longer rolls them into the parent reservation.
+  const [reservations, extensions, propertyCount] = await Promise.all([
     prisma.reservation.findMany({
-      where: { ...(ownerFilter ?? {}), upcoming: false },
+      where: ownerFilter ?? {},
       select: {
         nights: true,
         totalPrice: true,
@@ -45,26 +51,56 @@ export default async function OwnerDashboardPage({
       },
       orderBy: { checkIn: "asc" },
     }),
+    prisma.reservationExtension.findMany({
+      where: extensionOwnerFilter ?? {},
+      select: {
+        nights: true,
+        totalPrice: true,
+        payout: true,
+        checkIn: true,
+        checkOut: true,
+      },
+      orderBy: { checkIn: "asc" },
+    }),
     prisma.property.count({ where: propertyWhere }),
   ]);
 
-  const items = reservations.map((r) => ({
-    id: "",
-    propertyId: "",
-    propertyName: "",
-    propertyColor: "",
-    guestName: null,
-    numGuests: null,
-    checkIn: r.checkIn,
-    checkOut: r.checkOut,
-    nights: r.nights,
-    pricePerNight: 0,
-    totalPrice: r.totalPrice,
-    cleaningFee: r.cleaningFee,
-    payout: r.payout,
-    currency: "AED",
-    detailsFilled: false,
-  }));
+  const items: ReservationLite[] = [
+    ...reservations.map((r) => ({
+      id: "",
+      propertyId: "",
+      propertyName: "",
+      propertyColor: "",
+      guestName: null,
+      numGuests: null,
+      checkIn: r.checkIn,
+      checkOut: r.checkOut,
+      nights: r.nights,
+      pricePerNight: 0,
+      totalPrice: r.totalPrice,
+      cleaningFee: r.cleaningFee,
+      payout: r.payout,
+      currency: "AED",
+      detailsFilled: false,
+    })),
+    ...extensions.map((e) => ({
+      id: "",
+      propertyId: "",
+      propertyName: "",
+      propertyColor: "",
+      guestName: null,
+      numGuests: null,
+      checkIn: e.checkIn,
+      checkOut: e.checkOut,
+      nights: e.nights,
+      pricePerNight: 0,
+      totalPrice: e.totalPrice,
+      cleaningFee: 0,
+      payout: e.payout,
+      currency: "AED",
+      detailsFilled: false,
+    })),
+  ];
 
   const kpis = computeKpis(items, propertyCount, period);
   const monthly = buildMonthlySeries(items, propertyCount, 12);

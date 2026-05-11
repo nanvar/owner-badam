@@ -102,6 +102,20 @@ export function monthOptions(
   return opts;
 }
 
+// Pulls Airbnb's booking reference (e.g. "HM4JEPEPNZ") out of the
+// reservation description URL — Airbnb embeds it as
+// `https://www.airbnb.com/hosting/reservations/details/<REF>`. Returns
+// null when the description is missing or doesn't carry the URL.
+export function extractBookingRef(
+  description: string | null | undefined,
+): string | null {
+  if (!description) return null;
+  const m = description.match(
+    /airbnb\.com\/(?:hosting\/)?reservations(?:\/details)?\/([A-Z0-9]+)/i,
+  );
+  return m?.[1] ?? null;
+}
+
 // Friendly label like "May 2026" for a Date or "YYYY-MM" key.
 export function monthLabel(input: Date | string, locale = "en"): string {
   const d =
