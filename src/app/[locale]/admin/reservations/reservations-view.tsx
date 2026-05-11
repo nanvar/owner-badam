@@ -19,10 +19,6 @@ import {
   AlertTriangle,
   Plus,
   AlertCircle,
-  CalendarPlus,
-  ChevronDown,
-  Edit3,
-  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -55,6 +51,11 @@ import type { Locale } from "@/i18n/config";
 export type ReservationExtensionItem = {
   id: string;
   reservationId: string;
+  propertyId: string;
+  propertyName: string;
+  propertyColor: string;
+  parentGuestName: string | null;
+  parentExternalId: string | null;
   checkIn: string;
   checkOut: string;
   nights: number;
@@ -74,6 +75,7 @@ export type ReservationItem = {
   propertyId: string;
   propertyName: string;
   propertyColor: string;
+  externalId: string | null;
   guestName: string | null;
   guestPhone: string | null;
   guestEmail: string | null;
@@ -94,12 +96,53 @@ export type ReservationItem = {
   detailsFilled: boolean;
   paid: boolean;
   rawSummary: string | null;
-  extensions: ReservationExtensionItem[];
 };
+
+// Merged "booking" — reservation or extension — that the list view
+// renders as a single chronological feed. Extensions inherit their
+// parent's property + guest + Airbnb id so the row reads identically.
+type BookingRow =
+  | {
+      kind: "reservation";
+      id: string;
+      raw: ReservationItem;
+      propertyName: string;
+      propertyColor: string;
+      guestName: string | null;
+      externalId: string | null;
+      checkIn: string;
+      checkOut: string;
+      nights: number;
+      pricePerNight: number;
+      totalPrice: number;
+      paid: boolean;
+      currency: string;
+      detailsFilled: boolean;
+      searchBlob: string;
+    }
+  | {
+      kind: "extension";
+      id: string;
+      raw: ReservationExtensionItem;
+      propertyName: string;
+      propertyColor: string;
+      guestName: string | null;
+      externalId: string | null;
+      checkIn: string;
+      checkOut: string;
+      nights: number;
+      pricePerNight: number;
+      totalPrice: number;
+      paid: boolean;
+      currency: string;
+      detailsFilled: boolean;
+      searchBlob: string;
+    };
 
 export function ReservationsView({
   locale,
   items,
+  extensions,
   properties,
   monthOptions: monthOpts,
   selectedMonth,
@@ -108,6 +151,7 @@ export function ReservationsView({
 }: {
   locale: Locale;
   items: ReservationItem[];
+  extensions: ReservationExtensionItem[];
   properties: { id: string; name: string; color: string }[];
   monthOptions: { key: string; label: string }[];
   selectedMonth: string;
@@ -117,42 +161,89 @@ export function ReservationsView({
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<ReservationItem | null>(null);
+  const [editingExt, setEditingExt] = useState<ReservationExtensionItem | null>(
+    null,
+  );
   const [creating, setCreating] = useState(false);
   const [deletePending, startDelete] = useTransition();
+  const [extDeletePending, startExtDelete] = useTransition();
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const [syncPending, startSync] = useTransition();
 
+  // Build the unified bookings feed once: reservations + extensions
+  // share the same row shape so the table renders both as bookings.
+  const bookings = useMemo<BookingRow[]>(() => {
+    const reservationRows: BookingRow[] = items.map((i) => ({
+      kind: "reservation",
+      id: i.id,
+      raw: i,
+      propertyName: i.propertyName,
+      propertyColor: i.propertyColor,
+      guestName: i.guestName,
+      externalId: i.externalId,
+      checkIn: i.checkIn,
+      checkOut: i.checkOut,
+      nights: i.nights,
+      pricePerNight: i.pricePerNight,
+      totalPrice: i.totalPrice,
+      paid: i.paid,
+      currency: i.currency,
+      detailsFilled: i.detailsFilled,
+      searchBlob:
+        `${i.guestName ?? ""} ${i.propertyName} ${i.rawSummary ?? ""} ${i.externalId ?? ""}`.toLowerCase(),
+    }));
+    const extensionRows: BookingRow[] = extensions.map((e) => ({
+      kind: "extension",
+      id: e.id,
+      raw: e,
+      propertyName: e.propertyName,
+      propertyColor: e.propertyColor,
+      guestName: e.parentGuestName,
+      externalId: e.parentExternalId,
+      checkIn: e.checkIn,
+      checkOut: e.checkOut,
+      nights: e.nights,
+      pricePerNight: e.nights > 0 ? e.totalPrice / e.nights : 0,
+      totalPrice: e.totalPrice,
+      paid: e.paid,
+      currency: e.currency,
+      detailsFilled: e.detailsFilled,
+      searchBlob:
+        `${e.parentGuestName ?? ""} ${e.propertyName} ${e.parentExternalId ?? ""}`.toLowerCase(),
+    }));
+    return [...reservationRows, ...extensionRows];
+  }, [items, extensions]);
+
   const filtered = useMemo(() => {
-    const list = items.filter((i) => {
+    const list = bookings.filter((b) => {
       if (search) {
         const q = search.toLowerCase();
-        const blob = `${i.guestName ?? ""} ${i.propertyName} ${i.rawSummary ?? ""}`.toLowerCase();
-        if (!blob.includes(q)) return false;
+        if (!b.searchBlob.includes(q)) return false;
       }
       return true;
     });
     // Stable bucket sort: live (currently ongoing) on top, scheduled in
     // the middle, done (already checked out) at the bottom.
     const now = Date.now();
-    const bucket = (i: (typeof items)[number]) => {
-      const ci = new Date(i.checkIn).getTime();
-      const co = new Date(i.checkOut).getTime();
+    const bucket = (b: BookingRow) => {
+      const ci = new Date(b.checkIn).getTime();
+      const co = new Date(b.checkOut).getTime();
       if (ci <= now && co > now) return 0; // live
       if (co <= now) return 2; // done
       return 1; // future
     };
     return list
-      .map((i, idx) => ({ i, idx, b: bucket(i) }))
-      .sort((a, b) => a.b - b.b || a.idx - b.idx)
-      .map(({ i }) => i);
-  }, [items, search]);
+      .map((b, idx) => ({ b, idx, bucket: bucket(b) }))
+      .sort((a, b) => a.bucket - b.bucket || a.idx - b.idx)
+      .map(({ b }) => b);
+  }, [bookings, search]);
   const firstDoneIndex = useMemo(() => {
     const now = Date.now();
-    return filtered.findIndex((i) => new Date(i.checkOut).getTime() <= now);
+    return filtered.findIndex((b) => new Date(b.checkOut).getTime() <= now);
   }, [filtered]);
   const incompleteCount = useMemo(
-    () => items.filter((i) => !i.detailsFilled).length,
-    [items],
+    () => bookings.filter((b) => !b.detailsFilled).length,
+    [bookings],
   );
 
   return (
@@ -248,17 +339,21 @@ export function ReservationsView({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r, idx) => (
-                  <Fragment key={r.id}>
+                {filtered.map((b, idx) => (
+                  <Fragment key={`${b.kind}-${b.id}`}>
                     {idx > 0 && idx === firstDoneIndex && (
                       <tr aria-hidden>
                         <td colSpan={8} className="h-6 border-x-0 border-b-0" />
                       </tr>
                     )}
                     <tr
-                      onClick={() => setEditing(r)}
+                      onClick={() =>
+                        b.kind === "reservation"
+                          ? setEditing(b.raw)
+                          : setEditingExt(b.raw)
+                      }
                       className={`cursor-pointer border-t border-[var(--color-border)] ${
-                        !r.paid
+                        !b.paid
                           ? "bg-amber-500/10 hover:bg-amber-500/15"
                           : "hover:bg-[var(--color-surface-2)]/60"
                       }`}
@@ -267,31 +362,40 @@ export function ReservationsView({
                       <div className="flex items-center gap-2">
                         <span
                           className="h-7 w-1 shrink-0 rounded-full"
-                          style={{ background: r.propertyColor }}
+                          style={{ background: b.propertyColor }}
                         />
-                        <span className="font-medium">{r.propertyName}</span>
+                        <span className="font-medium">{b.propertyName}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3">{r.guestName ?? "—"}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {formatDate(r.checkIn, locale)}
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span>{b.guestName ?? "—"}</span>
+                        {b.kind === "extension" && (
+                          <span className="inline-flex items-center rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-700">
+                            Extension
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {formatDate(r.checkOut, locale)}
+                      {formatDate(b.checkIn, locale)}
                     </td>
-                    <td className="px-4 py-3 text-right">{r.nights}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {formatDate(b.checkOut, locale)}
+                    </td>
+                    <td className="px-4 py-3 text-right">{b.nights}</td>
                     <td className="px-4 py-3 text-right">
-                      {formatCurrency(r.pricePerNight, r.currency || "AED", locale)}
+                      {formatCurrency(b.pricePerNight, b.currency || "AED", locale)}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold">
-                      {formatCurrency(r.totalPrice, r.currency || "AED", locale)}
+                      {formatCurrency(b.totalPrice, b.currency || "AED", locale)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-1.5">
                         {(() => {
                           const now = Date.now();
-                          const ci = new Date(r.checkIn).getTime();
-                          const co = new Date(r.checkOut).getTime();
+                          const ci = new Date(b.checkIn).getTime();
+                          const co = new Date(b.checkOut).getTime();
                           if (ci <= now && co > now) {
                             return (
                               <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-600">
@@ -312,21 +416,13 @@ export function ReservationsView({
                           }
                           return null;
                         })()}
-                        {r.paid ? (
+                        {b.paid ? (
                           <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
                             Paid
                           </span>
                         ) : (
                           <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
                             Unpaid
-                          </span>
-                        )}
-                        {r.extensions.length > 0 && (
-                          <span
-                            className="inline-flex items-center rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-700"
-                            title={`${r.extensions.length} extension${r.extensions.length === 1 ? "" : "s"}`}
-                          >
-                            +{r.extensions.length} ext
                           </span>
                         )}
                       </div>
@@ -363,6 +459,23 @@ export function ReservationsView({
         labels={labels}
         locale={locale}
         onClose={() => setCreating(false)}
+      />
+
+      <ExtensionEditor
+        key={editingExt?.id ?? "ext-closed"}
+        open={!!editingExt}
+        extension={editingExt}
+        locale={locale}
+        currency={editingExt?.currency || "AED"}
+        onClose={() => setEditingExt(null)}
+        onDelete={(id) =>
+          startExtDelete(async () => {
+            await deleteReservationExtensionAction(id);
+            setEditingExt(null);
+            router.refresh();
+          })
+        }
+        deletePending={extDeletePending}
       />
     </div>
   );
@@ -605,14 +718,6 @@ export function ReservationEditor({
             placeholder="Internal notes about this reservation..."
           />
         </Field>
-
-        <ExtensionsSection
-          reservationId={reservation.id}
-          extensions={reservation.extensions}
-          locale={locale}
-          currency={reservation.currency || "AED"}
-          fallbackCheckIn={reservation.checkOut}
-        />
 
         {state?.status === "error" && (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
@@ -940,178 +1045,23 @@ function CompanyReservationCreator({
 // how many extensions exist + how many still need pricing; clicking
 // expands the inline forms (one per extension + an Add slot). Native
 // <details> handles the toggle so no extra state plumbing is needed.
-function ExtensionsSection({
-  reservationId,
-  extensions,
-  locale,
-  currency,
-  fallbackCheckIn,
-}: {
-  reservationId: string;
-  extensions: ReservationExtensionItem[];
-  locale: Locale;
-  currency: string;
-  fallbackCheckIn: string;
-}) {
-  const router = useRouter();
-  const [editing, setEditing] = useState<
-    ReservationExtensionItem | null | undefined
-  >(undefined);
-  const [deletePending, startDelete] = useTransition();
-  const pendingCount = extensions.filter(
-    (e) => !e.detailsFilled || e.totalPrice <= 0,
-  ).length;
 
-  return (
-    <details className="group rounded-2xl border border-[var(--color-border)] bg-white open:bg-[var(--color-surface-2)]/40">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm">
-        <span className="flex items-center gap-2">
-          <CalendarPlus className="h-4 w-4 text-[var(--color-brand)]" />
-          <span className="font-semibold">Extensions</span>
-          {extensions.length > 0 && (
-            <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-700">
-              {extensions.length}
-            </span>
-          )}
-          {pendingCount > 0 && (
-            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
-              {pendingCount} need pricing
-            </span>
-          )}
-        </span>
-        <ChevronDown className="h-4 w-4 text-[var(--color-muted)] transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="space-y-2 border-t border-[var(--color-border)] px-4 py-3">
-        {extensions.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[var(--color-border)] px-3 py-4 text-center text-xs text-[var(--color-muted)]">
-            No extensions yet. iCal sync adds them automatically when a
-            stay's check-out grows; you can also add one manually below.
-          </div>
-        ) : (
-          <ul className="space-y-1.5">
-            {extensions.map((ext) => {
-              const needsPricing = !ext.detailsFilled || ext.totalPrice <= 0;
-              return (
-                <li
-                  key={ext.id}
-                  className={`flex items-start gap-3 rounded-xl border px-3 py-2 ${
-                    needsPricing
-                      ? "border-amber-500/30 bg-amber-500/5"
-                      : "border-[var(--color-border)] bg-white"
-                  }`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
-                      {formatDate(ext.checkIn, locale)} →{" "}
-                      {formatDate(ext.checkOut, locale)}
-                      <span className="text-xs font-normal text-[var(--color-muted)]">
-                        · {ext.nights} {ext.nights === 1 ? "night" : "nights"}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
-                      {ext.totalPrice > 0 ? (
-                        <span className="font-semibold text-[var(--color-foreground)]">
-                          {formatCurrency(
-                            ext.totalPrice,
-                            ext.currency || "AED",
-                            locale,
-                          )}
-                        </span>
-                      ) : (
-                        <span className="font-semibold text-amber-700">
-                          Needs pricing
-                        </span>
-                      )}
-                      {ext.paid ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Paid
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
-                          Unpaid
-                        </span>
-                      )}
-                      {ext.monthKey && (
-                        <span className="text-[10px] text-[var(--color-muted)]">
-                          · {ext.monthKey}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setEditing(ext)}
-                      aria-label="Edit extension"
-                      className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]"
-                    >
-                      <Edit3 className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={deletePending}
-                      onClick={() => {
-                        if (!confirm("Delete this extension?")) return;
-                        startDelete(async () => {
-                          await deleteReservationExtensionAction(ext.id);
-                          router.refresh();
-                        });
-                      }}
-                      aria-label="Delete extension"
-                      className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-rose-500/10 hover:text-rose-600 disabled:opacity-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        <div className="flex justify-end pt-1">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => setEditing(null)}
-          >
-            <CalendarPlus className="h-4 w-4" />
-            Add extension
-          </Button>
-        </div>
-      </div>
-
-      <ExtensionEditor
-        key={editing === undefined ? "closed" : editing?.id ?? "new"}
-        open={editing !== undefined}
-        reservationId={reservationId}
-        extension={editing ?? null}
-        currency={currency}
-        locale={locale}
-        fallbackCheckIn={fallbackCheckIn}
-        onClose={() => setEditing(undefined)}
-      />
-    </details>
-  );
-}
-
-function ExtensionEditor({
+export function ExtensionEditor({
   open,
-  reservationId,
   extension,
   currency,
   locale,
-  fallbackCheckIn,
   onClose,
+  onDelete,
+  deletePending,
 }: {
   open: boolean;
-  reservationId: string;
   extension: ReservationExtensionItem | null;
   currency: string;
   locale: Locale;
-  fallbackCheckIn: string;
   onClose: () => void;
+  onDelete: (id: string) => void;
+  deletePending: boolean;
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState<
@@ -1167,7 +1117,11 @@ function ExtensionEditor({
     >
       <form action={action} className="space-y-4">
         {extension && <input type="hidden" name="id" value={extension.id} />}
-        <input type="hidden" name="reservationId" value={reservationId} />
+        <input
+          type="hidden"
+          name="reservationId"
+          value={extension?.reservationId ?? ""}
+        />
         <input type="hidden" name="currency" value={currency} />
         <input type="hidden" name="paid" value={paid ? "true" : "false"} />
 
@@ -1178,10 +1132,7 @@ function ExtensionEditor({
               name="checkIn"
               type="date"
               required
-              defaultValue={
-                extension?.checkIn.slice(0, 10) ??
-                fallbackCheckIn.slice(0, 10)
-              }
+              defaultValue={extension?.checkIn.slice(0, 10) ?? ""}
             />
           </Field>
           <Field label="Check-out" htmlFor="ext-checkOut">
@@ -1300,13 +1251,30 @@ function ExtensionEditor({
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" loading={pending}>
-            Save
-          </Button>
+        <div className="flex items-center gap-2 pt-2">
+          {extension && (
+            <Button
+              type="button"
+              variant="ghost"
+              loading={deletePending}
+              onClick={() => {
+                if (!confirm("Delete this extension?")) return;
+                onDelete(extension.id);
+              }}
+              className="text-rose-500 hover:bg-rose-500/10"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </Button>
+          )}
+          <div className="ml-auto flex gap-2">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={pending}>
+              Save
+            </Button>
+          </div>
         </div>
       </form>
     </Sheet>

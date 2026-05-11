@@ -13,14 +13,32 @@ export default async function IncompleteReservationsPage({
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
 
-  const reservations = await prisma.reservation.findMany({
-    where: { detailsFilled: false },
-    include: {
-      property: { select: { id: true, name: true, color: true } },
-      extensions: { orderBy: { checkIn: "asc" } },
-    },
-    orderBy: { checkIn: "desc" },
-  });
+  // Pull both unfilled reservations and unfilled extensions so the
+  // page reads as one "needs attention" feed. Extensions inherit their
+  // parent's property + guest info for the row render.
+  const [reservations, extensions] = await Promise.all([
+    prisma.reservation.findMany({
+      where: { detailsFilled: false },
+      include: {
+        property: { select: { id: true, name: true, color: true } },
+      },
+      orderBy: { checkIn: "desc" },
+    }),
+    prisma.reservationExtension.findMany({
+      where: { detailsFilled: false },
+      include: {
+        reservation: {
+          select: {
+            propertyId: true,
+            guestName: true,
+            externalId: true,
+            property: { select: { name: true, color: true } },
+          },
+        },
+      },
+      orderBy: { checkIn: "desc" },
+    }),
+  ]);
 
   const t = await getTranslations({ locale, namespace: "admin" });
   const tCommon = await getTranslations({ locale, namespace: "common" });
@@ -34,6 +52,7 @@ export default async function IncompleteReservationsPage({
         propertyId: r.propertyId,
         propertyName: r.property.name,
         propertyColor: r.property.color,
+        externalId: r.externalId,
         guestName: r.guestName,
         guestPhone: r.guestPhone,
         guestEmail: r.guestEmail,
@@ -54,22 +73,27 @@ export default async function IncompleteReservationsPage({
         detailsFilled: r.detailsFilled,
         paid: r.paid,
         rawSummary: r.rawSummary,
-        extensions: r.extensions.map((e) => ({
-          id: e.id,
-          reservationId: e.reservationId,
-          checkIn: e.checkIn.toISOString(),
-          checkOut: e.checkOut.toISOString(),
-          nights: e.nights,
-          totalPrice: e.totalPrice,
-          agencyCommission: e.agencyCommission,
-          portalCommission: e.portalCommission,
-          payout: e.payout,
-          currency: e.currency,
-          notes: e.notes,
-          paid: e.paid,
-          monthKey: e.monthKey,
-          detailsFilled: e.detailsFilled,
-        })),
+      }))}
+      extensions={extensions.map((e) => ({
+        id: e.id,
+        reservationId: e.reservationId,
+        propertyId: e.reservation.propertyId,
+        propertyName: e.reservation.property.name,
+        propertyColor: e.reservation.property.color,
+        parentGuestName: e.reservation.guestName,
+        parentExternalId: e.reservation.externalId,
+        checkIn: e.checkIn.toISOString(),
+        checkOut: e.checkOut.toISOString(),
+        nights: e.nights,
+        totalPrice: e.totalPrice,
+        agencyCommission: e.agencyCommission,
+        portalCommission: e.portalCommission,
+        payout: e.payout,
+        currency: e.currency,
+        notes: e.notes,
+        paid: e.paid,
+        monthKey: e.monthKey,
+        detailsFilled: e.detailsFilled,
       }))}
       labels={{
         title: tCommon("reservations"),
