@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   Plus,
   AlertCircle,
+  CornerDownRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -137,6 +138,11 @@ type BookingRow =
       currency: string;
       detailsFilled: boolean;
       searchBlob: string;
+      // True when this row is rendered as a sub-row directly below
+      // its parent reservation in the same view (so we render it
+      // indented). False for orphan extensions whose parent isn't
+      // in the current month filter.
+      groupChild: boolean;
     };
 
 export function ReservationsView({
@@ -170,10 +176,13 @@ export function ReservationsView({
   const [syncState, setSyncState] = useState<SyncState | null>(null);
   const [syncPending, startSync] = useTransition();
 
-  // Build the unified bookings feed once: reservations + extensions
-  // share the same row shape so the table renders both as bookings.
+  // Grouped feed: each parent reservation is followed by its extensions
+  // (sorted by checkIn asc). Orphan extensions whose parent isn't in
+  // the current view fall to the bottom in their own bucket order. The
+  // result reads as "reservation, then its add-on nights below" so the
+  // relationship is obvious at a glance.
   const bookings = useMemo<BookingRow[]>(() => {
-    const reservationRows: BookingRow[] = items.map((i) => ({
+    const buildResRow = (i: ReservationItem): BookingRow => ({
       kind: "reservation",
       id: i.id,
       raw: i,
@@ -191,8 +200,11 @@ export function ReservationsView({
       detailsFilled: i.detailsFilled,
       searchBlob:
         `${i.guestName ?? ""} ${i.propertyName} ${i.rawSummary ?? ""} ${i.externalId ?? ""}`.toLowerCase(),
-    }));
-    const extensionRows: BookingRow[] = extensions.map((e) => ({
+    });
+    const buildExtRow = (
+      e: ReservationExtensionItem,
+      child: boolean,
+    ): BookingRow => ({
       kind: "extension",
       id: e.id,
       raw: e,
@@ -210,36 +222,68 @@ export function ReservationsView({
       detailsFilled: e.detailsFilled,
       searchBlob:
         `${e.parentGuestName ?? ""} ${e.propertyName} ${e.parentExternalId ?? ""}`.toLowerCase(),
-    }));
-    return [...reservationRows, ...extensionRows];
+      groupChild: child,
+    });
+    // Bucket sort parents first so Live groups float to the top.
+    const now = Date.now();
+    const bucket = (ci: string, co: string) => {
+      const ciMs = new Date(ci).getTime();
+      const coMs = new Date(co).getTime();
+      if (ciMs <= now && coMs > now) return 0; // live
+      if (coMs <= now) return 2; // done
+      return 1; // future
+    };
+    const sortedItems = items
+      .map((i, idx) => ({ i, idx, b: bucket(i.checkIn, i.checkOut) }))
+      .sort((a, b) => a.b - b.b || a.idx - b.idx)
+      .map(({ i }) => i);
+    // Index extensions by their parent reservation id.
+    const extByParent = new Map<string, ReservationExtensionItem[]>();
+    for (const e of extensions) {
+      const arr = extByParent.get(e.reservationId) ?? [];
+      arr.push(e);
+      extByParent.set(e.reservationId, arr);
+    }
+    for (const arr of extByParent.values()) {
+      arr.sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+    }
+    const visibleIds = new Set(items.map((i) => i.id));
+    const used = new Set<string>();
+    const rows: BookingRow[] = [];
+    for (const item of sortedItems) {
+      rows.push(buildResRow(item));
+      const children = extByParent.get(item.id);
+      if (children) {
+        for (const c of children) {
+          rows.push(buildExtRow(c, true));
+          used.add(c.id);
+        }
+      }
+    }
+    // Orphans: extensions whose parent isn't part of this view (e.g.
+    // because the parent reservation's monthKey is filtered out).
+    const orphans = extensions
+      .filter((e) => !used.has(e.id) && !visibleIds.has(e.reservationId))
+      .map((e, idx) => ({ e, idx, b: bucket(e.checkIn, e.checkOut) }))
+      .sort((a, b) => a.b - b.b || a.idx - b.idx)
+      .map(({ e }) => buildExtRow(e, false));
+    rows.push(...orphans);
+    return rows;
   }, [items, extensions]);
 
   const filtered = useMemo(() => {
-    const list = bookings.filter((b) => {
-      if (search) {
-        const q = search.toLowerCase();
-        if (!b.searchBlob.includes(q)) return false;
-      }
-      return true;
-    });
-    // Stable bucket sort: live (currently ongoing) on top, scheduled in
-    // the middle, done (already checked out) at the bottom.
-    const now = Date.now();
-    const bucket = (b: BookingRow) => {
-      const ci = new Date(b.checkIn).getTime();
-      const co = new Date(b.checkOut).getTime();
-      if (ci <= now && co > now) return 0; // live
-      if (co <= now) return 2; // done
-      return 1; // future
-    };
-    return list
-      .map((b, idx) => ({ b, idx, bucket: bucket(b) }))
-      .sort((a, b) => a.bucket - b.bucket || a.idx - b.idx)
-      .map(({ b }) => b);
+    if (!search) return bookings;
+    const q = search.toLowerCase();
+    return bookings.filter((b) => b.searchBlob.includes(q));
   }, [bookings, search]);
   const firstDoneIndex = useMemo(() => {
     const now = Date.now();
-    return filtered.findIndex((b) => new Date(b.checkOut).getTime() <= now);
+    return filtered.findIndex((b) => {
+      // Group children stay attached to their parent — never use them
+      // as the separator anchor.
+      if (b.kind === "extension" && b.groupChild) return false;
+      return new Date(b.checkOut).getTime() <= now;
+    });
   }, [filtered]);
   const incompleteCount = useMemo(
     () => bookings.filter((b) => !b.detailsFilled).length,
@@ -352,25 +396,39 @@ export function ReservationsView({
                           ? setEditing(b.raw)
                           : setEditingExt(b.raw)
                       }
-                      className={`cursor-pointer border-t border-[var(--color-border)] ${
-                        !b.paid
-                          ? "bg-amber-500/10 hover:bg-amber-500/15"
-                          : "hover:bg-[var(--color-surface-2)]/60"
+                      className={`cursor-pointer ${
+                        b.kind === "extension" && b.groupChild
+                          ? // Child row stays visually tied to its parent
+                            // above — no top border so it reads as the
+                            // same group, plus a faint tint.
+                            "border-t border-dashed border-[var(--color-border)]/60 bg-sky-500/5 hover:bg-sky-500/10"
+                          : !b.paid
+                            ? "border-t border-[var(--color-border)] bg-amber-500/10 hover:bg-amber-500/15"
+                            : "border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60"
                       }`}
                     >
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="h-7 w-1 shrink-0 rounded-full"
-                          style={{ background: b.propertyColor }}
-                        />
-                        <span className="font-medium">{b.propertyName}</span>
-                      </div>
+                      {b.kind === "extension" && b.groupChild ? (
+                        <div className="flex items-center gap-2 pl-3 text-[var(--color-muted)]">
+                          <CornerDownRight className="h-3.5 w-3.5" />
+                          <span className="text-xs font-medium uppercase tracking-wider">
+                            Extension
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-7 w-1 shrink-0 rounded-full"
+                            style={{ background: b.propertyColor }}
+                          />
+                          <span className="font-medium">{b.propertyName}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span>{b.guestName ?? "—"}</span>
-                        {b.kind === "extension" && (
+                        {b.kind === "extension" && !b.groupChild && (
                           <span className="inline-flex items-center rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-700">
                             Extension
                           </span>

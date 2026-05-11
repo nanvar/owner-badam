@@ -6,9 +6,9 @@ import { requireSession } from "@/lib/auth";
 import {
   buildMonthlySeries,
   computeKpis,
-  periodFromRange,
   type ReservationLite,
 } from "@/lib/metrics";
+import { monthLabel } from "@/lib/utils";
 import { OwnerDashboardView } from "./dashboard-view";
 
 export default async function OwnerDashboardPage({
@@ -16,15 +16,14 @@ export default async function OwnerDashboardPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ range?: string }>;
+  searchParams: Promise<{ month?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
   const session = await requireSession();
   const sp = await searchParams;
-  const range = sp.range ?? "this-month";
-  const period = periodFromRange(range);
+  const loc = locale as Locale;
 
   const ownerFilter =
     session.role === "OWNER" ? { property: { ownerId: session.userId } } : undefined;
@@ -35,9 +34,10 @@ export default async function OwnerDashboardPage({
   const propertyWhere =
     session.role === "OWNER" ? { ownerId: session.userId } : undefined;
 
-  // Reservations + extensions are pulled together and treated as separate
-  // bookings by the KPI math — extensions have their own check-in/out and
-  // payout since iCal no longer rolls them into the parent reservation.
+  // Reservations + extensions pulled in full (no month filter) — the
+  // monthly chart needs the rolling 12-month context regardless of the
+  // selected slice, and we filter for KPIs in JS to avoid duplicate
+  // queries.
   const [reservations, extensions, propertyCount] = await Promise.all([
     prisma.reservation.findMany({
       where: ownerFilter ?? {},
@@ -48,6 +48,7 @@ export default async function OwnerDashboardPage({
         cleaningFee: true,
         checkIn: true,
         checkOut: true,
+        monthKey: true,
       },
       orderBy: { checkIn: "asc" },
     }),
@@ -59,13 +60,27 @@ export default async function OwnerDashboardPage({
         payout: true,
         checkIn: true,
         checkOut: true,
+        monthKey: true,
       },
       orderBy: { checkIn: "asc" },
     }),
     prisma.property.count({ where: propertyWhere }),
   ]);
 
-  const items: ReservationLite[] = [
+  // Distinct months for the picker — union across both tables.
+  const monthSet = new Set<string>();
+  for (const r of reservations) if (r.monthKey) monthSet.add(r.monthKey);
+  for (const e of extensions) if (e.monthKey) monthSet.add(e.monthKey);
+  const monthOpts = [...monthSet]
+    .sort()
+    .reverse()
+    .map((k) => ({ key: k, label: monthLabel(k, locale) }));
+  const selectedMonth =
+    sp.month && monthSet.has(sp.month) ? sp.month : "";
+
+  // Unified booking feed with monthKey so we can filter in JS.
+  type Booking = ReservationLite & { monthKey: string | null };
+  const allBookings: Booking[] = [
     ...reservations.map((r) => ({
       id: "",
       propertyId: "",
@@ -82,6 +97,7 @@ export default async function OwnerDashboardPage({
       payout: r.payout,
       currency: "AED",
       detailsFilled: false,
+      monthKey: r.monthKey,
     })),
     ...extensions.map((e) => ({
       id: "",
@@ -99,19 +115,55 @@ export default async function OwnerDashboardPage({
       payout: e.payout,
       currency: "AED",
       detailsFilled: false,
+      monthKey: e.monthKey,
     })),
   ];
 
-  const kpis = computeKpis(items, propertyCount, period);
-  const monthly = buildMonthlySeries(items, propertyCount, 12);
+  // KPI items: filtered by selectedMonth (or all when empty).
+  const kpiItems: ReservationLite[] = selectedMonth
+    ? allBookings.filter((b) => b.monthKey === selectedMonth)
+    : allBookings;
+
+  // Period: derive from selectedMonth for KPI math; for All, span the
+  // booked range (or fall back to current month when there's no data).
+  const now = new Date();
+  let period: { from: Date; to: Date };
+  if (selectedMonth) {
+    const [yy, mm] = selectedMonth.split("-").map(Number);
+    period = {
+      from: new Date(Date.UTC(yy, mm - 1, 1)),
+      to: new Date(Date.UTC(yy, mm, 1)),
+    };
+  } else if (allBookings.length > 0) {
+    const fromMs = Math.min(
+      ...allBookings.map((b) => b.checkIn.getTime()),
+    );
+    const toMs = Math.max(
+      ...allBookings.map((b) => b.checkOut.getTime()),
+    );
+    period = { from: new Date(fromMs), to: new Date(toMs) };
+  } else {
+    period = {
+      from: new Date(now.getFullYear(), now.getMonth(), 1),
+      to: new Date(now.getFullYear(), now.getMonth() + 1, 1),
+    };
+  }
+
+  const kpis = computeKpis(kpiItems, propertyCount, period);
+  // Monthly chart shows full 12-month context regardless of the filter
+  // so trend remains readable when a single month is picked.
+  const monthly = buildMonthlySeries(allBookings, propertyCount, 12);
 
   const t = await getTranslations({ locale, namespace: "owner" });
   const tCommon = await getTranslations({ locale, namespace: "common" });
 
   return (
     <OwnerDashboardView
-      locale={locale as Locale}
-      range={range}
+      locale={loc}
+      monthOptions={monthOpts}
+      selectedMonth={selectedMonth}
+      basePath={`/${locale}/owner`}
+      periodLabel={selectedMonth ? monthLabel(selectedMonth, locale) : "All months"}
       kpis={{
         revenue: kpis.revenue,
         bookings: kpis.bookings,
@@ -129,11 +181,6 @@ export default async function OwnerDashboardPage({
         kpiAdr: t("kpiAdr"),
         kpiRevpar: t("kpiRevpar"),
         kpiBookings: t("kpiBookings"),
-        thisMonth: t("thisMonth"),
-        lastMonth: t("lastMonth"),
-        ytd: t("ytd"),
-        last30: t("last30"),
-        last90: t("last90"),
         monthlyRevenue: t("monthlyRevenueAll"),
         noData: tCommon("noData"),
       }}
