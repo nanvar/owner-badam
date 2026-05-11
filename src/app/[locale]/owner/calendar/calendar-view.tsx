@@ -29,6 +29,7 @@ type Event = {
     totalPrice: number;
     currency: string;
     pricePerNight: number;
+    kind: "reservation" | "extension";
   };
 };
 

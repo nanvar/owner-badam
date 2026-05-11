@@ -15,6 +15,9 @@ export default async function OwnerCalendarPage({
   setRequestLocale(locale);
   const session = await requireRole("OWNER");
 
+  // Pull each property's reservations + their extensions in a single
+  // round-trip. Extensions render as their own calendar events so the
+  // owner can see the full stay (original window + any add-on nights).
   const properties = await prisma.property.findMany({
     where: { ownerId: session.userId },
     include: {
@@ -28,6 +31,17 @@ export default async function OwnerCalendarPage({
           pricePerNight: true,
           totalPrice: true,
           currency: true,
+          extensions: {
+            select: {
+              id: true,
+              checkIn: true,
+              checkOut: true,
+              nights: true,
+              totalPrice: true,
+              currency: true,
+            },
+            orderBy: { checkIn: "asc" },
+          },
         },
         orderBy: { checkIn: "asc" },
       },
@@ -39,9 +53,49 @@ export default async function OwnerCalendarPage({
   const tCommon = await getTranslations({ locale, namespace: "common" });
   const tOwner = await getTranslations({ locale, namespace: "owner" });
 
+  const today = Date.now();
   const items = properties.map((p) => {
-    const upcomingCount = p.reservations.filter(
-      (r) => new Date(r.checkOut) >= new Date(),
+    const reservationEvents = p.reservations.map((r) => ({
+      id: r.id,
+      title: r.guestName ?? "Guest",
+      start: r.checkIn.toISOString(),
+      end: r.checkOut.toISOString(),
+      color: p.color,
+      extendedProps: {
+        propertyName: p.name,
+        propertyColor: p.color,
+        guestName: r.guestName ?? "Guest",
+        nights: r.nights,
+        totalPrice: r.totalPrice,
+        currency: r.currency,
+        pricePerNight: r.pricePerNight,
+        kind: "reservation" as const,
+      },
+    }));
+    const extensionEvents = p.reservations.flatMap((r) =>
+      r.extensions.map((e) => ({
+        id: e.id,
+        title: `${r.guestName ?? "Guest"} (Ext)`,
+        start: e.checkIn.toISOString(),
+        end: e.checkOut.toISOString(),
+        color: p.color,
+        extendedProps: {
+          propertyName: p.name,
+          propertyColor: p.color,
+          guestName: r.guestName ?? "Guest",
+          nights: e.nights,
+          totalPrice: e.totalPrice,
+          currency: e.currency,
+          pricePerNight: e.nights > 0 ? e.totalPrice / e.nights : 0,
+          kind: "extension" as const,
+        },
+      })),
+    );
+    const events = [...reservationEvents, ...extensionEvents];
+    // Future bookings = reservations or extensions whose check-in is
+    // still ahead. Extensions count as their own booking.
+    const futureCount = events.filter(
+      (ev) => new Date(ev.start).getTime() > today,
     ).length;
     return {
       id: p.id,
@@ -49,23 +103,8 @@ export default async function OwnerCalendarPage({
       address: p.address,
       color: p.color,
       reservationCount: p._count.reservations,
-      upcomingCount,
-      events: p.reservations.map((r) => ({
-        id: r.id,
-        title: r.guestName ?? "Guest",
-        start: r.checkIn.toISOString(),
-        end: r.checkOut.toISOString(),
-        color: p.color,
-        extendedProps: {
-          propertyName: p.name,
-          propertyColor: p.color,
-          guestName: r.guestName ?? "Guest",
-          nights: r.nights,
-          totalPrice: r.totalPrice,
-          currency: r.currency,
-          pricePerNight: r.pricePerNight,
-        },
-      })),
+      upcomingCount: futureCount,
+      events,
     };
   });
 

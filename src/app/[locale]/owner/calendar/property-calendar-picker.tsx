@@ -22,6 +22,8 @@ type Event = {
     totalPrice: number;
     currency: string;
     pricePerNight: number;
+    // Reservation vs the iCal extension that uses its own window.
+    kind: "reservation" | "extension";
   };
 };
 

@@ -24,7 +24,9 @@ export default async function OwnerReportsPage({
     where: { ownerId: session.userId },
     include: {
       property: { select: { name: true, color: true } },
-      _count: { select: { reservations: true, expenses: true } },
+      _count: {
+        select: { reservations: true, extensions: true, expenses: true },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -67,8 +69,14 @@ export default async function OwnerReportsPage({
                   </div>
                   <div className="mt-4 flex items-baseline justify-between gap-3">
                     <div className="text-xs text-[var(--color-muted)]">
-                      {r._count.reservations} reservations ·{" "}
-                      {r._count.expenses} expenses
+                      {r._count.reservations}
+                      {r._count.extensions > 0 && (
+                        <span className="text-sky-700">
+                          {" "}
+                          +{r._count.extensions} ext
+                        </span>
+                      )}{" "}
+                      reservations · {r._count.expenses} expenses
                     </div>
                     <div
                       className={`text-lg font-bold tabular-nums ${r.netPayout >= 0 ? "text-emerald-700" : "text-rose-600"}`}

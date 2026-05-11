@@ -22,12 +22,14 @@ type Property = {
 
 type Reservation = {
   id: string;
-  externalId: string | null;
+  bookingRef: string | null;
   checkIn: string;
   checkOut: string;
   nights: number;
   guestName: string | null;
   totalPrice: number;
+  agencyCommission: number;
+  portalCommission: number;
   payout: number;
   currency: string;
   monthKey: string | null;
@@ -36,12 +38,14 @@ type Reservation = {
 type Extension = {
   id: string;
   reservationId: string;
-  parentExternalId: string | null;
+  bookingRef: string | null;
   parentGuestName: string | null;
   checkIn: string;
   checkOut: string;
   nights: number;
   totalPrice: number;
+  agencyCommission: number;
+  portalCommission: number;
   payout: number;
   currency: string;
   monthKey: string | null;
@@ -58,31 +62,20 @@ type Expense = {
 
 // Unified row type so reservations and extensions render in one table —
 // owners and admins look at a single chronological list of bookings.
-type BookingRow =
-  | {
-      kind: "reservation";
-      id: string;
-      externalId: string | null;
-      guestName: string | null;
-      checkIn: string;
-      checkOut: string;
-      nights: number;
-      payout: number;
-      currency: string;
-      monthKey: string | null;
-    }
-  | {
-      kind: "extension";
-      id: string;
-      externalId: string | null;
-      guestName: string | null;
-      checkIn: string;
-      checkOut: string;
-      nights: number;
-      payout: number;
-      currency: string;
-      monthKey: string | null;
-    };
+type BookingRow = {
+  kind: "reservation" | "extension";
+  id: string;
+  bookingRef: string | null;
+  guestName: string | null;
+  checkIn: string;
+  checkOut: string;
+  totalPrice: number;
+  agencyCommission: number;
+  portalCommission: number;
+  payout: number;
+  currency: string;
+  monthKey: string | null;
+};
 
 export function ReportBuilder({
   locale,
@@ -145,11 +138,13 @@ export function ReportBuilder({
       ...reservations.map((r) => ({
         kind: "reservation" as const,
         id: r.id,
-        externalId: r.externalId,
+        bookingRef: r.bookingRef,
         guestName: r.guestName,
         checkIn: r.checkIn,
         checkOut: r.checkOut,
-        nights: r.nights,
+        totalPrice: r.totalPrice,
+        agencyCommission: r.agencyCommission,
+        portalCommission: r.portalCommission,
         payout: r.payout,
         currency: r.currency,
         monthKey: r.monthKey,
@@ -157,11 +152,13 @@ export function ReportBuilder({
       ...extensions.map((e) => ({
         kind: "extension" as const,
         id: e.id,
-        externalId: e.parentExternalId,
+        bookingRef: e.bookingRef,
         guestName: e.parentGuestName,
         checkIn: e.checkIn,
         checkOut: e.checkOut,
-        nights: e.nights,
+        totalPrice: e.totalPrice,
+        agencyCommission: e.agencyCommission,
+        portalCommission: e.portalCommission,
         payout: e.payout,
         currency: e.currency,
         monthKey: e.monthKey,
@@ -383,10 +380,10 @@ export function ReportBuilder({
         ) : (
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="grid-table w-full text-sm">
-                <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
+              <table className="grid-table w-full text-xs">
+                <thead className="bg-[var(--color-surface-2)] text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
                   <tr>
-                    <th className="px-4 py-3 text-left">
+                    <th className="px-3 py-2 text-left">
                       <input
                         type="checkbox"
                         aria-label="select all"
@@ -394,12 +391,14 @@ export function ReportBuilder({
                         onChange={(e) => togglePickedAll(e.target.checked)}
                       />
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold">Guest</th>
-                    <th className="px-4 py-3 text-left font-semibold">Airbnb ID</th>
-                    <th className="px-4 py-3 text-left font-semibold">Stay</th>
-                    <th className="px-4 py-3 text-left font-semibold">Bill</th>
-                    <th className="px-4 py-3 text-right font-semibold">Nights</th>
-                    <th className="px-4 py-3 text-right font-semibold">Payout</th>
+                    <th className="px-3 py-2 text-left font-semibold">Guest</th>
+                    <th className="px-3 py-2 text-left font-semibold">Ref</th>
+                    <th className="px-3 py-2 text-left font-semibold">Dates</th>
+                    <th className="px-3 py-2 text-left font-semibold">Bill</th>
+                    <th className="px-3 py-2 text-right font-semibold">Total rent</th>
+                    <th className="px-3 py-2 text-right font-semibold">Agency</th>
+                    <th className="px-3 py-2 text-right font-semibold">Portal</th>
+                    <th className="px-3 py-2 text-right font-semibold">Owner payout</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -414,7 +413,7 @@ export function ReportBuilder({
                           checked ? "bg-emerald-500/5" : ""
                         }`}
                       >
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-2">
                           <input
                             type="checkbox"
                             checked={checked}
@@ -422,7 +421,7 @@ export function ReportBuilder({
                             onClick={(e) => e.stopPropagation()}
                           />
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-2">
                           <span className="block">
                             {row.guestName ?? "—"}
                           </span>
@@ -432,23 +431,29 @@ export function ReportBuilder({
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs text-[var(--color-muted)]">
-                          {row.externalId ?? "—"}
+                        <td className="px-3 py-2 font-mono text-[10px] text-[var(--color-muted)]">
+                          {row.bookingRef ?? "—"}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-[var(--color-muted)]">
+                        <td className="px-3 py-2 whitespace-nowrap text-[var(--color-muted)]">
                           {formatDate(row.checkIn, locale)} →{" "}
                           {formatDate(row.checkOut, locale)}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
+                        <td className="px-3 py-2 whitespace-nowrap">
                           <MonthBadge
                             monthKey={row.monthKey}
                             highlight={inMonth}
                           />
                         </td>
-                        <td className="px-4 py-3 text-right tabular-nums">
-                          {row.nights}
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {formatCurrency(row.totalPrice, row.currency, locale)}
                         </td>
-                        <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                        <td className="px-3 py-2 text-right tabular-nums text-[var(--color-muted)]">
+                          {formatCurrency(row.agencyCommission, row.currency, locale)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-[var(--color-muted)]">
+                          {formatCurrency(row.portalCommission, row.currency, locale)}
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold tabular-nums">
                           {formatCurrency(row.payout, row.currency, locale)}
                         </td>
                       </tr>

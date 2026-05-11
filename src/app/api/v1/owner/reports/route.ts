@@ -8,7 +8,9 @@ export async function GET(req: Request) {
     where: { ownerId: auth.session.userId },
     include: {
       property: { select: { id: true, name: true, color: true } },
-      _count: { select: { reservations: true, expenses: true } },
+      _count: {
+        select: { reservations: true, extensions: true, expenses: true },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -25,6 +27,7 @@ export async function GET(req: Request) {
       },
       counts: {
         reservations: r._count.reservations,
+        extensions: r._count.extensions,
         expenses: r._count.expenses,
       },
       createdAt: r.createdAt.toISOString(),

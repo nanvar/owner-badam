@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireOwnerApi, jsonError } from "@/lib/api-auth";
 import { getSettings } from "@/lib/settings";
 import { buildReportPdf, type ReportPdfInput } from "@/lib/report-pdf";
+import { extractBookingRef } from "@/lib/utils";
 
 async function fetchLogoAsDataUrl(url: string | null): Promise<string | null> {
   if (!url) return null;
@@ -30,6 +31,18 @@ export async function GET(
       include: {
         property: { select: { name: true, color: true } },
         reservations: { orderBy: { checkIn: "asc" } },
+        extensions: {
+          include: {
+            reservation: {
+              select: {
+                externalId: true,
+                guestName: true,
+                rawDescription: true,
+              },
+            },
+          },
+          orderBy: { checkIn: "asc" },
+        },
         expenses: { orderBy: { date: "asc" } },
       },
     }),
@@ -62,13 +75,28 @@ export async function GET(
       address: ownerProfile?.address ?? null,
     },
     reservations: report.reservations.map((r) => ({
+      bookingRef: extractBookingRef(r.rawDescription),
       checkIn: r.checkIn.toISOString(),
       checkOut: r.checkOut.toISOString(),
       nights: r.nights,
       guestName: r.guestName,
       totalPrice: r.totalPrice,
+      agencyCommission: r.agencyCommission,
+      portalCommission: r.portalCommission,
       payout: r.payout,
       currency: r.currency,
+    })),
+    extensions: report.extensions.map((e) => ({
+      bookingRef: extractBookingRef(e.reservation.rawDescription),
+      parentGuestName: e.reservation.guestName,
+      checkIn: e.checkIn.toISOString(),
+      checkOut: e.checkOut.toISOString(),
+      nights: e.nights,
+      totalPrice: e.totalPrice,
+      agencyCommission: e.agencyCommission,
+      portalCommission: e.portalCommission,
+      payout: e.payout,
+      currency: e.currency,
     })),
     expenses: report.expenses.map((e) => ({
       date: e.date.toISOString(),

@@ -47,11 +47,26 @@ export type ReportPdfInput = {
     address: string | null;
   };
   reservations: Array<{
+    bookingRef: string | null;
     checkIn: string;
     checkOut: string;
     nights: number;
     guestName: string | null;
     totalPrice: number;
+    agencyCommission: number;
+    portalCommission: number;
+    payout: number;
+    currency: string;
+  }>;
+  extensions: Array<{
+    bookingRef: string | null;
+    parentGuestName: string | null;
+    checkIn: string;
+    checkOut: string;
+    nights: number;
+    totalPrice: number;
+    agencyCommission: number;
+    portalCommission: number;
     payout: number;
     currency: string;
   }>;
@@ -223,11 +238,12 @@ export async function buildReportPdf(data: ReportPdfInput): Promise<Buffer> {
   // Tables
   const baseStyles = {
     font: FONT,
-    fontSize: 9,
-    cellPadding: 6,
+    fontSize: 7.5,
+    cellPadding: 4,
     lineColor: [200, 208, 204] as [number, number, number],
     lineWidth: 0.8,
     valign: "middle" as const,
+    overflow: "linebreak" as const,
   };
   const baseFootStyles = {
     font: FONT,
@@ -246,38 +262,109 @@ export async function buildReportPdf(data: ReportPdfInput): Promise<Buffer> {
     styles: { halign: "right" as const },
   });
 
+  // Reservations + extensions render as one chronological table — the
+  // "(Extension)" marker keeps the two row types distinguishable while
+  // the totals row sums Total rent / Agency / Portal / Owner payout.
+  type PdfBookingRow = {
+    kind: "reservation" | "extension";
+    guestName: string | null;
+    bookingRef: string | null;
+    checkIn: string;
+    checkOut: string;
+    totalPrice: number;
+    agencyCommission: number;
+    portalCommission: number;
+    payout: number;
+    currency: string;
+  };
+  const bookings: PdfBookingRow[] = [
+    ...data.reservations.map((r) => ({
+      kind: "reservation" as const,
+      guestName: r.guestName,
+      bookingRef: r.bookingRef,
+      checkIn: r.checkIn,
+      checkOut: r.checkOut,
+      totalPrice: r.totalPrice,
+      agencyCommission: r.agencyCommission,
+      portalCommission: r.portalCommission,
+      payout: r.payout,
+      currency: r.currency,
+    })),
+    ...data.extensions.map((e) => ({
+      kind: "extension" as const,
+      guestName: e.parentGuestName,
+      bookingRef: e.bookingRef,
+      checkIn: e.checkIn,
+      checkOut: e.checkOut,
+      totalPrice: e.totalPrice,
+      agencyCommission: e.agencyCommission,
+      portalCommission: e.portalCommission,
+      payout: e.payout,
+      currency: e.currency,
+    })),
+  ].sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+  const totalAgency = bookings.reduce((s, b) => s + b.agencyCommission, 0);
+  const totalPortal = bookings.reduce((s, b) => s + b.portalCommission, 0);
+  const totalRent = bookings.reduce((s, b) => s + b.totalPrice, 0);
   sectionTitle("Reservations", y);
   autoTable(doc, {
     startY: y + 8,
     margin: { left: margin, right: margin },
     tableWidth: innerW,
     head: [
-      ["Guest", "Stay", right("Nights"), right("Total"), right("Payout")],
+      [
+        "Guest",
+        "Ref",
+        "Dates",
+        right("Total rent"),
+        right("Agency"),
+        right("Portal"),
+        right("Owner payout"),
+      ],
     ],
     theme: "grid",
     headStyles: {
       fillColor: [243, 247, 244],
       textColor: [47, 90, 71],
       fontStyle: "bold",
+      fontSize: 7.5,
     },
     columnStyles: {
       0: { halign: "left" },
-      1: { halign: "left" },
-      2: { halign: "right" },
+      1: { halign: "left", cellWidth: 56 },
+      2: { halign: "left", cellWidth: 110 },
       3: { halign: "right" },
       4: { halign: "right" },
+      5: { halign: "right" },
+      6: { halign: "right" },
     },
     styles: baseStyles,
-    body: data.reservations.map((r) => [
-      r.guestName ?? "—",
-      `${formatDate(r.checkIn)} → ${formatDate(r.checkOut)}`,
-      String(r.nights),
-      formatCurrency(r.totalPrice, r.currency),
-      formatCurrency(r.payout, r.currency),
+    body: bookings.map((b) => [
+      b.kind === "extension"
+        ? `${b.guestName ?? "—"}  (Extension)`
+        : (b.guestName ?? "—"),
+      b.bookingRef ?? "—",
+      `${formatDate(b.checkIn)} → ${formatDate(b.checkOut)}`,
+      formatCurrency(b.totalPrice, b.currency),
+      formatCurrency(b.agencyCommission, b.currency),
+      formatCurrency(b.portalCommission, b.currency),
+      formatCurrency(b.payout, b.currency),
     ]),
     foot: [
       [
-        { content: "Total income", colSpan: 4, styles: baseFootStyles },
+        { content: "Totals", colSpan: 3, styles: baseFootStyles },
+        {
+          content: formatCurrency(totalRent),
+          styles: { ...baseFootStyles, halign: "right" },
+        },
+        {
+          content: formatCurrency(totalAgency),
+          styles: { ...baseFootStyles, halign: "right" },
+        },
+        {
+          content: formatCurrency(totalPortal),
+          styles: { ...baseFootStyles, halign: "right" },
+        },
         {
           content: formatCurrency(data.totals.income),
           styles: { ...baseFootStyles, halign: "right" },

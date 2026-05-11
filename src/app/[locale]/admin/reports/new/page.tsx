@@ -4,7 +4,7 @@ import { isLocale, type Locale } from "@/i18n/config";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { PageHeader } from "@/components/app-shell";
-import { monthKeyFor } from "@/lib/utils";
+import { monthKeyFor, extractBookingRef } from "@/lib/utils";
 import { ReportBuilder } from "./report-builder";
 import { BackButton } from "./back-button";
 
@@ -35,12 +35,14 @@ export default async function NewReportPage({
   const selectedId = sp.propertyId;
   let reservations: Array<{
     id: string;
-    externalId: string | null;
+    bookingRef: string | null;
     checkIn: string;
     checkOut: string;
     nights: number;
     guestName: string | null;
     totalPrice: number;
+    agencyCommission: number;
+    portalCommission: number;
     payout: number;
     currency: string;
     monthKey: string | null;
@@ -48,12 +50,14 @@ export default async function NewReportPage({
   let extensions: Array<{
     id: string;
     reservationId: string;
-    parentExternalId: string | null;
+    bookingRef: string | null;
     parentGuestName: string | null;
     checkIn: string;
     checkOut: string;
     nights: number;
     totalPrice: number;
+    agencyCommission: number;
+    portalCommission: number;
     payout: number;
     currency: string;
     monthKey: string | null;
@@ -86,7 +90,11 @@ export default async function NewReportPage({
         },
         include: {
           reservation: {
-            select: { externalId: true, guestName: true },
+            select: {
+              externalId: true,
+              guestName: true,
+              rawDescription: true,
+            },
           },
         },
         orderBy: { checkIn: "asc" },
@@ -98,12 +106,14 @@ export default async function NewReportPage({
     ]);
     reservations = r.map((row) => ({
       id: row.id,
-      externalId: row.externalId,
+      bookingRef: extractBookingRef(row.rawDescription),
       checkIn: row.checkIn.toISOString(),
       checkOut: row.checkOut.toISOString(),
       nights: row.nights,
       guestName: row.guestName,
       totalPrice: row.totalPrice,
+      agencyCommission: row.agencyCommission,
+      portalCommission: row.portalCommission,
       payout: row.payout,
       currency: row.currency,
       monthKey: row.monthKey,
@@ -111,12 +121,14 @@ export default async function NewReportPage({
     extensions = ext.map((row) => ({
       id: row.id,
       reservationId: row.reservationId,
-      parentExternalId: row.reservation.externalId,
+      bookingRef: extractBookingRef(row.reservation.rawDescription),
       parentGuestName: row.reservation.guestName,
       checkIn: row.checkIn.toISOString(),
       checkOut: row.checkOut.toISOString(),
       nights: row.nights,
       totalPrice: row.totalPrice,
+      agencyCommission: row.agencyCommission,
+      portalCommission: row.portalCommission,
       payout: row.payout,
       currency: row.currency,
       monthKey: row.monthKey,
