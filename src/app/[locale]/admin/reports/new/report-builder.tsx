@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Calendar, Receipt, CalendarPlus } from "lucide-react";
+import { Search, Calendar, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input, Field, Textarea } from "@/components/ui/input";
@@ -56,6 +56,34 @@ type Expense = {
   monthKey: string | null;
 };
 
+// Unified row type so reservations and extensions render in one table —
+// owners and admins look at a single chronological list of bookings.
+type BookingRow =
+  | {
+      kind: "reservation";
+      id: string;
+      externalId: string | null;
+      guestName: string | null;
+      checkIn: string;
+      checkOut: string;
+      nights: number;
+      payout: number;
+      currency: string;
+      monthKey: string | null;
+    }
+  | {
+      kind: "extension";
+      id: string;
+      externalId: string | null;
+      guestName: string | null;
+      checkIn: string;
+      checkOut: string;
+      nights: number;
+      payout: number;
+      currency: string;
+      monthKey: string | null;
+    };
+
 export function ReportBuilder({
   locale,
   currentMonthKey,
@@ -75,9 +103,7 @@ export function ReportBuilder({
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"reservations" | "extensions" | "expenses">(
-    "reservations",
-  );
+  const [tab, setTab] = useState<"reservations" | "expenses">("reservations");
   const [pickedRes, setPickedRes] = useState<Set<string>>(
     () => new Set(reservations.filter((r) => r.monthKey === currentMonthKey).map((r) => r.id)),
   );
@@ -111,6 +137,39 @@ export function ReportBuilder({
     );
   }, [properties, search]);
 
+  // Merged + chronological booking list for the Reservations tab.
+  // Extensions surface alongside reservations as separate bookings,
+  // matching the owner-report convention.
+  const bookings = useMemo<BookingRow[]>(() => {
+    const all: BookingRow[] = [
+      ...reservations.map((r) => ({
+        kind: "reservation" as const,
+        id: r.id,
+        externalId: r.externalId,
+        guestName: r.guestName,
+        checkIn: r.checkIn,
+        checkOut: r.checkOut,
+        nights: r.nights,
+        payout: r.payout,
+        currency: r.currency,
+        monthKey: r.monthKey,
+      })),
+      ...extensions.map((e) => ({
+        kind: "extension" as const,
+        id: e.id,
+        externalId: e.parentExternalId,
+        guestName: e.parentGuestName,
+        checkIn: e.checkIn,
+        checkOut: e.checkOut,
+        nights: e.nights,
+        payout: e.payout,
+        currency: e.currency,
+        monthKey: e.monthKey,
+      })),
+    ];
+    return all.sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+  }, [reservations, extensions]);
+
   const onChooseProperty = (id: string) => {
     setPickedRes(new Set());
     setPickedExt(new Set());
@@ -118,24 +177,35 @@ export function ReportBuilder({
     router.push(`/${locale}/admin/reports/new?propertyId=${id}`);
   };
 
-  const toggle = (
-    set: Set<string>,
-    setter: (s: Set<string>) => void,
-    id: string,
-  ) => {
-    const next = new Set(set);
+  const isPicked = (row: BookingRow) =>
+    row.kind === "reservation" ? pickedRes.has(row.id) : pickedExt.has(row.id);
+  const togglePicked = (row: BookingRow) => {
+    if (row.kind === "reservation") {
+      const next = new Set(pickedRes);
+      if (next.has(row.id)) next.delete(row.id);
+      else next.add(row.id);
+      setPickedRes(next);
+    } else {
+      const next = new Set(pickedExt);
+      if (next.has(row.id)) next.delete(row.id);
+      else next.add(row.id);
+      setPickedExt(next);
+    }
+  };
+  const toggleExp = (id: string) => {
+    const next = new Set(pickedExp);
     if (next.has(id)) next.delete(id);
     else next.add(id);
-    setter(next);
+    setPickedExp(next);
   };
 
-  const totalReservationPayout = reservations
-    .filter((r) => pickedRes.has(r.id))
-    .reduce((s, r) => s + r.payout, 0);
-  const totalExtensionPayout = extensions
-    .filter((e) => pickedExt.has(e.id))
-    .reduce((s, e) => s + e.payout, 0);
-  const totalIncome = totalReservationPayout + totalExtensionPayout;
+  const totalIncome =
+    reservations
+      .filter((r) => pickedRes.has(r.id))
+      .reduce((s, r) => s + r.payout, 0) +
+    extensions
+      .filter((e) => pickedExt.has(e.id))
+      .reduce((s, e) => s + e.payout, 0);
   const totalExpenses = expenses
     .filter((e) => pickedExp.has(e.id))
     .reduce((s, e) => s + e.amount, 0);
@@ -145,6 +215,18 @@ export function ReportBuilder({
     !!selected &&
     !!name.trim() &&
     pickedRes.size + pickedExt.size + pickedExp.size > 0;
+
+  const bookingsAllPicked =
+    bookings.length > 0 && bookings.every((row) => isPicked(row));
+  const togglePickedAll = (on: boolean) => {
+    if (on) {
+      setPickedRes(new Set(reservations.map((r) => r.id)));
+      setPickedExt(new Set(extensions.map((e) => e.id)));
+    } else {
+      setPickedRes(new Set());
+      setPickedExt(new Set());
+    }
+  };
 
   if (!selected) {
     return (
@@ -251,9 +333,18 @@ export function ReportBuilder({
       <div className="flex rounded-2xl border border-[var(--color-border)] bg-white p-1">
         {(
           [
-            { key: "reservations", label: "Reservations", icon: Calendar, count: reservations.length },
-            { key: "extensions", label: "Extensions", icon: CalendarPlus, count: extensions.length },
-            { key: "expenses", label: "Expenses", icon: Receipt, count: expenses.length },
+            {
+              key: "reservations",
+              label: "Reservations",
+              icon: Calendar,
+              count: bookings.length,
+            },
+            {
+              key: "expenses",
+              label: "Expenses",
+              icon: Receipt,
+              count: expenses.length,
+            },
           ] as const
         ).map((t) => (
           <button
@@ -282,7 +373,7 @@ export function ReportBuilder({
       </div>
 
       {tab === "reservations" ? (
-        reservations.length === 0 ? (
+        bookings.length === 0 ? (
           <Card>
             <CardBody className="py-10 text-center text-sm text-[var(--color-muted)]">
               No open reservations for this property. Items already in another
@@ -299,15 +390,8 @@ export function ReportBuilder({
                       <input
                         type="checkbox"
                         aria-label="select all"
-                        checked={
-                          reservations.length > 0 &&
-                          reservations.every((r) => pickedRes.has(r.id))
-                        }
-                        onChange={(e) => {
-                          if (e.target.checked)
-                            setPickedRes(new Set(reservations.map((r) => r.id)));
-                          else setPickedRes(new Set());
-                        }}
+                        checked={bookingsAllPicked}
+                        onChange={(e) => togglePickedAll(e.target.checked)}
                       />
                     </th>
                     <th className="px-4 py-3 text-left font-semibold">Guest</th>
@@ -319,13 +403,13 @@ export function ReportBuilder({
                   </tr>
                 </thead>
                 <tbody>
-                  {reservations.map((r) => {
-                    const checked = pickedRes.has(r.id);
-                    const inMonth = r.monthKey === currentMonthKey;
+                  {bookings.map((row) => {
+                    const checked = isPicked(row);
+                    const inMonth = row.monthKey === currentMonthKey;
                     return (
                       <tr
-                        key={r.id}
-                        onClick={() => toggle(pickedRes, setPickedRes, r.id)}
+                        key={`${row.kind}-${row.id}`}
+                        onClick={() => togglePicked(row)}
                         className={`cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60 ${
                           checked ? "bg-emerald-500/5" : ""
                         }`}
@@ -334,126 +418,38 @@ export function ReportBuilder({
                           <input
                             type="checkbox"
                             checked={checked}
-                            onChange={() =>
-                              toggle(pickedRes, setPickedRes, r.id)
-                            }
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </td>
-                        <td className="px-4 py-3">{r.guestName ?? "—"}</td>
-                        <td className="px-4 py-3 font-mono text-xs text-[var(--color-muted)]">
-                          {r.externalId ?? "—"}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-[var(--color-muted)]">
-                          {formatDate(r.checkIn, locale)} →{" "}
-                          {formatDate(r.checkOut, locale)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <MonthBadge
-                            monthKey={r.monthKey}
-                            highlight={inMonth}
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums">
-                          {r.nights}
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                          {formatCurrency(r.payout, r.currency, locale)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        )
-      ) : tab === "extensions" ? (
-        extensions.length === 0 ? (
-          <Card>
-            <CardBody className="py-10 text-center text-sm text-[var(--color-muted)]">
-              No open extensions for this property. iCal-pushed
-              extensions show up here once their pricing is filled in
-              (and they aren't already in another report).
-            </CardBody>
-          </Card>
-        ) : (
-          <Card className="overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="grid-table w-full text-sm">
-                <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
-                  <tr>
-                    <th className="px-4 py-3 text-left">
-                      <input
-                        type="checkbox"
-                        aria-label="select all"
-                        checked={
-                          extensions.length > 0 &&
-                          extensions.every((e) => pickedExt.has(e.id))
-                        }
-                        onChange={(e) => {
-                          if (e.target.checked)
-                            setPickedExt(new Set(extensions.map((x) => x.id)));
-                          else setPickedExt(new Set());
-                        }}
-                      />
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold">Guest</th>
-                    <th className="px-4 py-3 text-left font-semibold">Airbnb ID</th>
-                    <th className="px-4 py-3 text-left font-semibold">Window</th>
-                    <th className="px-4 py-3 text-left font-semibold">Bill</th>
-                    <th className="px-4 py-3 text-right font-semibold">Nights</th>
-                    <th className="px-4 py-3 text-right font-semibold">Payout</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {extensions.map((ext) => {
-                    const checked = pickedExt.has(ext.id);
-                    const inMonth = ext.monthKey === currentMonthKey;
-                    return (
-                      <tr
-                        key={ext.id}
-                        onClick={() => toggle(pickedExt, setPickedExt, ext.id)}
-                        className={`cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60 ${
-                          checked ? "bg-emerald-500/5" : ""
-                        }`}
-                      >
-                        <td className="px-4 py-3">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() =>
-                              toggle(pickedExt, setPickedExt, ext.id)
-                            }
+                            onChange={() => togglePicked(row)}
                             onClick={(e) => e.stopPropagation()}
                           />
                         </td>
                         <td className="px-4 py-3">
                           <span className="block">
-                            {ext.parentGuestName ?? "—"}
+                            {row.guestName ?? "—"}
                           </span>
-                          <span className="block text-[10px] font-bold uppercase tracking-wider text-sky-700">
-                            Extension
-                          </span>
+                          {row.kind === "extension" && (
+                            <span className="mt-0.5 inline-flex items-center rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-700">
+                              Extension
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-[var(--color-muted)]">
-                          {ext.parentExternalId ?? "—"}
+                          {row.externalId ?? "—"}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-[var(--color-muted)]">
-                          {formatDate(ext.checkIn, locale)} →{" "}
-                          {formatDate(ext.checkOut, locale)}
+                          {formatDate(row.checkIn, locale)} →{" "}
+                          {formatDate(row.checkOut, locale)}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <MonthBadge
-                            monthKey={ext.monthKey}
+                            monthKey={row.monthKey}
                             highlight={inMonth}
                           />
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums">
-                          {ext.nights}
+                          {row.nights}
                         </td>
                         <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                          {formatCurrency(ext.payout, ext.currency, locale)}
+                          {formatCurrency(row.payout, row.currency, locale)}
                         </td>
                       </tr>
                     );
@@ -506,7 +502,7 @@ export function ReportBuilder({
                   return (
                     <tr
                       key={e.id}
-                      onClick={() => toggle(pickedExp, setPickedExp, e.id)}
+                      onClick={() => toggleExp(e.id)}
                       className={`cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/60 ${
                         checked ? "bg-rose-500/5" : ""
                       }`}
@@ -515,9 +511,7 @@ export function ReportBuilder({
                         <input
                           type="checkbox"
                           checked={checked}
-                          onChange={() =>
-                            toggle(pickedExp, setPickedExp, e.id)
-                          }
+                          onChange={() => toggleExp(e.id)}
                           onClick={(ev) => ev.stopPropagation()}
                         />
                       </td>
@@ -572,7 +566,7 @@ export function ReportBuilder({
                   </span>
                 </span>
                 <span className="text-xs text-[var(--color-muted)]">
-                  {pickedRes.size} reservations · {pickedExt.size} extensions ·{" "}
+                  {pickedRes.size + pickedExt.size} bookings ·{" "}
                   {pickedExp.size} expenses
                 </span>
               </div>

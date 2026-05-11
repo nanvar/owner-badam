@@ -226,47 +226,39 @@ export async function syncProperty(propertyId: string): Promise<SyncOutcome> {
       });
       if (existing) {
         // Detect a stay extension: the feed pushed a checkOut later than
-        // what we stored. We keep the original reservation window intact
-        // (so reports for the period it was already attributed to don't
-        // shift) and record the added nights as a separate extension
-        // row that the admin prices manually.
-        if (
-          ev.end.getTime() > existing.checkOut.getTime() &&
-          ev.start.getTime() === existing.checkIn.getTime()
-        ) {
-          const extCheckIn = existing.checkOut;
-          const extCheckOut = ev.end;
-          const extNights = nightsBetween(extCheckIn, extCheckOut);
-          // Avoid creating duplicate extensions on repeated syncs by
-          // looking up whether one already covers this exact window.
-          const dupe = await prisma.reservationExtension.findFirst({
-            where: {
-              reservationId: existing.id,
-              checkIn: extCheckIn,
-              checkOut: extCheckOut,
-            },
-            select: { id: true },
+        // anything we currently track. Original reservation window stays
+        // frozen (no checkOut/nights update) so reports already pinned
+        // to that window don't shift; the extra nights live as their
+        // own ReservationExtension row priced separately. Handles
+        // repeated extensions by stacking from the latest known end.
+        if (ev.start.getTime() === existing.checkIn.getTime()) {
+          const latestExtension = await prisma.reservationExtension.findFirst({
+            where: { reservationId: existing.id },
+            orderBy: { checkOut: "desc" },
+            select: { checkOut: true },
           });
-          if (!dupe) {
+          const latestEnd =
+            latestExtension?.checkOut ?? existing.checkOut;
+          if (ev.end.getTime() > latestEnd.getTime()) {
             await prisma.reservationExtension.create({
               data: {
                 reservationId: existing.id,
-                checkIn: extCheckIn,
-                checkOut: extCheckOut,
-                nights: extNights,
+                checkIn: latestEnd,
+                checkOut: ev.end,
+                nights: nightsBetween(latestEnd, ev.end),
                 currency: existing.currency,
-                monthKey: monthKeyFor(extCheckIn),
+                monthKey: monthKeyFor(latestEnd),
                 detailsFilled: false,
               },
             });
           }
         }
+        // Update only the safe fields — never overwrite checkIn /
+        // checkOut / nights because we want the original window to
+        // stay stable for the report it's already attributed to.
         await prisma.reservation.update({
           where: { id: existing.id },
           data: {
-            checkIn: ev.start,
-            checkOut: ev.end,
-            nights,
             guestName: existing.detailsFilled ? existing.guestName : guest,
             rawSummary: ev.summary,
             rawDescription: ev.description,

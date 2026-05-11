@@ -199,111 +199,114 @@ export default async function AdminReportDetailPage({
         </Card>
       )}
 
-      <h2 className="mt-8 mb-3 text-base font-bold tracking-tight">
-        Reservations ({report.reservations.length})
-      </h2>
-      {report.reservations.length === 0 ? (
-        <Card>
-          <CardBody className="py-8 text-center text-sm text-[var(--color-muted)]">
-            No reservations in this report.
-          </CardBody>
-        </Card>
-      ) : (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="grid-table w-full text-sm">
-              <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
-                <tr>
-                  <th className="px-4 py-3 text-left font-semibold">Guest</th>
-                  <th className="px-4 py-3 text-left font-semibold">Airbnb ID</th>
-                  <th className="px-4 py-3 text-left font-semibold">Stay</th>
-                  <th className="px-4 py-3 text-right font-semibold">Nights</th>
-                  <th className="px-4 py-3 text-right font-semibold">Total</th>
-                  <th className="px-4 py-3 text-right font-semibold">Payout</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.reservations.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="border-t border-[var(--color-border)]"
-                  >
-                    <td className="px-4 py-3">{r.guestName ?? "—"}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--color-muted)]">
-                      {r.externalId ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-[var(--color-muted)]">
-                      {formatDate(r.checkIn.toISOString(), loc)} →{" "}
-                      {formatDate(r.checkOut.toISOString(), loc)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {r.nights}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {formatCurrency(r.totalPrice, r.currency, loc)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-bold tabular-nums">
-                      {formatCurrency(r.payout, r.currency, loc)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {report.extensions.length > 0 && (
-        <>
-          <h2 className="mt-8 mb-3 text-base font-bold tracking-tight">
-            Extensions ({report.extensions.length})
-          </h2>
-          <Card className="overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="grid-table w-full text-sm">
-                <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold">Guest</th>
-                    <th className="px-4 py-3 text-left font-semibold">Airbnb ID</th>
-                    <th className="px-4 py-3 text-left font-semibold">Window</th>
-                    <th className="px-4 py-3 text-right font-semibold">Nights</th>
-                    <th className="px-4 py-3 text-right font-semibold">Total</th>
-                    <th className="px-4 py-3 text-right font-semibold">Payout</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.extensions.map((ext) => (
-                    <tr
-                      key={ext.id}
-                      className="border-t border-[var(--color-border)]"
-                    >
-                      <td className="px-4 py-3">
-                        {ext.reservation.guestName ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-[var(--color-muted)]">
-                        {ext.reservation.externalId ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-[var(--color-muted)]">
-                        {formatDate(ext.checkIn.toISOString(), loc)} →{" "}
-                        {formatDate(ext.checkOut.toISOString(), loc)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {ext.nights}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {formatCurrency(ext.totalPrice, ext.currency, loc)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold tabular-nums">
-                        {formatCurrency(ext.payout, ext.currency, loc)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </>
-      )}
+      {(() => {
+        // Render reservations + extensions inline so the owner sees
+        // them as a single chronological list of bookings. Extension
+        // rows wear an "Extension" badge so it stays clear which is
+        // which without splitting them into two tables.
+        type BookingRow = {
+          key: string;
+          kind: "reservation" | "extension";
+          guestName: string | null;
+          externalId: string | null;
+          checkIn: string;
+          checkOut: string;
+          nights: number;
+          totalPrice: number;
+          payout: number;
+          currency: string;
+        };
+        const bookings: BookingRow[] = [
+          ...report.reservations.map((r) => ({
+            key: `r-${r.id}`,
+            kind: "reservation" as const,
+            guestName: r.guestName,
+            externalId: r.externalId,
+            checkIn: r.checkIn.toISOString(),
+            checkOut: r.checkOut.toISOString(),
+            nights: r.nights,
+            totalPrice: r.totalPrice,
+            payout: r.payout,
+            currency: r.currency,
+          })),
+          ...report.extensions.map((e) => ({
+            key: `e-${e.id}`,
+            kind: "extension" as const,
+            guestName: e.reservation.guestName,
+            externalId: e.reservation.externalId,
+            checkIn: e.checkIn.toISOString(),
+            checkOut: e.checkOut.toISOString(),
+            nights: e.nights,
+            totalPrice: e.totalPrice,
+            payout: e.payout,
+            currency: e.currency,
+          })),
+        ].sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+        return (
+          <>
+            <h2 className="mt-8 mb-3 text-base font-bold tracking-tight">
+              Reservations ({bookings.length})
+            </h2>
+            {bookings.length === 0 ? (
+              <Card>
+                <CardBody className="py-8 text-center text-sm text-[var(--color-muted)]">
+                  No reservations in this report.
+                </CardBody>
+              </Card>
+            ) : (
+              <Card className="overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="grid-table w-full text-sm">
+                    <thead className="bg-[var(--color-surface-2)] text-xs uppercase tracking-wider text-[var(--color-muted)]">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold">Guest</th>
+                        <th className="px-4 py-3 text-left font-semibold">Airbnb ID</th>
+                        <th className="px-4 py-3 text-left font-semibold">Stay</th>
+                        <th className="px-4 py-3 text-right font-semibold">Nights</th>
+                        <th className="px-4 py-3 text-right font-semibold">Total</th>
+                        <th className="px-4 py-3 text-right font-semibold">Payout</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bookings.map((b) => (
+                        <tr
+                          key={b.key}
+                          className="border-t border-[var(--color-border)]"
+                        >
+                          <td className="px-4 py-3">
+                            <span className="block">{b.guestName ?? "—"}</span>
+                            {b.kind === "extension" && (
+                              <span className="mt-0.5 inline-flex items-center rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-700">
+                                Extension
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs text-[var(--color-muted)]">
+                            {b.externalId ?? "—"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-[var(--color-muted)]">
+                            {formatDate(b.checkIn, loc)} →{" "}
+                            {formatDate(b.checkOut, loc)}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {b.nights}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {formatCurrency(b.totalPrice, b.currency, loc)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-bold tabular-nums">
+                            {formatCurrency(b.payout, b.currency, loc)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
+          </>
+        );
+      })()}
 
       <h2 className="mt-8 mb-3 text-base font-bold tracking-tight">
         Expenses ({report.expenses.length})

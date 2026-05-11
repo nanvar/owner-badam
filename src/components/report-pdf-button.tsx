@@ -263,13 +263,45 @@ export function ReportPdfButton({
         styles: { halign: "right" as const },
       });
 
-      // Reservations — Airbnb id (externalId) shown so admins/owner can
-      // tie the row back to the source reservation, especially when the
-      // same guest spans an extension into a different report.
-      const reservationIncome = data.reservations.reduce(
-        (s, r) => s + r.payout,
-        0,
-      );
+      // Reservations — extensions are folded in as additional rows in
+      // the same table, marked "+ Extension" so the original booking
+      // and its add-on portion are visible at a glance without a
+      // second section. Airbnb id ties each row to its source.
+      type PdfBookingRow = {
+        kind: "reservation" | "extension";
+        guestName: string | null;
+        externalId: string | null;
+        checkIn: string;
+        checkOut: string;
+        nights: number;
+        totalPrice: number;
+        payout: number;
+        currency: string;
+      };
+      const bookings: PdfBookingRow[] = [
+        ...data.reservations.map((r) => ({
+          kind: "reservation" as const,
+          guestName: r.guestName,
+          externalId: r.externalId,
+          checkIn: r.checkIn,
+          checkOut: r.checkOut,
+          nights: r.nights,
+          totalPrice: r.totalPrice,
+          payout: r.payout,
+          currency: r.currency,
+        })),
+        ...data.extensions.map((e) => ({
+          kind: "extension" as const,
+          guestName: e.parentGuestName,
+          externalId: e.parentExternalId,
+          checkIn: e.checkIn,
+          checkOut: e.checkOut,
+          nights: e.nights,
+          totalPrice: e.totalPrice,
+          payout: e.payout,
+          currency: e.currency,
+        })),
+      ].sort((a, b) => a.checkIn.localeCompare(b.checkIn));
       sectionTitle("Reservations", y);
       autoTable(doc, {
         startY: y + 8,
@@ -300,80 +332,26 @@ export function ReportPdfButton({
           5: { halign: "right" },
         },
         styles: baseStyles,
-        body: data.reservations.map((r) => [
-          r.guestName ?? "—",
-          r.externalId ?? "—",
-          `${formatDate(r.checkIn, locale)} → ${formatDate(r.checkOut, locale)}`,
-          String(r.nights),
-          formatCurrency(r.totalPrice, r.currency, locale),
-          formatCurrency(r.payout, r.currency, locale),
+        body: bookings.map((b) => [
+          b.kind === "extension"
+            ? `${b.guestName ?? "—"}  (Extension)`
+            : (b.guestName ?? "—"),
+          b.externalId ?? "—",
+          `${formatDate(b.checkIn, locale)} → ${formatDate(b.checkOut, locale)}`,
+          String(b.nights),
+          formatCurrency(b.totalPrice, b.currency, locale),
+          formatCurrency(b.payout, b.currency, locale),
         ]),
         foot: [
           [
-            { content: "Reservations subtotal", colSpan: 5, styles: baseFootStyles },
-            { content: fmt(reservationIncome), styles: { ...baseFootStyles, halign: "right" } },
+            { content: "Total income", colSpan: 5, styles: baseFootStyles },
+            { content: fmt(data.totals.income), styles: { ...baseFootStyles, halign: "right" } },
           ],
         ],
       });
 
       // @ts-expect-error jspdf-autotable extends jsPDF internals
       y = (doc.lastAutoTable?.finalY ?? y + 60) + 24;
-
-      // Extensions — drawn as their own table so the original reservation
-      // and the add-on portion stay easy to tell apart on the report.
-      if (data.extensions.length > 0) {
-        const extensionIncome = data.extensions.reduce(
-          (s, e) => s + e.payout,
-          0,
-        );
-        sectionTitle("Extensions", y);
-        autoTable(doc, {
-          startY: y + 8,
-          margin: { left: margin, right: margin },
-          tableWidth: innerW,
-          head: [
-            [
-              "Guest",
-              "Airbnb ID",
-              "Window",
-              right("Nights"),
-              right("Total"),
-              right("Payout"),
-            ],
-          ],
-          theme: "grid",
-          headStyles: {
-            fillColor: [243, 247, 244],
-            textColor: [47, 90, 71],
-            fontStyle: "bold",
-          },
-          columnStyles: {
-            0: { halign: "left" },
-            1: { halign: "left", cellWidth: 96 },
-            2: { halign: "left" },
-            3: { halign: "right" },
-            4: { halign: "right" },
-            5: { halign: "right" },
-          },
-          styles: baseStyles,
-          body: data.extensions.map((e) => [
-            e.parentGuestName ?? "—",
-            e.parentExternalId ?? "—",
-            `${formatDate(e.checkIn, locale)} → ${formatDate(e.checkOut, locale)}`,
-            String(e.nights),
-            formatCurrency(e.totalPrice, e.currency, locale),
-            formatCurrency(e.payout, e.currency, locale),
-          ]),
-          foot: [
-            [
-              { content: "Extensions subtotal", colSpan: 5, styles: baseFootStyles },
-              { content: fmt(extensionIncome), styles: { ...baseFootStyles, halign: "right" } },
-            ],
-          ],
-        });
-        // @ts-expect-error jspdf-autotable extends jsPDF internals
-        y = (doc.lastAutoTable?.finalY ?? y + 60) + 24;
-      }
 
       // Expenses
       if (data.expenses.length > 0) {
