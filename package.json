@@ -37,6 +37,7 @@
     "motion": "^12.38.0",
     "next": "16.2.4",
     "next-intl": "^4.9.1",
+    "pptxgenjs": "^4.0.1",
     "prisma": "^7.8.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -59,15 +60,15 @@
     "typescript": "^5"
   },
   "optionalDependencies": {
-    "@parcel/watcher-linux-x64-glibc": "^2.5.0",
-    "@parcel/watcher-linux-x64-musl": "^2.5.0",
     "@next/swc-linux-x64-gnu": "16.2.4",
     "@next/swc-linux-x64-musl": "16.2.4",
+    "@parcel/watcher-linux-x64-glibc": "^2.5.0",
+    "@parcel/watcher-linux-x64-musl": "^2.5.0",
     "@swc/core-linux-x64-gnu": "*",
     "@swc/core-linux-x64-musl": "*",
-    "lightningcss-linux-x64-gnu": "*",
-    "lightningcss-linux-x64-musl": "*",
     "@tailwindcss/oxide-linux-x64-gnu": "*",
-    "@tailwindcss/oxide-linux-x64-musl": "*"
+    "@tailwindcss/oxide-linux-x64-musl": "*",
+    "lightningcss-linux-x64-gnu": "*",
+    "lightningcss-linux-x64-musl": "*"
   }
 }

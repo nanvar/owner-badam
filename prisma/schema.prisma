@@ -96,8 +96,60 @@ model Property {
   ownerPayments  OwnerPayment[]
   companyEntries CompanyExpense[]
   ownerReports   OwnerReport[]
+  projection     PropertyProjection?
 
   @@index([ownerId])
+}
+
+// One-shot pitch deck for prospective owners. Captures every dynamic
+// figure shown on the financial-projection slides so the admin can edit
+// once and re-export as PDF or PPTX. The non-dynamic copy (services
+// bullets, "about us" paragraph) is sourced from settings/defaults and
+// optionally overridden per-property via the text columns below.
+model PropertyProjection {
+  id                       String   @id @default(cuid())
+  propertyId               String   @unique
+  property                 Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  // Hero descriptors — Property model already carries `bedrooms`,
+  // these are free-text labels for the slide.
+  area                     String   @default("")
+  buildingName             String   @default("")
+
+  // Hero average — the headline "You could earn X net per month".
+  avgMonthlyNet            Float    @default(0)
+
+  // Recurring costs.
+  duMonthly                Float    @default(380)
+  dewaChillerMonthly       Float    @default(650)
+  propertyInsuranceYearly  Float    @default(1200)
+  maintenanceMonthly       Float    @default(125)
+  dtcmPermitYearly         Float    @default(370)
+
+  // Fee structure.
+  managementFeePct         Float    @default(20)
+  vatPct                   Float    @default(5)
+  portalFeePct             Float    @default(10.5)
+
+  // Pessimistic / Realistic / Optimistic scenarios.
+  pessimisticOccupancy     Float    @default(75)
+  realisticOccupancy       Float    @default(80)
+  optimisticOccupancy      Float    @default(85)
+  // Gross annual revenue is admin-entered (driven by ADR × nights ×
+  // occupancy outside the system) — kept editable so the deck always
+  // matches the owner offer.
+  pessimisticGross         Float    @default(0)
+  realisticGross           Float    @default(0)
+  optimisticGross          Float    @default(0)
+
+  // Optional overrides for the static copy. Newline-separated bullets.
+  listingMgmtBullets       String?  @db.Text
+  guestMgmtBullets         String?  @db.Text
+  propertyMgmtBullets      String?  @db.Text
+  aboutText                String?  @db.Text
+
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 }
 
 model Reservation {

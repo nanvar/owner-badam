@@ -19,6 +19,7 @@ import {
   MoreHorizontal,
   ExternalLink,
   Search,
+  Presentation,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -648,6 +649,7 @@ function PropertyTable({
                   <RowMenu
                     labels={labels}
                     detailHref={detailHref}
+                    projectionHref={`/${locale}/admin/properties/${p.id}/projection`}
                     expensesCount={expenses.length}
                     paymentsCount={payments.length}
                     showExpenses={showExpenseColumn}
@@ -670,6 +672,7 @@ function PropertyTable({
 function RowMenu({
   labels,
   detailHref,
+  projectionHref,
   expensesCount,
   paymentsCount,
   showExpenses,
@@ -681,6 +684,7 @@ function RowMenu({
 }: {
   labels: Labels;
   detailHref: string;
+  projectionHref: string;
   expensesCount: number;
   paymentsCount: number;
   showExpenses: boolean;
@@ -735,6 +739,16 @@ function RowMenu({
             <span className="flex-1">
               {labels.showProperty ?? "Show property"}
             </span>
+          </Link>
+          <Link
+            href={projectionHref}
+            onClick={close}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--color-foreground)] transition-colors hover:bg-[var(--color-surface-2)]"
+          >
+            <span className="shrink-0 text-[var(--color-muted)]">
+              <Presentation className="h-4 w-4" />
+            </span>
+            <span className="flex-1">Projection</span>
           </Link>
           <div className="my-1 h-px bg-[var(--color-border)]" />
           {showExpenses && (
