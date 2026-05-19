@@ -9,6 +9,7 @@ import {
   Building2,
   BarChart3,
   FileText,
+  Presentation,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { requireRole } from "@/lib/auth";
@@ -83,6 +84,11 @@ export default async function AdminLayout({
       href: `/${locale}/admin/reservations`,
       label: t("navReservations"),
       icon: <ListTree className="h-4 w-4" />,
+    },
+    {
+      href: `/${locale}/admin/projection`,
+      label: "Projection",
+      icon: <Presentation className="h-4 w-4" />,
     },
     {
       // Parent dropdown — landing page is the owner list, but the

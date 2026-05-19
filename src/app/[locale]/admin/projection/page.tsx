@@ -48,23 +48,40 @@ const DEFAULT_PROPERTY_BULLETS = [
 const DEFAULT_ABOUT =
   "We are a boutique holiday homes rental agency with an experienced hospitality team managing your property end-to-end.";
 
-export default async function PropertyProjectionPage({
+export default async function ProjectionPage({
   params,
+  searchParams,
 }: {
-  params: Promise<{ locale: string; id: string }>;
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ propertyId?: string }>;
 }) {
-  const { locale, id } = await params;
+  const { locale } = await params;
+  const { propertyId } = await searchParams;
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
   await requireRole("ADMIN");
 
-  const [property, settings] = await Promise.all([
-    prisma.property.findUnique({
-      where: { id },
-      include: { projection: true },
+  const [properties, settings] = await Promise.all([
+    prisma.property.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
     }),
     getSettings(),
   ]);
+
+  const selectedId = propertyId || properties[0]?.id;
+  if (!selectedId) {
+    return (
+      <div className="rounded-2xl border border-[var(--color-border)] bg-white p-8 text-center text-sm text-[var(--color-muted)]">
+        Create a property first to build a financial projection.
+      </div>
+    );
+  }
+
+  const property = await prisma.property.findUnique({
+    where: { id: selectedId },
+    include: { projection: true },
+  });
   if (!property) notFound();
 
   const projection = property.projection;
@@ -100,8 +117,9 @@ export default async function PropertyProjectionPage({
 
   return (
     <ProjectionEditor
+      key={property.id}
       locale={locale as Locale}
-      backHref={`/${locale}/admin/properties`}
+      properties={properties}
       initial={initial}
       brand={{
         name: settings.brandName,

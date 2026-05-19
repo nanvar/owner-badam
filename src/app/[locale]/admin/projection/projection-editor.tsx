@@ -2,10 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
-  ArrowLeft,
-  FileDown,
   Presentation,
   Save,
   Building2,
@@ -22,7 +19,6 @@ import {
   upsertPropertyProjectionAction,
   type PropertyProjectionState,
 } from "@/app/actions/property-projection";
-import { exportProjectionPdf } from "./export-pdf";
 import { exportProjectionPptx } from "./export-pptx";
 import type { Locale } from "@/i18n/config";
 
@@ -94,12 +90,12 @@ export function computeScenario(
 
 export function ProjectionEditor({
   locale,
-  backHref,
+  properties,
   initial,
   brand,
 }: {
   locale: Locale;
-  backHref: string;
+  properties: Array<{ id: string; name: string }>;
   initial: ProjectionData;
   brand: ProjectionBrand;
 }) {
@@ -109,7 +105,7 @@ export function ProjectionEditor({
     FormData
   >(upsertPropertyProjectionAction, undefined);
   const [data, setData] = useState<ProjectionData>(initial);
-  const [exporting, setExporting] = useState<"pdf" | "pptx" | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (state?.status === "ok") router.refresh();
@@ -131,33 +127,22 @@ export function ProjectionEditor({
     [data],
   );
 
-  const handlePdf = async () => {
-    setExporting("pdf");
-    try {
-      await exportProjectionPdf(data, brand, locale);
-    } finally {
-      setExporting(null);
-    }
-  };
   const handlePptx = async () => {
-    setExporting("pptx");
+    setExporting(true);
     try {
       await exportProjectionPptx(data, brand);
     } finally {
-      setExporting(null);
+      setExporting(false);
     }
+  };
+
+  const handlePropertyChange = (id: string) => {
+    if (!id || id === data.propertyId) return;
+    router.push(`?propertyId=${id}`);
   };
 
   return (
     <div>
-      <Link
-        href={backHref}
-        className="mb-3 inline-flex items-center gap-1 text-sm text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Properties
-      </Link>
-
       <PageHeader
         title={
           <span className="flex items-center gap-3">
@@ -168,25 +153,24 @@ export function ProjectionEditor({
           </span>
         }
         subtitle={
-          <span className="text-sm text-[var(--color-muted)]">
-            {data.propertyName}
-          </span>
+          <select
+            value={data.propertyId}
+            onChange={(e) => handlePropertyChange(e.target.value)}
+            className="mt-1 rounded-lg border border-[var(--color-border)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-foreground)] shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+          >
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
         }
         right={
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="secondary"
-              loading={exporting === "pdf"}
-              onClick={handlePdf}
-            >
-              <FileDown className="h-4 w-4" />
-              Export PDF
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              loading={exporting === "pptx"}
+              loading={exporting}
               onClick={handlePptx}
             >
               <Presentation className="h-4 w-4" />
