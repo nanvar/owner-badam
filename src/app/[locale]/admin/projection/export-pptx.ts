@@ -10,7 +10,7 @@ import {
   ABOUT_SVG,
   loadBuildingImageDataUrl,
   loadBuildingImageSize,
-  svgDataUrl,
+  svgToPng,
 } from "./illustration";
 
 // Hex palette — matches export-pdf.ts so both formats render the same.
@@ -473,9 +473,14 @@ export async function exportProjectionPptx(
   const colRightW = innerW - (colRightX - innerX) - 0.1;
 
   // --- Left column: illustration ---
+  // Rasterize the SVG to PNG before embedding. Mobile PowerPoint /
+  // Keynote viewers can't render SVG inside pptx, so they'd show a
+  // broken/missing image. PNG is universally supported.
   const aboutIllSize = Math.min(colLeftW, 3.5);
+  const aboutPngPx = 720; // ~96dpi × 7.5in display target → crisp on retina too
+  const aboutPng = await svgToPng(ABOUT_SVG, aboutPngPx, aboutPngPx);
   s3.addImage({
-    data: svgDataUrl(ABOUT_SVG),
+    data: aboutPng,
     x: colLeftX + (colLeftW - aboutIllSize) / 2,
     y: innerY + 1.9,
     w: aboutIllSize,
