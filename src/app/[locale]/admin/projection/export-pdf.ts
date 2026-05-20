@@ -141,24 +141,65 @@ export async function exportProjectionPdf(
   setText(ACCENT);
   doc.text("YOUR PROPERTY", leftX + doc.getTextWidth("MONTH FOR "), headlineY + 60);
 
-  // Meta rows — each: small icon glyph in a soft circle, then a rose
-  // underlined label, then the value beneath.
-  const metaRows = [
+  // Meta rows — each: small vector icon in a soft circle, then a rose
+  // underlined label, then the value beneath. Icons are drawn with
+  // jsPDF primitives because the default Helvetica font has no
+  // pictogram glyphs (Unicode shapes render as garbage).
+  const drawMetaIcon = (kind: "pin" | "building" | "bed", cx: number, cy: number) => {
+    setFill(INK);
+    if (kind === "pin") {
+      // Map pin: filled teardrop with a white inner hole.
+      doc.circle(cx, cy - 3, 5, "F");
+      doc.triangle(cx - 4, cy, cx + 4, cy, cx, cy + 7, "F");
+      setFill([255, 255, 255]);
+      doc.circle(cx, cy - 3, 1.8, "F");
+    } else if (kind === "building") {
+      // Filled building body with a 3×3 grid of white windows.
+      doc.rect(cx - 7, cy - 7, 14, 14, "F");
+      setFill([255, 255, 255]);
+      const ws = 2.4;
+      const gap = 1.4;
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) {
+          doc.rect(
+            cx - 5.6 + c * (ws + gap),
+            cy - 5.4 + r * (ws + gap),
+            ws,
+            ws,
+            "F",
+          );
+        }
+      }
+    } else {
+      // Bed: headboard on the left, mattress slab, base line.
+      doc.rect(cx - 8, cy - 5, 3, 9, "F");
+      doc.rect(cx - 5, cy + 1, 13, 3, "F");
+      setDraw(INK);
+      doc.setLineWidth(1.4);
+      doc.line(cx - 8, cy + 5, cx + 8, cy + 5);
+    }
+  };
+
+  const metaRows: Array<{
+    label: string;
+    value: string;
+    icon: "pin" | "building" | "bed";
+  }> = [
     {
       label: "AREA",
       value: (data.area || "—").toUpperCase(),
-      glyph: "◎", // bullseye-ish stand-in for a pin
+      icon: "pin",
     },
     {
       label: "BUILDING",
       value: (data.buildingName || data.propertyName).toUpperCase(),
-      glyph: "▢", // square
+      icon: "building",
     },
     {
       label: "BEDROOMS",
       value:
         data.bedrooms === 1 ? "1 BEDROOM" : `${data.bedrooms} BEDROOMS`,
-      glyph: "⌂", // house
+      icon: "bed",
     },
   ];
   metaRows.forEach((m, i) => {
@@ -168,10 +209,7 @@ export async function exportProjectionPdf(
     doc.setLineWidth(0.8);
     setFill([255, 255, 255]);
     doc.circle(leftX + 14, y, 16, "FD");
-    setText(INK);
-    doc.setFont(FONT, "bold");
-    doc.setFontSize(18);
-    doc.text(m.glyph, leftX + 14, y + 6, { align: "center" });
+    drawMetaIcon(m.icon, leftX + 14, y);
     // Label
     setText(ACCENT);
     doc.setFontSize(16);
