@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  FileDown,
   Presentation,
   Save,
   Building2,
@@ -19,6 +20,7 @@ import {
   upsertPropertyProjectionAction,
   type PropertyProjectionState,
 } from "@/app/actions/property-projection";
+import { exportProjectionPdf } from "./export-pdf";
 import { exportProjectionPptx } from "./export-pptx";
 import type { Locale } from "@/i18n/config";
 
@@ -113,7 +115,7 @@ export function ProjectionEditor({
     FormData
   >(upsertPropertyProjectionAction, undefined);
   const [data, setData] = useState<ProjectionData>(initial);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<"pdf" | "pptx" | null>(null);
 
   useEffect(() => {
     if (state?.status === "ok") router.refresh();
@@ -135,12 +137,20 @@ export function ProjectionEditor({
     [data],
   );
 
+  const handlePdf = async () => {
+    setExporting("pdf");
+    try {
+      await exportProjectionPdf(data, brand, locale);
+    } finally {
+      setExporting(null);
+    }
+  };
   const handlePptx = async () => {
-    setExporting(true);
+    setExporting("pptx");
     try {
       await exportProjectionPptx(data, brand);
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   };
 
@@ -178,7 +188,16 @@ export function ProjectionEditor({
             <Button
               type="button"
               variant="secondary"
-              loading={exporting}
+              loading={exporting === "pdf"}
+              onClick={handlePdf}
+            >
+              <FileDown className="h-4 w-4" />
+              Export PDF
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              loading={exporting === "pptx"}
               onClick={handlePptx}
             >
               <Presentation className="h-4 w-4" />

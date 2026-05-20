@@ -110,15 +110,6 @@ export async function exportProjectionPptx(
 
   // Headline block — left column.
   const headlineY = innerY + 1.05;
-  // Highlight "YOU"
-  s1.addShape(pres.ShapeType.rect, {
-    x: innerX,
-    y: headlineY + 0.04,
-    w: 0.95,
-    h: 0.55,
-    fill: { color: "E2E3E4" },
-    line: { color: "E2E3E4" },
-  });
   s1.addText("YOU COULD EARN", {
     x: innerX,
     y: headlineY,

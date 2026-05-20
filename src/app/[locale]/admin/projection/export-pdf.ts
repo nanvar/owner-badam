@@ -124,11 +124,6 @@ export async function exportProjectionPdf(
   const leftX = innerX + 6;
   const headlineY = innerY + 110;
 
-  // Subtle gray highlight behind "YOU" — the reference deck does this
-  // micro-detail to anchor the eye on the call-to-action word.
-  setFill([225, 226, 227]);
-  doc.rect(leftX - 4, headlineY - 26, 60, 32, "F");
-
   setText(INK);
   doc.setFont(FONT, "bold");
   doc.setFontSize(34);
@@ -381,12 +376,22 @@ export async function exportProjectionPdf(
   );
 
   // --- Middle column: intro paragraph + reasons list ---
+  // Intro is rendered with a hard line cap so a long aboutText cannot
+  // bleed into the reasons list. Reasons row height + start Y are then
+  // tuned to whatever vertical space is left in the column.
   const intro = data.aboutText || "";
+  const introFontSize = 13;
+  const introLineH = 16;
+  const introMaxLines = 4;
   setText(INK);
   doc.setFont(FONT, "bold");
-  doc.setFontSize(14);
-  const introLines = doc.splitTextToSize(intro, colMidW);
-  doc.text(introLines, colMidX, innerY + 110);
+  doc.setFontSize(introFontSize);
+  const wrappedIntro: string[] = doc
+    .splitTextToSize(intro, colMidW)
+    .slice(0, introMaxLines);
+  const introTop = innerY + 110;
+  doc.text(wrappedIntro, colMidX, introTop);
+  const introBottom = introTop + wrappedIntro.length * introLineH;
 
   const reasons = [
     { title: "MORE REVENUE", body: "10–15% more income than long-term contracts." },
@@ -397,8 +402,9 @@ export async function exportProjectionPdf(
     { title: "LESS FLUCTUATION", body: "Optimise revenue based on seasonality." },
     { title: "CAPITAL GAINS", body: "Higher sales price than long-term rentals." },
   ];
-  const reasonsStartY = innerY + 180;
-  const reasonsRowH = 32;
+  const reasonsStartY = introBottom + 24;
+  const reasonsAvailH = innerY + innerH - reasonsStartY - 10;
+  const reasonsRowH = Math.min(32, reasonsAvailH / reasons.length);
   reasons.forEach((r, i) => {
     const y = reasonsStartY + i * reasonsRowH;
     setFill(ACCENT);
@@ -463,8 +469,13 @@ export async function exportProjectionPdf(
 
   autoTable(doc, {
     startY: innerY + 120,
-    margin: { left: innerX + 6, right: pageW - innerX - innerW + 6 },
+    margin: {
+      left: innerX + 6,
+      right: pageW - innerX - innerW + 6,
+      bottom: pageH - (innerY + innerH) + 6,
+    },
     tableWidth: innerW - 12,
+    pageBreak: "avoid",
     head: [
       [
         { content: "Scenario", styles: { halign: "left" } },
@@ -512,11 +523,12 @@ export async function exportProjectionPdf(
     theme: "grid",
     styles: {
       font: FONT,
-      fontSize: 10,
-      cellPadding: 8,
+      fontSize: 9.5,
+      cellPadding: 5,
       lineColor: BORDER,
       lineWidth: 0.6,
       textColor: INK,
+      overflow: "linebreak",
     },
     headStyles: {
       fillColor: [200, 200, 200],
