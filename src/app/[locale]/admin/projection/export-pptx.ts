@@ -620,9 +620,9 @@ export async function exportProjectionPptx(
     color: INK,
   });
 
-  const p = computeScenario(data.pessimisticGross, data);
-  const r = computeScenario(data.realisticGross, data);
-  const o = computeScenario(data.optimisticGross, data);
+  const p = computeScenario(data.pessimisticNet, data);
+  const r = computeScenario(data.realisticNet, data);
+  const o = computeScenario(data.optimisticNet, data);
   const duYear = data.duMonthly * 12;
   const dewaYear = data.dewaChillerMonthly * 12;
   const maintenanceYear = data.maintenanceMonthly * 12;
@@ -663,9 +663,9 @@ export async function exportProjectionPptx(
     ],
     [
       cell("Gross annual revenue", { bold: true }),
-      cell(fmt(data.pessimisticGross), { bold: true, align: "right" }),
-      cell(fmt(data.realisticGross), { bold: true, align: "right" }),
-      cell(fmt(data.optimisticGross), { bold: true, align: "right" }),
+      cell(fmt(p.gross), { bold: true, align: "right" }),
+      cell(fmt(r.gross), { bold: true, align: "right" }),
+      cell(fmt(o.gross), { bold: true, align: "right" }),
     ],
     [
       cell("Portal fees (Booking, Airbnb…)"),

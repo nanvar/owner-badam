@@ -135,12 +135,12 @@ model PropertyProjection {
   pessimisticOccupancy     Float    @default(75)
   realisticOccupancy       Float    @default(80)
   optimisticOccupancy      Float    @default(85)
-  // Gross annual revenue is admin-entered (driven by ADR × nights ×
-  // occupancy outside the system) — kept editable so the deck always
-  // matches the owner offer.
-  pessimisticGross         Float    @default(0)
-  realisticGross           Float    @default(0)
-  optimisticGross          Float    @default(0)
+  // Net annual revenue (after all expenses) is admin-entered — the
+  // deck derives gross + expense breakdown from this. DB columns are
+  // historically named *Gross; @map preserves the column name.
+  pessimisticNet           Float    @default(0) @map("pessimisticGross")
+  realisticNet             Float    @default(0) @map("realisticGross")
+  optimisticNet            Float    @default(0) @map("optimisticGross")
 
   // Optional overrides for the static copy. Newline-separated bullets.
   listingMgmtBullets       String?  @db.Text

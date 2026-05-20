@@ -103,9 +103,9 @@ export default async function ProjectionPage({
     pessimisticOccupancy: projection?.pessimisticOccupancy ?? 75,
     realisticOccupancy: projection?.realisticOccupancy ?? 80,
     optimisticOccupancy: projection?.optimisticOccupancy ?? 85,
-    pessimisticGross: projection?.pessimisticGross ?? 0,
-    realisticGross: projection?.realisticGross ?? 0,
-    optimisticGross: projection?.optimisticGross ?? 0,
+    pessimisticNet: projection?.pessimisticNet ?? 0,
+    realisticNet: projection?.realisticNet ?? 0,
+    optimisticNet: projection?.optimisticNet ?? 0,
     listingMgmtBullets:
       projection?.listingMgmtBullets ?? DEFAULT_LISTING_BULLETS,
     guestMgmtBullets:

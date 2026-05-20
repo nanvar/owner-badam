@@ -454,9 +454,9 @@ export async function exportProjectionPdf(
   doc.setFontSize(34);
   doc.text("FINANCIAL BREAKDOWN", innerX + 6, innerY + 90);
 
-  const p = computeScenario(data.pessimisticGross, data);
-  const r = computeScenario(data.realisticGross, data);
-  const o = computeScenario(data.optimisticGross, data);
+  const p = computeScenario(data.pessimisticNet, data);
+  const r = computeScenario(data.realisticNet, data);
+  const o = computeScenario(data.optimisticNet, data);
   const duYear = data.duMonthly * 12;
   const dewaYear = data.dewaChillerMonthly * 12;
   const maintenanceYear = data.maintenanceMonthly * 12;
@@ -482,9 +482,9 @@ export async function exportProjectionPdf(
       ],
       [
         { content: "Gross annual revenue", styles: { fontStyle: "bold" } },
-        { content: fmt(data.pessimisticGross), styles: { fontStyle: "bold" } },
-        { content: fmt(data.realisticGross), styles: { fontStyle: "bold" } },
-        { content: fmt(data.optimisticGross), styles: { fontStyle: "bold" } },
+        { content: fmt(p.gross), styles: { fontStyle: "bold" } },
+        { content: fmt(r.gross), styles: { fontStyle: "bold" } },
+        { content: fmt(o.gross), styles: { fontStyle: "bold" } },
       ],
       ["Portal fees (Booking, Airbnb…)", fmt(p.portal), fmt(r.portal), fmt(o.portal)],
       ["Du (Internet)", fmt(duYear), fmt(duYear), fmt(duYear)],

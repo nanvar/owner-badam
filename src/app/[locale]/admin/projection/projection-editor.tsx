@@ -50,9 +50,9 @@ export type ProjectionData = {
   pessimisticOccupancy: number;
   realisticOccupancy: number;
   optimisticOccupancy: number;
-  pessimisticGross: number;
-  realisticGross: number;
-  optimisticGross: number;
+  pessimisticNet: number;
+  realisticNet: number;
+  optimisticNet: number;
   listingMgmtBullets: string;
   guestMgmtBullets: string;
   propertyMgmtBullets: string;
@@ -61,10 +61,16 @@ export type ProjectionData = {
 
 // Single source of truth for KPI computations. PDF + PPTX exporters
 // both call this so the deck and any preview stay in sync.
+//
+// Admin enters NET annual revenue per scenario; gross is derived by
+// inverting the expense formula:
+//   net = gross*(1-pp)*(1 - mp*(1+vp)) - utilities
+// ⇒  gross = (net + utilities) / [(1-pp) * (1 - mp*(1+vp))]
 export function computeScenario(
-  gross: number,
+  net: number,
   data: ProjectionData,
 ): {
+  gross: number;
   portal: number;
   utilities: number;
   managementFee: number;
@@ -72,20 +78,22 @@ export function computeScenario(
   totalExpenses: number;
   net: number;
 } {
-  const portal = gross * (data.portalFeePct / 100);
+  const pp = data.portalFeePct / 100;
+  const mp = data.managementFeePct / 100;
+  const vp = data.vatPct / 100;
   const utilities =
     data.duMonthly * 12 +
     data.dewaChillerMonthly * 12 +
     data.propertyInsuranceYearly +
     data.dtcmPermitYearly +
     data.maintenanceMonthly * 12;
-  // Management fee on gross-after-portal-fees, matching the deck's
-  // pattern: 20% of the net-of-portals revenue.
-  const managementFee = (gross - portal) * (data.managementFeePct / 100);
-  const vat = managementFee * (data.vatPct / 100);
+  const denom = (1 - pp) * (1 - mp * (1 + vp));
+  const gross = denom > 0 ? (net + utilities) / denom : 0;
+  const portal = gross * pp;
+  const managementFee = (gross - portal) * mp;
+  const vat = managementFee * vp;
   const totalExpenses = portal + utilities + managementFee + vat;
-  const net = gross - totalExpenses;
-  return { portal, utilities, managementFee, vat, totalExpenses, net };
+  return { gross, portal, utilities, managementFee, vat, totalExpenses, net };
 }
 
 export function ProjectionEditor({
@@ -120,9 +128,9 @@ export function ProjectionEditor({
 
   const scenarios = useMemo(
     () => ({
-      pessimistic: computeScenario(data.pessimisticGross, data),
-      realistic: computeScenario(data.realisticGross, data),
-      optimistic: computeScenario(data.optimisticGross, data),
+      pessimistic: computeScenario(data.pessimisticNet, data),
+      realistic: computeScenario(data.realisticNet, data),
+      optimistic: computeScenario(data.optimisticNet, data),
     }),
     [data],
   );
@@ -315,11 +323,11 @@ export function ProjectionEditor({
                 tone="rose"
                 title="Pessimistic"
                 occName="pessimisticOccupancy"
-                grossName="pessimisticGross"
+                netName="pessimisticNet"
                 occ={data.pessimisticOccupancy}
-                gross={data.pessimisticGross}
+                net={data.pessimisticNet}
                 onOcc={setNum("pessimisticOccupancy")}
-                onGross={setNum("pessimisticGross")}
+                onNet={setNum("pessimisticNet")}
                 computed={scenarios.pessimistic}
                 locale={locale}
               />
@@ -327,11 +335,11 @@ export function ProjectionEditor({
                 tone="sky"
                 title="Realistic"
                 occName="realisticOccupancy"
-                grossName="realisticGross"
+                netName="realisticNet"
                 occ={data.realisticOccupancy}
-                gross={data.realisticGross}
+                net={data.realisticNet}
                 onOcc={setNum("realisticOccupancy")}
-                onGross={setNum("realisticGross")}
+                onNet={setNum("realisticNet")}
                 computed={scenarios.realistic}
                 locale={locale}
               />
@@ -339,11 +347,11 @@ export function ProjectionEditor({
                 tone="emerald"
                 title="Optimistic"
                 occName="optimisticOccupancy"
-                grossName="optimisticGross"
+                netName="optimisticNet"
                 occ={data.optimisticOccupancy}
-                gross={data.optimisticGross}
+                net={data.optimisticNet}
                 onOcc={setNum("optimisticOccupancy")}
-                onGross={setNum("optimisticGross")}
+                onNet={setNum("optimisticNet")}
                 computed={scenarios.optimistic}
                 locale={locale}
               />
@@ -456,18 +464,18 @@ export function ProjectionEditor({
         />
         <input
           type="hidden"
-          name="pessimisticGross"
-          value={data.pessimisticGross}
+          name="pessimisticNet"
+          value={data.pessimisticNet}
         />
         <input
           type="hidden"
-          name="realisticGross"
-          value={data.realisticGross}
+          name="realisticNet"
+          value={data.realisticNet}
         />
         <input
           type="hidden"
-          name="optimisticGross"
-          value={data.optimisticGross}
+          name="optimisticNet"
+          value={data.optimisticNet}
         />
 
         {state?.status === "error" && (
@@ -563,22 +571,22 @@ function ScenarioBlock({
   tone,
   title,
   occName,
-  grossName,
+  netName,
   occ,
-  gross,
+  net,
   onOcc,
-  onGross,
+  onNet,
   computed,
   locale,
 }: {
   tone: "rose" | "sky" | "emerald";
   title: string;
   occName: string;
-  grossName: string;
+  netName: string;
   occ: number;
-  gross: number;
+  net: number;
   onOcc: (v: string) => void;
-  onGross: (v: string) => void;
+  onNet: (v: string) => void;
   computed: ReturnType<typeof computeScenario>;
   locale: Locale;
 }) {
@@ -603,19 +611,24 @@ function ScenarioBlock({
             onChange={(e) => onOcc(e.target.value)}
           />
         </Field>
-        <Field label="Gross annual revenue (AED)" htmlFor={grossName}>
+        <Field label="Net annual revenue (AED)" htmlFor={netName}>
           <Input
-            id={grossName}
-            name={grossName}
+            id={netName}
+            name={netName}
             type="number"
             step="0.01"
             min="0"
-            value={String(gross || "")}
-            onChange={(e) => onGross(e.target.value)}
+            value={String(net || "")}
+            onChange={(e) => onNet(e.target.value)}
           />
         </Field>
       </div>
       <div className="mt-3 space-y-1 text-xs text-[var(--color-foreground)]/80">
+        <Row
+          label="Gross annual"
+          value={formatCurrency(computed.gross, "AED", locale)}
+          strong
+        />
         <Row label="Portal fees" value={formatCurrency(computed.portal, "AED", locale)} />
         <Row label="Utilities + permit" value={formatCurrency(computed.utilities, "AED", locale)} />
         <Row label="Management fee" value={formatCurrency(computed.managementFee, "AED", locale)} />
