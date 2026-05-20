@@ -204,12 +204,15 @@ export async function exportProjectionPptx(
       bold: true,
       color: ACCENT,
     });
-    s1.addShape(pres.ShapeType.line, {
+    // Thin filled rect instead of a zero-height line — some mobile
+    // viewers (WhatsApp's Office Online preview) drop h=0 shapes.
+    s1.addShape(pres.ShapeType.rect, {
       x: innerX + 0.6,
       y: y + 0.3,
       w: 0.8,
-      h: 0,
-      line: { color: ACCENT, width: 1.5 },
+      h: 0.025,
+      fill: { color: ACCENT },
+      line: { color: ACCENT },
     });
     // Value
     s1.addText(m.value, {
@@ -338,12 +341,13 @@ export async function exportProjectionPptx(
       align: "right",
     });
     if (i < costs.length - 1) {
-      s1.addShape(pres.ShapeType.line, {
+      s1.addShape(pres.ShapeType.rect, {
         x: listX + 0.28,
         y: rowTop + rowH,
         w: listW - 0.32,
-        h: 0,
-        line: { color: ACCENT_SOFT, width: 0.5 },
+        h: 0.012,
+        fill: { color: ACCENT_SOFT },
+        line: { color: ACCENT_SOFT },
       });
     }
   });
@@ -435,7 +439,7 @@ export async function exportProjectionPptx(
     s2.addText(
       c.bullets.map((t) => ({
         text: t,
-        options: { bullet: { code: "25CF" }, bold: true, color: "1E2530" },
+        options: { bullet: true, bold: true, color: "1E2530" },
       })),
       {
         x: x + 0.35,
@@ -553,12 +557,13 @@ export async function exportProjectionPptx(
     bold: true,
     color: MUTED,
   });
-  s3.addShape(pres.ShapeType.line, {
+  s3.addShape(pres.ShapeType.rect, {
     x: colRightX,
     y: innerY + 1.9,
     w: 0.55,
-    h: 0,
-    line: { color: ACCENT, width: 1.5 },
+    h: 0.025,
+    fill: { color: ACCENT },
+    line: { color: ACCENT },
   });
 
   const contactItems: Array<{ label: string; value: string | null | undefined }> = [
