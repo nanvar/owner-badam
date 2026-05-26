@@ -8,6 +8,7 @@ import {
   Users,
   TrendingUp,
   CalendarDays,
+  Banknote,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
@@ -260,7 +261,7 @@ export default async function SuperAdminDashboard({
   // Company expense + profit totals (filtered). Stored together in
   // CompanyExpense with a `kind` discriminator. Net = profit − expenses
   // and feeds the company net-profit KPI.
-  const [companyEntryAggs, activeDeposits] = await Promise.all([
+  const [companyEntryAggs, activeDeposits, investmentsAgg] = await Promise.all([
     prisma.companyExpense.groupBy({
       by: ["kind"],
       where: { kind: { in: ["EXPENSE", "PROFIT"] }, ...monthWhere },
@@ -272,12 +273,20 @@ export default async function SuperAdminDashboard({
       _sum: { amount: true },
       _count: { _all: true },
     }),
+    // Investments are info-only and unfiltered by month — they roll up
+    // the full lifetime total here and never feed any calculation.
+    prisma.investment.aggregate({
+      _sum: { amount: true },
+      _count: { _all: true },
+    }),
   ]);
   const expenseRow = companyEntryAggs.find((r) => r.kind === "EXPENSE");
   const profitRow = companyEntryAggs.find((r) => r.kind === "PROFIT");
   const totalCompanyExpenses = expenseRow?._sum.amount ?? 0;
   const totalCompanyExtraProfit = profitRow?._sum.amount ?? 0;
   const totalActiveDeposits = activeDeposits._sum.amount ?? 0;
+  const totalInvestments = investmentsAgg._sum.amount ?? 0;
+  const totalInvestmentsCount = investmentsAgg._count._all;
 
   // Outstanding to owners (sum across every property where the company
   // still owes the owner money). Drops the table that used to render this
@@ -463,6 +472,18 @@ export default async function SuperAdminDashboard({
             { label: "Done", value: String(doneReservationsCount) },
             { label: "Ext", value: String(totalExtensionsCount) },
           ]}
+        />
+      </div>
+
+      {/* Investments — info only, never fed into any calculation above. */}
+      <div className="mt-3">
+        <KpiTile
+          label={`Total investments · ${totalInvestmentsCount} ${
+            totalInvestmentsCount === 1 ? "entry" : "entries"
+          } · info only`}
+          value={formatCurrency(totalInvestments, "AED", loc)}
+          accent="emerald"
+          icon={<Banknote className="h-4 w-4" />}
         />
       </div>
     </div>

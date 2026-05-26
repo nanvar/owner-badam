@@ -10,6 +10,7 @@ import {
   BarChart3,
   FileText,
   Presentation,
+  Banknote,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { requireRole } from "@/lib/auth";
@@ -55,6 +56,11 @@ export default async function AdminLayout({
                 href: `/${locale}/admin/company/expenses`,
                 label: "Finances",
                 icon: <Receipt className="h-4 w-4" />,
+              },
+              {
+                href: `/${locale}/admin/company/investments`,
+                label: "Investments",
+                icon: <Banknote className="h-4 w-4" />,
               },
               {
                 href: `/${locale}/admin/company/reporting`,

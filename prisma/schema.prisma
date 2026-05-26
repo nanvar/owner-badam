@@ -371,6 +371,20 @@ model CompanyExpense {
   @@index([monthKey])
 }
 
+// Capital injections into the company. Purely informational —
+// never folded into any P&L, expense, or owner-settlement calculation.
+model Investment {
+  id          String   @id @default(cuid())
+  amount      Float
+  source      String   @db.VarChar(255)
+  description String?  @db.Text
+  date        DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([date])
+}
+
 // A curated bundle of one property's reservations + expenses, prepared by
 // admin for an owner. Once an item belongs to a report it's "closed" and
 // no longer offered when building future reports.
