@@ -475,8 +475,10 @@ export default async function SuperAdminDashboard({
         />
       </div>
 
-      {/* Investments — info only, never fed into any calculation above. */}
-      <div className="mt-3">
+      {/* Investments — info only, never fed into any calculation above.
+          Same 4-col grid as the rows above so the tile is one column
+          wide instead of stretching the full dashboard. */}
+      <div className="mt-3 grid auto-rows-fr grid-cols-1 gap-3 *:h-full md:grid-cols-2 lg:grid-cols-4">
         <KpiTile
           label={`Total investments · ${totalInvestmentsCount} ${
             totalInvestmentsCount === 1 ? "entry" : "entries"
