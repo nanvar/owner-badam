@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useActionState,
   useEffect,
   useRef,
@@ -240,29 +241,32 @@ export function CompanyFinancesView({
               </thead>
               <tbody>
                 {entries.map((e, idx) => {
-                  // For PROFIT tab the list is sorted unpaid-first. We
-                  // add a visible gap between the last unpaid row and
-                  // the first paid row so the two groups read clearly.
+                  const isUnpaidProfit = e.kind === "PROFIT" && !e.paid;
+                  // Last row in the unpaid block — we render a tall
+                  // empty <tr> after it so the visual gap between
+                  // unpaid and paid groups is unmistakable.
                   const isLastUnpaid =
                     tab === "PROFIT" &&
                     !e.paid &&
-                    (idx === entries.length - 1 || entries[idx + 1]?.paid);
-                  const isUnpaidProfit = e.kind === "PROFIT" && !e.paid;
+                    idx < entries.length - 1 &&
+                    entries[idx + 1]?.paid;
                   return (
+                  <Fragment key={e.id}>
                   <tr
-                    key={e.id}
                     className={cn(
-                      "hover:bg-[var(--color-surface-2)]/60",
-                      // Unpaid profit: tint background + red top/bottom
-                      // borders + thick left rail so the row pops out
-                      // of the list at a glance.
-                      isUnpaidProfit &&
-                        "bg-rose-500/5 [&>td]:!border-y-2 [&>td]:!border-y-rose-500 [&>td:first-child]:!border-l-4 [&>td:first-child]:!border-l-rose-500 [&>td:last-child]:!border-r-2 [&>td:last-child]:!border-r-rose-500",
-                      isLastUnpaid &&
-                        "[&>td]:!border-b-8 [&>td]:!border-b-transparent",
+                      "transition-colors",
+                      isUnpaidProfit
+                        ? "bg-rose-100/70 hover:bg-rose-100"
+                        : "hover:bg-[var(--color-surface-2)]/60",
                     )}
                   >
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td
+                      className={cn(
+                        "px-4 py-3 whitespace-nowrap",
+                        isUnpaidProfit &&
+                          "border-l-4 border-l-rose-500 pl-3 font-medium text-rose-700",
+                      )}
+                    >
                       {formatDate(e.date, locale)}
                     </td>
                     <td className="px-4 py-3">
@@ -399,6 +403,15 @@ export function CompanyFinancesView({
                       </div>
                     </td>
                   </tr>
+                  {isLastUnpaid && (
+                    <tr aria-hidden="true" className="pointer-events-none">
+                      <td
+                        colSpan={tab === "PROFIT" || tab === "DEPOSIT" ? 6 : 5}
+                        className="h-6 border-0 bg-transparent p-0"
+                      ></td>
+                    </tr>
+                  )}
+                  </Fragment>
                   );
                 })}
               </tbody>
