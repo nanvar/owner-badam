@@ -26,6 +26,7 @@ const Schema = z
       .regex(/^\d{4}-\d{2}$/)
       .optional()
       .or(z.literal("")),
+    paid: z.boolean().optional().default(true),
   })
   .refine(
     (v) =>
@@ -63,6 +64,14 @@ export async function upsertCompanyExpenseAction(
   formData: FormData,
 ): Promise<CompanyExpenseState> {
   await requireRole("SUPERADMIN");
+  // Checkbox-style boolean: missing field = unchecked = false; the
+  // ProfitEditor mirrors the checkbox into a hidden "paid" input with
+  // value "true"/"false". For EXPENSE/DEPOSIT (no toggle) the form
+  // omits the field and we fall back to true so legacy entries keep
+  // counting toward KPIs.
+  const paidRaw = formData.get("paid") as string | null;
+  const paid =
+    paidRaw === null ? true : paidRaw === "true" || paidRaw === "on" || paidRaw === "1";
   const parsed = Schema.safeParse({
     id: (formData.get("id") as string | null) || undefined,
     kind: (formData.get("kind") as string | null) || "EXPENSE",
@@ -72,6 +81,7 @@ export async function upsertCompanyExpenseAction(
     description: (formData.get("description") as string | null) ?? "",
     amount: formData.get("amount") || 0,
     monthKey: (formData.get("monthKey") as string | null) ?? "",
+    paid,
   });
   if (!parsed.success) {
     return {
@@ -92,6 +102,9 @@ export async function upsertCompanyExpenseAction(
       : null,
     propertyId: isExpense ? null : v.propertyId || null,
     monthKey: v.monthKey || monthKeyFor(date),
+    // Only PROFIT honours the toggle; EXPENSE/DEPOSIT always stored as
+    // paid so the column never needs special handling elsewhere.
+    paid: v.kind === "PROFIT" ? v.paid : true,
   };
   if (v.id) {
     await prisma.companyExpense.update({

@@ -261,10 +261,22 @@ export default async function SuperAdminDashboard({
   // Company expense + profit totals (filtered). Stored together in
   // CompanyExpense with a `kind` discriminator. Net = profit − expenses
   // and feeds the company net-profit KPI.
-  const [companyEntryAggs, activeDeposits, investmentsAgg] = await Promise.all([
-    prisma.companyExpense.groupBy({
-      by: ["kind"],
-      where: { kind: { in: ["EXPENSE", "PROFIT"] }, ...monthWhere },
+  const [
+    companyExpenseAgg,
+    companyProfitAgg,
+    activeDeposits,
+    investmentsAgg,
+  ] = await Promise.all([
+    prisma.companyExpense.aggregate({
+      where: { kind: "EXPENSE", ...monthWhere },
+      _sum: { amount: true },
+      _count: { _all: true },
+    }),
+    // Only PAID profits feed the dashboard KPIs. Unpaid PROFIT rows
+    // stay visible in the finance list but don't roll up into totals
+    // until the cash actually arrives and the entry is marked paid.
+    prisma.companyExpense.aggregate({
+      where: { kind: "PROFIT", paid: true, ...monthWhere },
       _sum: { amount: true },
       _count: { _all: true },
     }),
@@ -280,10 +292,8 @@ export default async function SuperAdminDashboard({
       _count: { _all: true },
     }),
   ]);
-  const expenseRow = companyEntryAggs.find((r) => r.kind === "EXPENSE");
-  const profitRow = companyEntryAggs.find((r) => r.kind === "PROFIT");
-  const totalCompanyExpenses = expenseRow?._sum.amount ?? 0;
-  const totalCompanyExtraProfit = profitRow?._sum.amount ?? 0;
+  const totalCompanyExpenses = companyExpenseAgg._sum.amount ?? 0;
+  const totalCompanyExtraProfit = companyProfitAgg._sum.amount ?? 0;
   const totalActiveDeposits = activeDeposits._sum.amount ?? 0;
   const totalInvestments = investmentsAgg._sum.amount ?? 0;
   const totalInvestmentsCount = investmentsAgg._count._all;

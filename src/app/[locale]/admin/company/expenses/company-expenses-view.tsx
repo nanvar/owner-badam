@@ -60,6 +60,7 @@ export type Entry = {
   propertyColor: string | null;
   description: string;
   amount: number;
+  paid: boolean;
   refundedAt: string | null;
   refundedAmount: number | null;
 };
@@ -268,6 +269,11 @@ export function CompanyFinancesView({
                       )}
                     </td>
                     <td className="max-w-[360px] truncate px-4 py-3">
+                      {e.kind === "PROFIT" && !e.paid && (
+                        <span className="mr-2 inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                          Unpaid
+                        </span>
+                      )}
                       {e.description || (
                         <span className="text-[var(--color-muted)]">—</span>
                       )}
@@ -562,6 +568,8 @@ function ProfitEditor({
     CompanyExpenseState | undefined,
     FormData
   >(upsertCompanyExpenseAction, undefined);
+  // Default true for new entries; preserve existing flag when editing.
+  const [paid, setPaid] = useState<boolean>(entry?.paid ?? true);
 
   useEffect(() => {
     if (state?.status === "ok" && open) {
@@ -632,6 +640,27 @@ function ProfitEditor({
             placeholder="Late check-out fee, parking, etc."
           />
         </Field>
+        {/* Paid toggle — when off, the entry stays visible in the list
+            but the dashboard KPIs ignore it until it's marked paid. */}
+        <label
+          htmlFor="pro-paid"
+          className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-[var(--color-border)] bg-white px-3 py-2.5"
+        >
+          <input
+            id="pro-paid"
+            type="checkbox"
+            checked={paid}
+            onChange={(e) => setPaid(e.target.checked)}
+            className="h-4 w-4 accent-emerald-600"
+          />
+          <span className="text-sm font-medium">Paid</span>
+          <span className="ml-auto text-xs text-[var(--color-muted)]">
+            {paid
+              ? "Counted in dashboard KPIs"
+              : "Hidden from dashboard until paid"}
+          </span>
+        </label>
+        <input type="hidden" name="paid" value={paid ? "true" : "false"} />
         <MonthPicker />
         {state?.status === "error" && (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">

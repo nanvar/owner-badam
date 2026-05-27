@@ -362,6 +362,10 @@ model CompanyExpense {
   // Same convention as Reservation/Expense: defaults to the entry date,
   // bumped by one month when the form's "Next month" checkbox is on.
   monthKey        String?                 @db.VarChar(7)
+  // PROFIT rows can be entered before the cash actually arrives. Only
+  // paid profits feed the dashboard's company KPIs. EXPENSE/DEPOSIT
+  // entries don't expose the toggle and keep the default `true`.
+  paid            Boolean                 @default(true)
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
 

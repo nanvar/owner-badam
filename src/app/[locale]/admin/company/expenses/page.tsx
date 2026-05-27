@@ -147,6 +147,7 @@ export default async function SuperAdminFinancesPage({
         propertyColor: e.property?.color ?? null,
         description: e.description,
         amount: e.amount,
+        paid: e.paid,
         refundedAt: e.refundedAt?.toISOString() ?? null,
         refundedAmount: e.refundedAmount,
       }))}
