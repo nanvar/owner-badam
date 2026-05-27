@@ -97,18 +97,27 @@ export default async function SuperAdminFinancesPage({
       include: {
         property: { select: { id: true, name: true, color: true } },
       },
-      // PROFIT lists unpaid entries first so admins immediately see
-      // what still needs collecting. EXPENSE/DEPOSIT keep the simple
-      // date-desc order since their "paid" column never varies.
+      // PROFIT and DEPOSIT both list unpaid entries first so admins
+      // immediately see what still needs collecting. EXPENSE rows are
+      // always paid by definition, so they keep the simple date-desc
+      // order.
       orderBy:
-        tab === "PROFIT"
+        tab === "PROFIT" || tab === "DEPOSIT"
           ? [{ paid: "asc" }, { date: "desc" }]
           : { date: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
     prisma.companyExpense.aggregate({
-      where: { kind: "DEPOSIT", refundedAt: null, ...monthWhere },
+      // "Active" = received cash that's still held (paid + not yet
+      // refunded). Unpaid deposits are excluded since the money isn't
+      // actually in our hands.
+      where: {
+        kind: "DEPOSIT",
+        paid: true,
+        refundedAt: null,
+        ...monthWhere,
+      },
       _sum: { amount: true },
       _count: { _all: true },
     }),

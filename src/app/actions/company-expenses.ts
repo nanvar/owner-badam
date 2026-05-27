@@ -102,9 +102,10 @@ export async function upsertCompanyExpenseAction(
       : null,
     propertyId: isExpense ? null : v.propertyId || null,
     monthKey: v.monthKey || monthKeyFor(date),
-    // Only PROFIT honours the toggle; EXPENSE/DEPOSIT always stored as
-    // paid so the column never needs special handling elsewhere.
-    paid: v.kind === "PROFIT" ? v.paid : true,
+    // PROFIT and DEPOSIT honour the toggle — both can be entered
+    // before the cash actually changes hands. EXPENSE is always
+    // stored as paid since recording one already means we paid.
+    paid: v.kind === "EXPENSE" ? true : v.paid,
   };
   if (v.id) {
     await prisma.companyExpense.update({

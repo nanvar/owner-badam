@@ -241,12 +241,16 @@ export function CompanyFinancesView({
               </thead>
               <tbody>
                 {entries.map((e, idx) => {
-                  const isUnpaidProfit = e.kind === "PROFIT" && !e.paid;
+                  // Unpaid highlighting applies to PROFIT and DEPOSIT.
+                  // EXPENSE entries are always paid so they never
+                  // surface the unpaid styling.
+                  const isUnpaid =
+                    (e.kind === "PROFIT" || e.kind === "DEPOSIT") && !e.paid;
                   // Last row in the unpaid block — we render a tall
                   // empty <tr> after it so the visual gap between
                   // unpaid and paid groups is unmistakable.
                   const isLastUnpaid =
-                    tab === "PROFIT" &&
+                    (tab === "PROFIT" || tab === "DEPOSIT") &&
                     !e.paid &&
                     idx < entries.length - 1 &&
                     entries[idx + 1]?.paid;
@@ -255,7 +259,7 @@ export function CompanyFinancesView({
                   <tr
                     className={cn(
                       "transition-colors",
-                      isUnpaidProfit
+                      isUnpaid
                         ? "bg-rose-100/70 hover:bg-rose-100"
                         : "hover:bg-[var(--color-surface-2)]/60",
                     )}
@@ -263,7 +267,7 @@ export function CompanyFinancesView({
                     <td
                       className={cn(
                         "px-4 py-3 whitespace-nowrap",
-                        isUnpaidProfit &&
+                        isUnpaid &&
                           "border-l-4 border-l-rose-500 pl-3 font-medium text-rose-700",
                       )}
                     >
@@ -331,7 +335,11 @@ export function CompanyFinancesView({
                     )}
                     {tab === "DEPOSIT" && (
                       <td className="px-4 py-3">
-                        {e.refundedAt ? (
+                        {!e.paid ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700">
+                            Unpaid
+                          </span>
+                        ) : e.refundedAt ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
                             <CheckCircle2 className="h-3 w-3" />
                             Refunded
@@ -345,7 +353,7 @@ export function CompanyFinancesView({
                     )}
                     <td className="px-2 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        {tab === "DEPOSIT" && !e.refundedAt && (
+                        {tab === "DEPOSIT" && e.paid && !e.refundedAt && (
                           <Button
                             size="sm"
                             variant="secondary"
@@ -740,6 +748,9 @@ function DepositEditor({
     CompanyExpenseState | undefined,
     FormData
   >(upsertCompanyExpenseAction, undefined);
+  // Same paid-toggle pattern as ProfitEditor — default true, mirrored
+  // through a hidden input so the server action gets a clean boolean.
+  const [paid, setPaid] = useState<boolean>(entry?.paid ?? true);
 
   useEffect(() => {
     if (state?.status === "ok" && open) {
@@ -813,6 +824,25 @@ function DepositEditor({
             placeholder="Guest XYZ — security deposit"
           />
         </Field>
+        <label
+          htmlFor="dep-paid"
+          className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-[var(--color-border)] bg-white px-3 py-2.5"
+        >
+          <input
+            id="dep-paid"
+            type="checkbox"
+            checked={paid}
+            onChange={(e) => setPaid(e.target.checked)}
+            className="h-4 w-4 accent-emerald-600"
+          />
+          <span className="text-sm font-medium">Paid</span>
+          <span className="ml-auto text-xs text-[var(--color-muted)]">
+            {paid
+              ? "Held — counted in dashboard KPIs"
+              : "Awaiting cash — hidden from dashboard"}
+          </span>
+        </label>
+        <input type="hidden" name="paid" value={paid ? "true" : "false"} />
         {state?.status === "error" && (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
             {state.message}

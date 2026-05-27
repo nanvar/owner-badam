@@ -281,7 +281,15 @@ export default async function SuperAdminDashboard({
       _count: { _all: true },
     }),
     prisma.companyExpense.aggregate({
-      where: { kind: "DEPOSIT", refundedAt: null, ...monthWhere },
+      // Only PAID deposits that are still held — same rule as the
+      // PROFIT KPI: unrecorded cash doesn't count toward the company's
+      // current obligation totals.
+      where: {
+        kind: "DEPOSIT",
+        paid: true,
+        refundedAt: null,
+        ...monthWhere,
+      },
       _sum: { amount: true },
       _count: { _all: true },
     }),

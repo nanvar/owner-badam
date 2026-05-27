@@ -323,12 +323,15 @@ export async function exportProjectionPdf(
   const costGridTop = heroTopY + 196;
   const costGridGap = 16;
   const costGridW = (pageW / 2 - 30 - heroX - costGridGap) / 2;
-  costs.slice(0, 4).forEach((c, i) => {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    const cx = costGridX + col * (costGridW + costGridGap);
-    const cy = costGridTop + row * 50;
-    // gold dot
+  // Helper — draw one cost line. Critically, the value's width is
+  // measured while the bold/15pt font is still active. The previous
+  // version measured after switching to 8pt/normal, so the unit text
+  // landed inside the value string.
+  const drawCostLine = (
+    c: { label: string; value: string; unit: string },
+    cx: number,
+    cy: number,
+  ) => {
     setFill(GOLD);
     doc.circle(cx + 3, cy - 2, 2.4, "F");
     setText(INK_SOFT);
@@ -338,31 +341,24 @@ export async function exportProjectionPdf(
     setText(INK);
     doc.setFont(FONT, "bold");
     doc.setFontSize(15);
+    const valueWidth = doc.getTextWidth(c.value);
     doc.text(c.value, cx + 14, cy + 14);
     setText(GOLD);
     doc.setFont(FONT, "normal");
     doc.setFontSize(8);
-    doc.text(c.unit, cx + 14 + doc.getTextWidth(c.value) + 6, cy + 14);
+    doc.text(c.unit, cx + 14 + valueWidth + 6, cy + 14);
+  };
+  costs.slice(0, 4).forEach((c, i) => {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    drawCostLine(
+      c,
+      costGridX + col * (costGridW + costGridGap),
+      costGridTop + row * 50,
+    );
   });
   // 5th cost spans both columns at the bottom
-  {
-    const c = costs[4];
-    const cy = costGridTop + 2 * 50;
-    setFill(GOLD);
-    doc.circle(costGridX + 3, cy - 2, 2.4, "F");
-    setText(INK_SOFT);
-    doc.setFont(FONT, "normal");
-    doc.setFontSize(9);
-    doc.text(c.label, costGridX + 14, cy - 4);
-    setText(INK);
-    doc.setFont(FONT, "bold");
-    doc.setFontSize(15);
-    doc.text(c.value, costGridX + 14, cy + 14);
-    setText(GOLD);
-    doc.setFont(FONT, "normal");
-    doc.setFontSize(8);
-    doc.text(c.unit, costGridX + 14 + doc.getTextWidth(c.value) + 6, cy + 14);
-  }
+  drawCostLine(costs[4], costGridX, costGridTop + 2 * 50);
 
   // ===== Slide 2 — Our services ======================================
   newSlide();
@@ -426,25 +422,28 @@ export async function exportProjectionPdf(
     // Gold accent band on top
     setFill(GOLD);
     doc.roundedRect(x, svcTop, svcW, 4, 2, 2, "F");
-    // Roman numeral large in the corner, very thin gold
+    // Roman numeral lives on its own row above the title now so the
+    // big glyph can never collide with long titles like "PROPERTY
+    // MANAGEMENT". It sits in a gold-tinted disc on the left edge.
+    setFill(GOLD_FAINT);
+    doc.circle(x + 32, svcTop + 36, 14, "F");
     setText(GOLD);
     doc.setFont(FONT, "bold");
-    doc.setFontSize(34);
-    doc.text(card.num, x + svcW - 18, svcTop + 50, { align: "right" });
-    // Title
+    doc.setFontSize(14);
+    doc.text(card.num, x + 32, svcTop + 41, { align: "center" });
+    // Title — separate baseline, fully unobstructed.
     setText(INK);
     doc.setFont(FONT, "bold");
     doc.setFontSize(14);
-    doc.text(card.title.toUpperCase(), x + 18, svcTop + 38);
+    doc.text(card.title.toUpperCase(), x + 18, svcTop + 78);
     // gold underline
     setDraw(GOLD);
     doc.setLineWidth(1.2);
-    doc.line(x + 18, svcTop + 46, x + 38, svcTop + 46);
+    doc.line(x + 18, svcTop + 86, x + 38, svcTop + 86);
     // Bullets
-    const bulletStartY = svcTop + 78;
+    const bulletStartY = svcTop + 116;
     card.bullets.forEach((b, idx) => {
       const by = bulletStartY + idx * 22;
-      // Tiny gold dot
       setFill(GOLD);
       doc.circle(x + 22, by - 3, 1.6, "F");
       setText(INK);
@@ -466,13 +465,16 @@ export async function exportProjectionPdf(
   doc.setFontSize(38);
   doc.text("Built for elegant returns", innerX + 18, innerY + 130);
 
-  // 3-column body: illustration · reasons · contact
+  // 3-column body: illustration · reasons · contact. Widths are sized
+  // so that colMid + a 20pt gutter ends BEFORE colRight starts —
+  // otherwise long intro paragraphs and reason bodies wrap into the
+  // contact card on the right.
   const colLeftX = innerX + 18;
-  const colLeftW = 230;
-  const colMidX = innerX + 270;
-  const colMidW = 330;
+  const colLeftW = 220;
+  const colMidX = innerX + 260;
   const colRightX = innerX + innerW - 200;
   const colRightW = 182;
+  const colMidW = colRightX - colMidX - 20;
 
   // Left: SVG illustration
   const aboutSize = Math.min(colLeftW, 220);
