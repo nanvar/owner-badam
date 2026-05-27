@@ -229,6 +229,9 @@ export function CompanyFinancesView({
                     Description
                   </th>
                   <th className="px-4 py-3 text-right font-semibold">Amount</th>
+                  {tab === "PROFIT" && (
+                    <th className="px-4 py-3 text-left font-semibold">Status</th>
+                  )}
                   {tab === "DEPOSIT" && (
                     <th className="px-4 py-3 text-left font-semibold">Status</th>
                   )}
@@ -244,11 +247,17 @@ export function CompanyFinancesView({
                     tab === "PROFIT" &&
                     !e.paid &&
                     (idx === entries.length - 1 || entries[idx + 1]?.paid);
+                  const isUnpaidProfit = e.kind === "PROFIT" && !e.paid;
                   return (
                   <tr
                     key={e.id}
                     className={cn(
                       "hover:bg-[var(--color-surface-2)]/60",
+                      // Unpaid profit: tint background + red top/bottom
+                      // borders + thick left rail so the row pops out
+                      // of the list at a glance.
+                      isUnpaidProfit &&
+                        "bg-rose-500/5 [&>td]:!border-y-2 [&>td]:!border-y-rose-500 [&>td:first-child]:!border-l-4 [&>td:first-child]:!border-l-rose-500 [&>td:last-child]:!border-r-2 [&>td:last-child]:!border-r-rose-500",
                       isLastUnpaid &&
                         "[&>td]:!border-b-8 [&>td]:!border-b-transparent",
                     )}
@@ -281,11 +290,6 @@ export function CompanyFinancesView({
                       )}
                     </td>
                     <td className="max-w-[360px] truncate px-4 py-3">
-                      {e.kind === "PROFIT" && !e.paid && (
-                        <span className="mr-2 inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
-                          Unpaid
-                        </span>
-                      )}
                       {e.description || (
                         <span className="text-[var(--color-muted)]">—</span>
                       )}
@@ -307,6 +311,20 @@ export function CompanyFinancesView({
                           : ""}
                       {formatCurrency(e.amount, "AED", locale)}
                     </td>
+                    {tab === "PROFIT" && (
+                      <td className="px-4 py-3">
+                        {e.paid ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Paid
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700">
+                            Unpaid
+                          </span>
+                        )}
+                      </td>
+                    )}
                     {tab === "DEPOSIT" && (
                       <td className="px-4 py-3">
                         {e.refundedAt ? (
