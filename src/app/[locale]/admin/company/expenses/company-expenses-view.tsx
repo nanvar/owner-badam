@@ -236,10 +236,22 @@ export function CompanyFinancesView({
                 </tr>
               </thead>
               <tbody>
-                {entries.map((e) => (
+                {entries.map((e, idx) => {
+                  // For PROFIT tab the list is sorted unpaid-first. We
+                  // add a visible gap between the last unpaid row and
+                  // the first paid row so the two groups read clearly.
+                  const isLastUnpaid =
+                    tab === "PROFIT" &&
+                    !e.paid &&
+                    (idx === entries.length - 1 || entries[idx + 1]?.paid);
+                  return (
                   <tr
                     key={e.id}
-                    className="hover:bg-[var(--color-surface-2)]/60"
+                    className={cn(
+                      "hover:bg-[var(--color-surface-2)]/60",
+                      isLastUnpaid &&
+                        "[&>td]:!border-b-8 [&>td]:!border-b-transparent",
+                    )}
                   >
                     <td className="px-4 py-3 whitespace-nowrap">
                       {formatDate(e.date, locale)}
@@ -369,7 +381,8 @@ export function CompanyFinancesView({
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

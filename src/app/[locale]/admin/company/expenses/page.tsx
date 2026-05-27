@@ -97,7 +97,13 @@ export default async function SuperAdminFinancesPage({
       include: {
         property: { select: { id: true, name: true, color: true } },
       },
-      orderBy: { date: "desc" },
+      // PROFIT lists unpaid entries first so admins immediately see
+      // what still needs collecting. EXPENSE/DEPOSIT keep the simple
+      // date-desc order since their "paid" column never varies.
+      orderBy:
+        tab === "PROFIT"
+          ? [{ paid: "asc" }, { date: "desc" }]
+          : { date: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
