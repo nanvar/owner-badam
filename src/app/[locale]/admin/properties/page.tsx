@@ -77,6 +77,7 @@ export default async function AdminPropertiesPage({
           type: e.type,
           description: e.description,
           amount: e.amount,
+          paidFromCompanyInvest: e.paidFromCompanyInvest,
         }))}
         payments={payments.map((p) => ({
           id: p.id,

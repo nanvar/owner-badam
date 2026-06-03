@@ -89,9 +89,16 @@ export default async function ReportingPage({
         payout: true,
       },
     }),
+    // Reporting only credits OWNER-paid expenses against the owner's
+    // payout. "Paid from company invest" rows are tracked elsewhere
+    // (OwnerDebt + Investment SPEND) and never feed this rollup.
     prisma.expense.groupBy({
       by: ["propertyId"],
-      where: { ...monthWhere, ...propertyOwnerFilter },
+      where: {
+        paidFromCompanyInvest: false,
+        ...monthWhere,
+        ...propertyOwnerFilter,
+      },
       _sum: { amount: true },
     }),
     prisma.companyExpense.groupBy({

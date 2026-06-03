@@ -1,5 +1,6 @@
 import { setRequestLocale } from "next-intl/server";
 import { Fragment } from "react";
+import Link from "next/link";
 import { isLocale, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
 import {
@@ -9,6 +10,7 @@ import {
   TrendingUp,
   CalendarDays,
   Banknote,
+  HandCoins,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
@@ -114,8 +116,12 @@ export default async function SuperAdminDashboard({
         payout: true,
       },
     }),
+    // Split by the "paid from company invest" flag so the owner-paid
+    // bucket reduces owner payout (default behavior) and the
+    // company-funded bucket is excluded from owner net — those rows
+    // already have a matching Investment SPEND + OwnerDebt elsewhere.
     prisma.expense.groupBy({
-      by: ["propertyId"],
+      by: ["propertyId", "paidFromCompanyInvest"],
       where: monthWhere,
       _sum: { amount: true },
     }),
@@ -151,9 +157,27 @@ export default async function SuperAdminDashboard({
   ]);
 
   const realizedByProp = new Map(propertyAggs.map((a) => [a.propertyId, a]));
-  const expenseByProp = new Map(
-    expenseAggs.map((a) => [a.propertyId, a._sum.amount ?? 0]),
-  );
+  // Owner-paid expenses feed the owner-payout calculation.
+  // paidFromCompanyInvest expenses are tracked separately: they
+  // still appear in the per-property "Property expenses" total
+  // column for visibility, but they don't reduce owner payout and
+  // they're recorded as Investment SPEND + OwnerDebt elsewhere.
+  const expenseByPropOwner = new Map<string, number>();
+  const expenseByPropCompany = new Map<string, number>();
+  for (const a of expenseAggs) {
+    const sum = a._sum.amount ?? 0;
+    if (a.paidFromCompanyInvest) {
+      expenseByPropCompany.set(
+        a.propertyId,
+        (expenseByPropCompany.get(a.propertyId) ?? 0) + sum,
+      );
+    } else {
+      expenseByPropOwner.set(
+        a.propertyId,
+        (expenseByPropOwner.get(a.propertyId) ?? 0) + sum,
+      );
+    }
+  }
   const profitByProp = new Map(
     companyProfitAggs.map((a) => [a.propertyId ?? "", a._sum.amount ?? 0]),
   );
@@ -217,9 +241,13 @@ export default async function SuperAdminDashboard({
   const baseTable = properties.map((p) => {
     const a = realizedByProp.get(p.id);
     const ext = extByProp.get(p.id);
-    const expenses = expenseByProp.get(p.id) ?? 0;
+    // Owner net only subtracts the owner-paid bucket; company-paid
+    // expenses are tracked separately and never reduce the owner's
+    // share.
+    const ownerExpenses = expenseByPropOwner.get(p.id) ?? 0;
+    const companyExpenses = expenseByPropCompany.get(p.id) ?? 0;
     const payout = (a?._sum.payout ?? 0) + (ext?.payout ?? 0);
-    const ownerNet = payout - expenses;
+    const ownerNet = payout - ownerExpenses;
     return {
       id: p.id,
       name: p.name,
@@ -232,7 +260,10 @@ export default async function SuperAdminDashboard({
       portalCommissions:
         (a?._sum.portalCommission ?? 0) + (ext?.portal ?? 0),
       ownerPayout: payout,
-      propertyExpenses: expenses,
+      // Visible column still rolls up everything attached to the
+      // property — full transparency for the admin even though the
+      // company-paid slice no longer hits the owner.
+      propertyExpenses: ownerExpenses + companyExpenses,
       ownerNet,
       paymentsToOwner: directPaymentsByProp.get(p.id) ?? 0,
       companyExtraProfit: profitByProp.get(p.id) ?? 0,
@@ -295,7 +326,11 @@ export default async function SuperAdminDashboard({
     }),
     // Investments are info-only and unfiltered by month — they roll up
     // the full lifetime total here and never feed any calculation.
-    prisma.investment.aggregate({
+    // INCOME = capital received, SPEND = capital paid out (most of
+    // those are auto-created from "paid from company invest"
+    // expenses).
+    prisma.investment.groupBy({
+      by: ["kind"],
       _sum: { amount: true },
       _count: { _all: true },
     }),
@@ -303,8 +338,21 @@ export default async function SuperAdminDashboard({
   const totalCompanyExpenses = companyExpenseAgg._sum.amount ?? 0;
   const totalCompanyExtraProfit = companyProfitAgg._sum.amount ?? 0;
   const totalActiveDeposits = activeDeposits._sum.amount ?? 0;
-  const totalInvestments = investmentsAgg._sum.amount ?? 0;
-  const totalInvestmentsCount = investmentsAgg._count._all;
+  const investmentIncomeRow = investmentsAgg.find((r) => r.kind === "INCOME");
+  const investmentSpendRow = investmentsAgg.find((r) => r.kind === "SPEND");
+  const totalInvestments = investmentIncomeRow?._sum.amount ?? 0;
+  const totalInvestmentsCount = investmentIncomeRow?._count._all ?? 0;
+  const totalInvestmentSpent = investmentSpendRow?._sum.amount ?? 0;
+  const totalInvestmentSpentCount = investmentSpendRow?._count._all ?? 0;
+  // Outstanding owner IOUs — unsettled debts from "paid from company
+  // invest" expenses. Surfaced as its own dashboard tile.
+  const ownerDebtsAgg = await prisma.ownerDebt.aggregate({
+    where: { status: "PENDING" },
+    _sum: { amount: true },
+    _count: { _all: true },
+  });
+  const totalOwnerDebts = ownerDebtsAgg._sum.amount ?? 0;
+  const totalOwnerDebtsCount = ownerDebtsAgg._count._all;
 
   // Outstanding to owners (sum across every property where the company
   // still owes the owner money). Drops the table that used to render this
@@ -412,6 +460,10 @@ export default async function SuperAdminDashboard({
 
   // KPIs
   const totalAgency = propertyTable.reduce((s, p) => s + p.agencyEarnings, 0);
+  // Company profit math is untouched by the new flag — the SPEND row
+  // recorded in Investment is purely informational (it's a draw on
+  // invested capital, not an expense), and the OwnerDebt row will
+  // eventually be settled by the owner.
   const companyNet =
     totalAgency + totalCompanyExtraProfit - totalCompanyExpenses;
 
@@ -493,18 +545,37 @@ export default async function SuperAdminDashboard({
         />
       </div>
 
-      {/* Investments — info only, never fed into any calculation above.
-          Same 4-col grid as the rows above so the tile is one column
-          wide instead of stretching the full dashboard. */}
+      {/* Investments + Owner debts — both info-only, never fed into
+          any KPI calculation. Tiles are clickable: investments → the
+          investment ledger (income + spend), owner debts → list of
+          unsettled IOUs. */}
       <div className="mt-3 grid auto-rows-fr grid-cols-1 gap-3 *:h-full md:grid-cols-2 lg:grid-cols-4">
-        <KpiTile
-          label={`Total investments · ${totalInvestmentsCount} ${
-            totalInvestmentsCount === 1 ? "entry" : "entries"
-          } · info only`}
-          value={formatCurrency(totalInvestments, "AED", loc)}
-          accent="emerald"
-          icon={<Banknote className="h-4 w-4" />}
-        />
+        <Link
+          href={`/${loc}/admin/company/investments`}
+          className="contents"
+        >
+          <KpiTile
+            label={`Investments · ${totalInvestmentsCount} in · ${totalInvestmentSpentCount} out`}
+            value={formatCurrency(
+              totalInvestments - totalInvestmentSpent,
+              "AED",
+              loc,
+            )}
+            accent="emerald"
+            icon={<Banknote className="h-4 w-4" />}
+          />
+        </Link>
+        <Link
+          href={`/${loc}/admin/company/owner-debts`}
+          className="contents"
+        >
+          <KpiTile
+            label={`Owner debts · ${totalOwnerDebtsCount} pending`}
+            value={formatCurrency(totalOwnerDebts, "AED", loc)}
+            accent={totalOwnerDebtsCount > 0 ? "amber" : "indigo"}
+            icon={<HandCoins className="h-4 w-4" />}
+          />
+        </Link>
       </div>
     </div>
   );

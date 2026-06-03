@@ -61,6 +61,7 @@ model User {
   ownerReports     OwnerReport[]  @relation("OwnerReportRecipient")
   createdReports   OwnerReport[]  @relation("OwnerReportCreator")
   devices          OwnerDevice[]
+  debts            OwnerDebt[]    @relation("OwnerDebts")
 }
 
 model Property {
@@ -97,6 +98,8 @@ model Property {
   companyEntries CompanyExpense[]
   ownerReports   OwnerReport[]
   projection     PropertyProjection?
+  investmentSpends Investment[]
+  ownerDebts     OwnerDebt[]
 
   @@index([ownerId])
 }
@@ -274,6 +277,15 @@ model Expense {
   // Billing month "YYYY-MM" the expense belongs to. Defaults to the
   // expense date's month; admins can flip "Next month" in the form.
   monthKey    String?     @db.VarChar(7)
+  // When true the company paid for this expense out of invested
+  // capital. Triggers two side-effects on create:
+  //   1) an Investment SPEND row is auto-recorded
+  //   2) an OwnerDebt row is created against the property's owner
+  // The expense itself still appears in the owner's report so they
+  // see what was spent on the property.
+  paidFromCompanyInvest Boolean @default(false)
+  investmentSpend       Investment?     @relation("ExpenseInvestmentSpend")
+  ownerDebt             OwnerDebt?      @relation("ExpenseOwnerDebt")
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -281,6 +293,7 @@ model Expense {
   @@index([date])
   @@index([reportId])
   @@index([monthKey])
+  @@index([paidFromCompanyInvest])
 }
 
 model Advance {
@@ -375,18 +388,64 @@ model CompanyExpense {
   @@index([monthKey])
 }
 
-// Capital injections into the company. Purely informational —
-// never folded into any P&L, expense, or owner-settlement calculation.
-model Investment {
-  id          String   @id @default(cuid())
-  amount      Float
-  source      String   @db.VarChar(255)
-  description String?  @db.Text
-  date        DateTime
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+// Ledger of investor capital flowing into and out of the company.
+// INCOME rows record money received from investors; SPEND rows
+// record money paid out of that pool — typically auto-created when
+// a property expense is marked "paid from company invest". Purely
+// informational on the dashboard, never folded into the P&L math.
+enum InvestmentKind {
+  INCOME
+  SPEND
+}
 
+model Investment {
+  id          String         @id @default(cuid())
+  kind        InvestmentKind @default(INCOME)
+  amount      Float
+  source      String         @db.VarChar(255)
+  description String?        @db.Text
+  date        DateTime
+  // Optional linkage when a SPEND row was auto-created from a
+  // property expense — keeps an audit trail in both directions.
+  propertyId  String?
+  property    Property?      @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  expenseId   String?        @unique
+  expense     Expense?       @relation("ExpenseInvestmentSpend", fields: [expenseId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([kind])
+  @@index([propertyId])
   @@index([date])
+}
+
+// Pending / settled IOUs owed by owners to the company. Created
+// automatically when an owner's expense is paid from invested
+// capital — the owner now owes the company that amount. Admin flips
+// the row to PAID once the owner reimburses.
+enum DebtStatus {
+  PENDING
+  PAID
+}
+
+model OwnerDebt {
+  id          String     @id @default(cuid())
+  ownerId     String
+  owner       User       @relation("OwnerDebts", fields: [ownerId], references: [id], onDelete: Cascade)
+  propertyId  String?
+  property    Property?  @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  expenseId   String?    @unique
+  expense     Expense?   @relation("ExpenseOwnerDebt", fields: [expenseId], references: [id], onDelete: Cascade)
+  amount      Float
+  description String?    @db.Text
+  status      DebtStatus @default(PENDING)
+  paidAt      DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([propertyId])
 }
 
 // A curated bundle of one property's reservations + expenses, prepared by

@@ -99,6 +99,11 @@ export default async function NewReportPage({
         },
         orderBy: { checkIn: "asc" },
       }),
+      // Owner reports bundle every expense recorded against the
+      // property — even ones that were paid from invested capital.
+      // The owner sees the full picture of what was spent. The
+      // "paid from company invest" rows have their own OwnerDebt
+      // settling life cycle outside the report.
       prisma.expense.findMany({
         where: { propertyId: selectedId, reportId: null },
         orderBy: { date: "asc" },

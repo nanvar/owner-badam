@@ -83,6 +83,7 @@ type ExpenseEntry = {
   type: ExpenseTypeKey;
   description: string;
   amount: number;
+  paidFromCompanyInvest: boolean;
 };
 
 type PaymentEntry = {
@@ -1117,6 +1118,11 @@ function PropertyExpensesDrawer({
                   >
                     {EXPENSE_TYPE_LABELS[e.type]}
                   </span>
+                  {e.paidFromCompanyInvest && (
+                    <span className="inline-flex rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700">
+                      Paid from invest
+                    </span>
+                  )}
                   <span className="text-[10px] text-[var(--color-muted)]">
                     {formatDate(e.date, locale)}
                   </span>
@@ -1191,6 +1197,9 @@ function ExpenseEditor({
     FormData
   >(upsertExpenseAction, undefined);
   const [type, setType] = useState<string>(expense?.type ?? "OTHERS");
+  const [paidFromCompanyInvest, setPaidFromCompanyInvest] = useState<boolean>(
+    expense?.paidFromCompanyInvest ?? false,
+  );
 
   useEffect(() => {
     if (state?.status === "ok" && open) {
@@ -1271,6 +1280,39 @@ function ExpenseEditor({
           />
         </Field>
         <MonthPicker />
+        {/* Pay-from-company-invest toggle. When on:
+            • the bill is paid out of invested capital (Investment
+              SPEND row is auto-created),
+            • the owner now owes us this amount (OwnerDebt row is
+              auto-created in PENDING status),
+            • dashboard owner payout is NOT reduced by this expense. */}
+        <label
+          htmlFor="exp-paid-from-invest"
+          className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-[var(--color-border)] bg-white px-3 py-2.5"
+        >
+          <input
+            id="exp-paid-from-invest"
+            type="checkbox"
+            checked={paidFromCompanyInvest}
+            onChange={(e) => setPaidFromCompanyInvest(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-indigo-600"
+          />
+          <span className="flex-1">
+            <span className="block text-sm font-medium">
+              Pay from company invest
+            </span>
+            <span className="block text-xs text-[var(--color-muted)]">
+              {paidFromCompanyInvest
+                ? "Logged as an investment SPEND + owner debt. Not deducted from owner payout."
+                : "Default: owner covers this. Deducted from their payout."}
+            </span>
+          </span>
+        </label>
+        <input
+          type="hidden"
+          name="paidFromCompanyInvest"
+          value={paidFromCompanyInvest ? "true" : "false"}
+        />
         {state?.status === "error" && (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
             {state.message}

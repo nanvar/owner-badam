@@ -19,6 +19,7 @@ const ExpenseSchema = z
       .regex(/^\d{4}-\d{2}$/)
       .optional()
       .or(z.literal("")),
+    paidFromCompanyInvest: z.boolean().optional().default(false),
   })
   // Description is mandatory only for OTHERS — typed expenses (DEWA, GAS …)
   // are self-explanatory.
@@ -40,6 +41,16 @@ export async function upsertExpenseAction(
   formData: FormData,
 ): Promise<ExpenseState> {
   await requireRole("ADMIN");
+  // Checkbox-style boolean: hidden mirror input from the form sends
+  // "true" / "false" so the action gets an explicit value. Missing
+  // field defaults to false (default behavior — owner pays the bill).
+  const paidFromCompanyInvestRaw = formData.get(
+    "paidFromCompanyInvest",
+  ) as string | null;
+  const paidFromCompanyInvest =
+    paidFromCompanyInvestRaw === "true" ||
+    paidFromCompanyInvestRaw === "on" ||
+    paidFromCompanyInvestRaw === "1";
   const parsed = ExpenseSchema.safeParse({
     id: (formData.get("id") as string | null) || undefined,
     propertyId: formData.get("propertyId"),
@@ -48,6 +59,7 @@ export async function upsertExpenseAction(
     description: (formData.get("description") as string | null) ?? "",
     amount: formData.get("amount") || 0,
     monthKey: (formData.get("monthKey") as string | null) ?? "",
+    paidFromCompanyInvest,
   });
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -55,29 +67,121 @@ export async function upsertExpenseAction(
   const v = parsed.data;
   const date = new Date(v.date);
   const monthKey = v.monthKey || monthKeyFor(date);
+  const data = {
+    propertyId: v.propertyId,
+    date,
+    type: v.type,
+    description: v.description ?? "",
+    amount: v.amount,
+    monthKey,
+    paidFromCompanyInvest: v.paidFromCompanyInvest,
+  };
+
+  // We need the property's owner to mint the OwnerDebt when this is
+  // a "paid from company invest" expense. One query covers create,
+  // update, and the no-op case.
+  const propertyForOwner = v.paidFromCompanyInvest
+    ? await prisma.property.findUnique({
+        where: { id: v.propertyId },
+        select: { ownerId: true, name: true },
+      })
+    : null;
+  if (v.paidFromCompanyInvest && !propertyForOwner) {
+    return { status: "error", message: "Property not found" };
+  }
+
   if (v.id) {
-    await prisma.expense.update({
-      where: { id: v.id },
-      data: {
-        propertyId: v.propertyId,
-        date,
-        type: v.type,
-        description: v.description ?? "",
-        amount: v.amount,
-        monthKey,
-      },
+    // Update path. If the flag is currently true, we keep the
+    // companion Investment SPEND + OwnerDebt rows in sync; if the
+    // flag was flipped off we clear them. If it was flipped on we
+    // create fresh ones. Everything runs in a single transaction so
+    // the three tables can never drift.
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.expense.findUnique({
+        where: { id: v.id! },
+        select: { paidFromCompanyInvest: true },
+      });
+      await tx.expense.update({ where: { id: v.id! }, data });
+      if (v.paidFromCompanyInvest) {
+        await tx.investment.upsert({
+          where: { expenseId: v.id! },
+          create: {
+            kind: "SPEND",
+            amount: v.amount,
+            source: `${v.type} · ${propertyForOwner!.name}`,
+            description: v.description || null,
+            date,
+            propertyId: v.propertyId,
+            expenseId: v.id!,
+          },
+          update: {
+            amount: v.amount,
+            source: `${v.type} · ${propertyForOwner!.name}`,
+            description: v.description || null,
+            date,
+            propertyId: v.propertyId,
+          },
+        });
+        await tx.ownerDebt.upsert({
+          where: { expenseId: v.id! },
+          create: {
+            ownerId: propertyForOwner!.ownerId,
+            propertyId: v.propertyId,
+            expenseId: v.id!,
+            amount: v.amount,
+            description: v.description || null,
+          },
+          update: {
+            ownerId: propertyForOwner!.ownerId,
+            propertyId: v.propertyId,
+            amount: v.amount,
+            description: v.description || null,
+            // Don't touch status on an edit — if the debt was already
+            // PAID, the admin marked it settled deliberately.
+          },
+        });
+      } else if (existing?.paidFromCompanyInvest) {
+        // Flag flipped off: drop the companion rows. Cascade on the
+        // FK does the heavy lifting if we instead deleted the
+        // Expense, but here the Expense itself stays.
+        await tx.investment.deleteMany({
+          where: { expenseId: v.id! },
+        });
+        await tx.ownerDebt.deleteMany({
+          where: { expenseId: v.id! },
+        });
+      }
     });
   } else {
-    await prisma.expense.create({
-      data: {
-        propertyId: v.propertyId,
-        date,
-        type: v.type,
-        description: v.description ?? "",
-        amount: v.amount,
-        monthKey,
-      },
-    });
+    // Create path. Same transactional triple-write when the flag is
+    // on; plain create otherwise.
+    if (v.paidFromCompanyInvest) {
+      await prisma.$transaction(async (tx) => {
+        const created = await tx.expense.create({ data });
+        await tx.investment.create({
+          data: {
+            kind: "SPEND",
+            amount: v.amount,
+            source: `${v.type} · ${propertyForOwner!.name}`,
+            description: v.description || null,
+            date,
+            propertyId: v.propertyId,
+            expenseId: created.id,
+          },
+        });
+        await tx.ownerDebt.create({
+          data: {
+            ownerId: propertyForOwner!.ownerId,
+            propertyId: v.propertyId,
+            expenseId: created.id,
+            amount: v.amount,
+            description: v.description || null,
+          },
+        });
+      });
+    } else {
+      await prisma.expense.create({ data });
+    }
   }
   return { status: "ok" };
 }
