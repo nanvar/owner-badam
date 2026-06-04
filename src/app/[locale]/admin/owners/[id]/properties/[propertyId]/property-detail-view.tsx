@@ -24,6 +24,11 @@ import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { crawlAirbnbAction, type CrawlState } from "@/app/actions/crawl";
 import type { Locale } from "@/i18n/config";
 import { PropertyMediaPanel } from "./property-media-panel";
+import {
+  ServiceChargeCard,
+  type ServiceSchedule,
+  type ServiceInstance,
+} from "./service-charge-card";
 
 type Property = {
   id: string;
@@ -123,6 +128,8 @@ export function PropertyDetailView({
   adminPhotos = [],
   documents = [],
   events = [],
+  serviceSchedule = null,
+  serviceInstances = [],
 }: {
   locale: Locale;
   property: Property;
@@ -131,6 +138,8 @@ export function PropertyDetailView({
   adminPhotos?: AdminPhoto[];
   documents?: DocumentItem[];
   events?: EventItem[];
+  serviceSchedule?: ServiceSchedule;
+  serviceInstances?: ServiceInstance[];
 }) {
   const router = useRouter();
   const [crawlState, setCrawlState] = useState<CrawlState | null>(null);
@@ -455,6 +464,18 @@ export function PropertyDetailView({
           documents={documents}
           events={events}
           locale={locale}
+        />
+      </div>
+
+      {/* Service charge — quarterly bill tracker. Surfaced as its own
+          card so admins always see the next due date and current
+          payment state at a glance. */}
+      <div className="mt-4">
+        <ServiceChargeCard
+          propertyId={property.id}
+          locale={locale}
+          schedule={serviceSchedule}
+          instances={serviceInstances}
         />
       </div>
 
