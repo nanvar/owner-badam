@@ -20,6 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Field, Textarea } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
 import { PageHeader } from "@/components/app-shell";
+import { FadeIn } from "@/components/ui/motion";
+import { EmptyState } from "@/components/owner/empty-state";
 import { cn, formatDate } from "@/lib/utils";
 import {
   createOwnerReservationRequestAction,
@@ -87,13 +89,12 @@ export function OwnerStayRequestsView({
       />
 
       {propsWithQuota.length === 0 ? (
-        <Card className="grid place-items-center px-6 py-16 text-center">
-          <BedDouble className="h-8 w-8 text-[var(--color-muted)]" />
-          <p className="mt-3 text-sm text-[var(--color-muted)]">
-            No stay quota configured on your properties yet. Reach out to
-            management to set one up.
-          </p>
-        </Card>
+        <EmptyState
+          title="No stay quota yet"
+          description="Reach out to management to set one up — once a property has a quota, you can request your own stays from here."
+          illustration="/illustrations/owner-stay-empty.svg"
+          icon={<BedDouble className="h-7 w-7" />}
+        />
       ) : (
         <div className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {propsWithQuota.map((p) => (

@@ -10,6 +10,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { PwaBoot } from "@/components/pwa-boot";
 import { ActivityBell } from "@/components/activity-bell";
+import { PageTransition } from "@/components/owner/page-transition";
 import { requireRole } from "@/lib/auth";
 import { isLocale } from "@/i18n/config";
 import { notFound } from "next/navigation";
@@ -80,7 +81,7 @@ export default async function OwnerLayout({
       }}
     >
       <PwaBoot />
-      {children}
+      <PageTransition>{children}</PageTransition>
     </AppShell>
   );
 }
