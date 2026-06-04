@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { crawlAirbnbAction, type CrawlState } from "@/app/actions/crawl";
 import type { Locale } from "@/i18n/config";
+import { PropertyMediaPanel } from "./property-media-panel";
 
 type Property = {
   id: string;
@@ -40,6 +41,39 @@ type Property = {
   photos: { url: string; caption?: string }[];
   crawledAt: string | null;
   reservationCount: number;
+  managementOnly: boolean;
+  coverPhotoUrl: string | null;
+};
+
+export type AdminPhoto = {
+  id: string;
+  url: string;
+  kind: string;
+  title: string | null;
+  caption: string | null;
+  createdAt: string;
+};
+
+export type DocumentItem = {
+  id: string;
+  url: string;
+  fileName: string | null;
+  fileSize: number | null;
+  mimeType: string | null;
+  title: string | null;
+  caption: string | null;
+  createdAt: string;
+};
+
+export type EventItem = {
+  id: string;
+  kind: string;
+  title: string;
+  description: string | null;
+  happenedAt: string;
+  createdAt: string;
+  createdByName: string | null;
+  media: { id: string; url: string; mimeType: string | null }[];
 };
 
 type Reservation = {
@@ -86,11 +120,17 @@ export function PropertyDetailView({
   property,
   reservations,
   labels,
+  adminPhotos = [],
+  documents = [],
+  events = [],
 }: {
   locale: Locale;
   property: Property;
   reservations: Reservation[];
   labels: Labels;
+  adminPhotos?: AdminPhoto[];
+  documents?: DocumentItem[];
+  events?: EventItem[];
 }) {
   const router = useRouter();
   const [crawlState, setCrawlState] = useState<CrawlState | null>(null);
@@ -404,6 +444,18 @@ export function PropertyDetailView({
             </div>
           )}
         </aside>
+      </div>
+
+      {/* Photos / Documents / History tabbed panel */}
+      <div className="mt-6">
+        <PropertyMediaPanel
+          propertyId={property.id}
+          coverPhotoUrl={property.coverPhotoUrl}
+          adminPhotos={adminPhotos}
+          documents={documents}
+          events={events}
+          locale={locale}
+        />
       </div>
 
       {/* Lightbox */}

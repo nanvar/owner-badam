@@ -16,6 +16,8 @@ const PropertySchema = z.object({
   // Toggles "management-only" mode — no rentals expected, dashboards
   // hide revenue KPIs, and stay-quota / service-charge features unlock.
   managementOnly: z.boolean().optional().default(false),
+  // Optional S3 URL set by the dedicated PropertyForm uploader.
+  coverPhotoUrl: z.string().url().optional().or(z.literal("")),
   // Manual override of the property's "added on" date — drives the months
   // that show up in the owner's reports.
   createdAt: z.string().optional().or(z.literal("")),
@@ -46,6 +48,7 @@ export async function upsertPropertyAction(
     ownerId: formData.get("ownerId"),
     notes: formData.get("notes") || "",
     managementOnly,
+    coverPhotoUrl: formData.get("coverPhotoUrl") || "",
     createdAt: formData.get("createdAt") || "",
   });
   if (!parsed.success) {
@@ -75,6 +78,7 @@ export async function upsertPropertyAction(
     notes: data.notes || null,
     ownerId: data.ownerId,
     managementOnly: data.managementOnly,
+    coverPhotoUrl: data.coverPhotoUrl || null,
     ...(manualCreatedAt ? { createdAt: manualCreatedAt } : {}),
   };
   const upserted = data.id
