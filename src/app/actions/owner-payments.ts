@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { pushToOwner } from "@/lib/push";
+import { notify, NotificationType } from "@/lib/notify";
 import { monthKeyFor } from "@/lib/utils";
 
 const OwnerPaymentSchema = z.object({
@@ -73,12 +73,15 @@ export async function createOwnerPaymentAction(
       message: (err as Error).message ?? "Failed to record payment",
     };
   }
-  // Best-effort push — fire-and-forget so a notification outage never
-  // blocks the bookkeeping action.
-  pushToOwner(v.ownerId, {
+  // Best-effort dispatch — fans out to Expo push (RN), Web Push (PWA)
+  // and the owner's activity feed in one call.
+  notify({
+    userId: v.ownerId,
+    type: NotificationType.OWNER_PAYMENT_RECORDED,
     title: "Payment received",
     body: `${v.amount.toLocaleString("en-GB", { style: "currency", currency: "AED", maximumFractionDigits: 2 })} recorded${v.reference ? ` · ${v.reference}` : ""}`,
-    data: { type: "payment" },
+    url: "/owner/payments",
+    data: { amount: v.amount, reference: v.reference ?? null },
   }).catch(() => {});
   return { status: "ok" };
 }
