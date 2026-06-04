@@ -29,6 +29,11 @@ import {
   type ServiceSchedule,
   type ServiceInstance,
 } from "./service-charge-card";
+import {
+  StayQuotaCard,
+  type Quota,
+  type StayRequest,
+} from "./stay-quota-card";
 
 type Property = {
   id: string;
@@ -130,6 +135,8 @@ export function PropertyDetailView({
   events = [],
   serviceSchedule = null,
   serviceInstances = [],
+  stayQuota = null,
+  stayRequests = [],
 }: {
   locale: Locale;
   property: Property;
@@ -140,6 +147,8 @@ export function PropertyDetailView({
   events?: EventItem[];
   serviceSchedule?: ServiceSchedule;
   serviceInstances?: ServiceInstance[];
+  stayQuota?: Quota;
+  stayRequests?: StayRequest[];
 }) {
   const router = useRouter();
   const [crawlState, setCrawlState] = useState<CrawlState | null>(null);
@@ -476,6 +485,16 @@ export function PropertyDetailView({
           locale={locale}
           schedule={serviceSchedule}
           instances={serviceInstances}
+        />
+      </div>
+
+      {/* Owner stay quota + reservation requests. */}
+      <div className="mt-4">
+        <StayQuotaCard
+          propertyId={property.id}
+          locale={locale}
+          quota={stayQuota}
+          requests={stayRequests}
         />
       </div>
 
