@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/app-shell";
+import { FadeIn, StaggerList } from "@/components/ui/motion";
+import { EmptyState } from "@/components/owner/empty-state";
 import { cn, formatDate } from "@/lib/utils";
 import type { Locale } from "@/i18n/config";
 
@@ -179,12 +181,12 @@ export function ActivityView({
       />
 
       {items.length === 0 ? (
-        <Card className="grid place-items-center px-6 py-16 text-center">
-          <Bell className="h-8 w-8 text-[var(--color-muted)]" />
-          <p className="mt-3 text-sm text-[var(--color-muted)]">
-            Nothing yet. New bookings, reports and updates will land here.
-          </p>
-        </Card>
+        <EmptyState
+          title="All caught up"
+          description="New bookings, reports and updates will land here as they happen."
+          illustration="/illustrations/owner-activity-empty.svg"
+          icon={<Bell className="h-7 w-7" />}
+        />
       ) : (
         <div className="space-y-6">
           {groups.map((g) => (
