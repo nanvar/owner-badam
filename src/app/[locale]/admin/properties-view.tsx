@@ -67,6 +67,7 @@ type Property = {
   cleaningFee: number;
   color: string;
   notes: string | null;
+  managementOnly: boolean;
   ownerId: string;
   ownerName: string;
   reservationCount: number;
@@ -405,12 +406,19 @@ function PropertyCard({
                 {property.address}
               </div>
             )}
-            {!hideOwner && (
-              <div className="mt-2">
-                <Badge tone="brand">
-                  <Building2 className="h-3 w-3" />
-                  {property.ownerName}
-                </Badge>
+            {(property.managementOnly || !hideOwner) && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {!hideOwner && (
+                  <Badge tone="brand">
+                    <Building2 className="h-3 w-3" />
+                    {property.ownerName}
+                  </Badge>
+                )}
+                {property.managementOnly && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700">
+                    Management only
+                  </span>
+                )}
               </div>
             )}
           </Link>
@@ -606,8 +614,13 @@ function PropertyTable({
                       style={{ background: p.color }}
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-1 truncate font-semibold tracking-tight group-hover:text-[var(--color-brand)]">
+                      <span className="flex items-center gap-1.5 truncate font-semibold tracking-tight group-hover:text-[var(--color-brand)]">
                         {p.name}
+                        {p.managementOnly && (
+                          <span className="inline-flex shrink-0 items-center rounded-full bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-indigo-700">
+                            Mgmt
+                          </span>
+                        )}
                         <ChevronRight className="h-3.5 w-3.5 text-[var(--color-muted)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--color-brand)]" />
                       </span>
                       {p.address && (
@@ -843,6 +856,9 @@ function PropertyEditor({
     undefined,
   );
   const isEdit = !!property;
+  const [managementOnly, setManagementOnly] = useState<boolean>(
+    property?.managementOnly ?? false,
+  );
 
   useEffect(() => {
     if (state?.status === "ok" && open) {
@@ -963,6 +979,37 @@ function PropertyEditor({
             placeholder="Internal notes (Wi-Fi codes, instructions...)"
           />
         </Field>
+        {/* Management-only flag. When on, the property is just being
+            managed for the owner (not rented out) — owner can stay
+            there themselves up to the configured quota and the service
+            charge tracker becomes the primary cadence. */}
+        <label
+          htmlFor="property-management-only"
+          className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-[var(--color-border)] bg-white px-3 py-2.5"
+        >
+          <input
+            id="property-management-only"
+            type="checkbox"
+            checked={managementOnly}
+            onChange={(e) => setManagementOnly(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-indigo-600"
+          />
+          <span className="flex-1">
+            <span className="block text-sm font-medium">
+              Management only — not rented out
+            </span>
+            <span className="block text-xs text-[var(--color-muted)]">
+              {managementOnly
+                ? "Dashboards hide revenue. Owner-stay quota + service charge tracking unlock."
+                : "Default: this property is rented out and earns revenue."}
+            </span>
+          </span>
+        </label>
+        <input
+          type="hidden"
+          name="managementOnly"
+          value={managementOnly ? "true" : "false"}
+        />
         {state?.status === "error" && (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
             {state.message}

@@ -62,6 +62,13 @@ model User {
   createdReports   OwnerReport[]  @relation("OwnerReportCreator")
   devices          OwnerDevice[]
   debts            OwnerDebt[]    @relation("OwnerDebts")
+  preferences      UserPreference?
+  webPushSubs      WebPushSubscription[]
+  activities       ActivityEvent[]
+  uploadedMedia    PropertyMedia[]    @relation("MediaUploader")
+  createdEvents    PropertyEvent[]    @relation("EventCreator")
+  stayRequests     OwnerReservationRequest[] @relation("RequestOwner")
+  decidedRequests  OwnerReservationRequest[] @relation("RequestDecider")
 }
 
 model Property {
@@ -84,6 +91,13 @@ model Property {
   photos        Json?
   crawledAt     DateTime?
   crawlPayload  Json?
+  // When true the property is only being managed for the owner — no
+  // rentals expected. Affects dashboards (no revenue KPIs) and unlocks
+  // the owner's "stay quota + service charge" workflow.
+  managementOnly Boolean   @default(false)
+  // Optional admin-uploaded cover photo (S3 URL) used when the Airbnb
+  // photo array is empty (typical for managementOnly properties).
+  coverPhotoUrl String?   @db.Text
   ownerId       String
   owner         User      @relation("OwnerProperties", fields: [ownerId], references: [id], onDelete: Cascade)
   createdAt     DateTime  @default(now())
@@ -100,8 +114,15 @@ model Property {
   projection     PropertyProjection?
   investmentSpends Investment[]
   ownerDebts     OwnerDebt[]
+  media            PropertyMedia[]
+  events           PropertyEvent[]
+  serviceCharge    ServiceChargeSchedule?
+  serviceInstances ServiceChargeInstance[]
+  stayQuota        OwnerStayQuota?
+  stayRequests     OwnerReservationRequest[]
 
   @@index([ownerId])
+  @@index([managementOnly])
 }
 
 // One-shot pitch deck for prospective owners. Captures every dynamic
@@ -286,6 +307,11 @@ model Expense {
   paidFromCompanyInvest Boolean @default(false)
   investmentSpend       Investment?     @relation("ExpenseInvestmentSpend")
   ownerDebt             OwnerDebt?      @relation("ExpenseOwnerDebt")
+  // Receipt / proof attachment (S3-hosted). Required by the form on
+  // every new expense — admins must upload a photo or PDF so the
+  // owner can verify spend.
+  receiptMediaId String?
+  receiptMedia   PropertyMedia? @relation("ExpenseReceipt", fields: [receiptMediaId], references: [id], onDelete: SetNull)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -550,4 +576,224 @@ model AppSettings {
   currency    String   @default("AED")
   timezone    String   @default("Asia/Dubai")
   updatedAt   DateTime @updatedAt
+}
+
+// ============================================================
+// Foundation models for property docs/history, owner activity,
+// service charge tracking, owner stay quota + booking requests,
+// and per-user notification/UI preferences.
+// ============================================================
+
+// Universal media row attached to a property. The `kind` discriminates
+// gallery photos, official documents (contracts, deeds, NOC), receipt
+// attachments for expenses, and per-event photos.
+enum PropertyMediaKind {
+  PHOTO
+  DOCUMENT
+  RECEIPT
+  EVENT_PHOTO
+  SERVICE_CHARGE_PROOF
+  COVER
+}
+
+model PropertyMedia {
+  id           String            @id @default(cuid())
+  propertyId   String
+  property     Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  kind         PropertyMediaKind
+  // Public S3 URL. The form uploads via presigned PUT then stores the
+  // returned canonical URL here. Original filename + size + mime kept
+  // for download UX.
+  url          String            @db.Text
+  fileName     String?           @db.VarChar(255)
+  fileSize     Int?
+  mimeType     String?           @db.VarChar(120)
+  title        String?           @db.VarChar(255)
+  caption      String?           @db.Text
+  takenAt      DateTime?
+  uploadedById String?
+  uploadedBy   User?             @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  // Reverse FK populated when this row is referenced by an Expense as
+  // a receipt — lets us prevent deletion mid-flight.
+  expenseReceipts Expense[]      @relation("ExpenseReceipt")
+  eventId      String?
+  event        PropertyEvent?    @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  serviceInstanceId String?
+  serviceInstance   ServiceChargeInstance? @relation(fields: [serviceInstanceId], references: [id], onDelete: SetNull)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([propertyId, kind])
+  @@index([eventId])
+  @@index([serviceInstanceId])
+}
+
+// Timeline entry on a property — admin notes about renovations,
+// inspections, condition changes, etc. Owner sees these in the
+// property history tab.
+model PropertyEvent {
+  id          String          @id @default(cuid())
+  propertyId  String
+  property    Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  kind        String          @db.VarChar(40) // free-form tag: RENOVATION / INSPECTION / FURNISHING / ISSUE / NOTE …
+  title       String          @db.VarChar(255)
+  description String?         @db.Text
+  happenedAt  DateTime
+  createdById String?
+  createdBy   User?           @relation("EventCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  media       PropertyMedia[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([propertyId])
+  @@index([happenedAt])
+}
+
+// Service charge configuration: per-property quarterly (or custom)
+// bill that the building/developer emails directly to the owner.
+// PMS only nags the owner to check email + lets admin file proof.
+model ServiceChargeSchedule {
+  id                 String   @id @default(cuid())
+  propertyId         String   @unique
+  property           Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  // Months between bills (3 = quarterly, 6 = semi-annual, 12 = annual).
+  frequencyMonths    Int      @default(3)
+  // How many days before dueDate the daily reminder starts.
+  reminderDaysBefore Int      @default(7)
+  // First-cycle anchor; subsequent instances are computed from this.
+  firstDueDate       DateTime
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+enum ServiceChargeStatus {
+  UPCOMING
+  REMINDING
+  PAID
+  SKIPPED
+}
+
+model ServiceChargeInstance {
+  id           String              @id @default(cuid())
+  propertyId   String
+  property     Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  dueDate      DateTime
+  status       ServiceChargeStatus @default(UPCOMING)
+  paidAt       DateTime?
+  amount       Float?              // optional — admin can record after payment
+  notes        String?             @db.Text
+  // Last day daily reminders were sent (so the cron doesn't double-fire).
+  lastReminderAt DateTime?
+  proofs       PropertyMedia[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([propertyId, dueDate])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// Per-property cap on how many days per year the owner may stay in
+// the unit themselves. Used to validate OwnerReservationRequest rows.
+model OwnerStayQuota {
+  id          String   @id @default(cuid())
+  propertyId  String   @unique
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  daysPerYear Int      @default(0)
+  // Month-day anchor for the yearly cycle (1=January, 12=December).
+  // Defaults to Jan 1.
+  yearStartMonth Int   @default(1)
+  yearStartDay   Int   @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum StayRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model OwnerReservationRequest {
+  id         String            @id @default(cuid())
+  propertyId String
+  property   Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  ownerId    String
+  owner      User              @relation("RequestOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  checkIn    DateTime
+  checkOut   DateTime
+  nights     Int
+  notes      String?           @db.Text
+  status     StayRequestStatus @default(PENDING)
+  decidedAt  DateTime?
+  decidedById String?
+  decidedBy  User?             @relation("RequestDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decisionNote String?         @db.Text
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@index([propertyId])
+  @@index([ownerId])
+  @@index([status])
+  @@index([checkIn])
+}
+
+// Owner-facing notification / activity feed. One row per noteworthy
+// thing that happened that the owner might care about.
+model ActivityEvent {
+  id        String   @id @default(cuid())
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  // Stable enum-style tag — see NotificationType in code for the full
+  // set. Stored as String so we don't need a schema migration when
+  // adding new categories.
+  type      String   @db.VarChar(60)
+  title     String   @db.VarChar(255)
+  body      String?  @db.Text
+  // Anything the UI might want — propertyId, expenseId, amount, etc.
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([ownerId, createdAt])
+  @@index([ownerId, readAt])
+  @@index([type])
+}
+
+// Free-form per-user prefs. JSON keeps it open-ended so future
+// preference flags don't require schema migrations.
+model UserPreference {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Strip the dashboard down to a single hero card for owners who
+  // just want to glance at their income.
+  easyMode          Boolean  @default(false)
+  // Per-notification-category opt-in/out. Keys are NotificationType
+  // values. Missing keys default to ENABLED.
+  notificationPrefs Json?
+  // Reserved for future UI prefs (theme, locale override, etc.).
+  ui                Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// VAPID-based Web Push subscription. Mirrors PushManager.subscribe
+// output. One row per device/browser per user.
+model WebPushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Push endpoints fit in 500 chars in practice; we cap so MySQL can
+  // index it. p256dh + auth are smaller fixed-size base64 strings.
+  endpoint  String   @unique(length: 500) @db.VarChar(500)
+  p256dh    String   @db.VarChar(255)
+  auth      String   @db.VarChar(120)
+  userAgent String?  @db.VarChar(255)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
