@@ -10,29 +10,17 @@
 import { prisma } from "./prisma";
 import { sendWebPushToUser } from "./webpush";
 import { pushToOwner } from "./push";
+// NotificationType + NotificationTypeKey moved to notification-types.ts
+// so client components can import them without dragging this file's
+// prisma / push transitive deps into the browser bundle.
+import {
+  NotificationType,
+  type NotificationTypeKey,
+} from "./notification-types";
 
-// Stable category tags — the activity feed + notification settings
-// share this enum so toggles map 1:1 to events.
-export const NotificationType = {
-  NEW_RESERVATION: "NEW_RESERVATION",
-  RESERVATION_PAID: "RESERVATION_PAID",
-  CHECK_IN_TODAY: "CHECK_IN_TODAY",
-  CHECK_OUT_TODAY: "CHECK_OUT_TODAY",
-  NEW_EXPENSE: "NEW_EXPENSE",
-  PROPERTY_EVENT: "PROPERTY_EVENT",
-  PROPERTY_DOCUMENT_UPLOADED: "PROPERTY_DOCUMENT_UPLOADED",
-  NEW_REPORT: "NEW_REPORT",
-  OWNER_PAYMENT_RECORDED: "OWNER_PAYMENT_RECORDED",
-  SERVICE_CHARGE_DUE: "SERVICE_CHARGE_DUE",
-  SERVICE_CHARGE_PAID: "SERVICE_CHARGE_PAID",
-  OWNER_DEBT_CREATED: "OWNER_DEBT_CREATED",
-  OWNER_DEBT_SETTLED: "OWNER_DEBT_SETTLED",
-  STAY_REQUEST_APPROVED: "STAY_REQUEST_APPROVED",
-  STAY_REQUEST_REJECTED: "STAY_REQUEST_REJECTED",
-} as const;
-
-export type NotificationTypeKey =
-  (typeof NotificationType)[keyof typeof NotificationType];
+// Re-export for existing call sites that import from notify.ts.
+export { NotificationType };
+export type { NotificationTypeKey };
 
 export type NotifyInput = {
   userId: string;
