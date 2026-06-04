@@ -25,6 +25,7 @@ import { Card, CardBody } from "@/components/ui/card";
 import { Input, Field, Textarea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Sheet } from "@/components/ui/sheet";
+import { S3Uploader, type UploadedFile } from "@/components/ui/s3-uploader";
 import { PageHeader } from "@/components/app-shell";
 import {
   formatCurrency,
@@ -187,7 +188,7 @@ export function PropertiesView({
                   {syncPending ? labels.syncing : labels.syncNow}
                 </Button>
               )}
-              <Button onClick={() => setEditing(null)}>
+              <Button onClick={() => router.push(`/${locale}/admin/properties/new`)}>
                 <Plus className="h-4 w-4" />
                 {labels.addProperty}
               </Button>
@@ -198,7 +199,7 @@ export function PropertiesView({
 
       {hideTitle && (
         <div className="mb-3 flex justify-end">
-          <Button onClick={() => setEditing(null)}>
+          <Button onClick={() => router.push(`/${locale}/admin/properties/new`)}>
             <Plus className="h-4 w-4" />
             {labels.addProperty}
           </Button>
@@ -250,7 +251,7 @@ export function PropertiesView({
           showPaymentsColumn={showPaymentsColumn}
           onShowExpenses={(p) => setExpensesProperty(p)}
           onRecordPayment={(p) => setPaymentsProperty(p)}
-          onEdit={(p) => setEditing(p)}
+          onEdit={(p) => router.push(`/${locale}/admin/properties/${p.id}/edit`)}
           onDelete={(id) => setDeleteId(id)}
         />
       ) : (
@@ -271,7 +272,7 @@ export function PropertiesView({
               }
               onShowExpenses={() => setExpensesProperty(p)}
               onRecordPayment={() => setPaymentsProperty(p)}
-              onEdit={() => setEditing(p)}
+              onEdit={() => router.push(`/${locale}/admin/properties/${p.id}/edit`)}
               onDelete={() => setDeleteId(p.id)}
               onSync={async () => {
                 const r = await syncOneAction(p.id);
@@ -1247,6 +1248,10 @@ function ExpenseEditor({
   const [paidFromCompanyInvest, setPaidFromCompanyInvest] = useState<boolean>(
     expense?.paidFromCompanyInvest ?? false,
   );
+  // Receipt — uploaded directly to S3 via the presigned PUT, mirrored
+  // here so the form submission can carry the URL + meta to the
+  // action.
+  const [receipt, setReceipt] = useState<UploadedFile | null>(null);
 
   useEffect(() => {
     if (state?.status === "ok" && open) {
@@ -1327,6 +1332,46 @@ function ExpenseEditor({
           />
         </Field>
         <MonthPicker />
+        {/* Receipt / proof — uploaded directly to S3 with progress.
+            Owner sees this attachment in their reports + expense list
+            to verify the spend. Required for new expenses; on edit
+            the previously-saved receipt sticks around even if the
+            admin doesn't re-attach. */}
+        <Field
+          label="Receipt / proof"
+          htmlFor="exp-receipt"
+          hint="Photo or PDF — owner can open it from their report"
+        >
+          <S3Uploader
+            scope="expense-receipt"
+            scopeId={propertyId}
+            accept="image/*,application/pdf"
+            value={receipt}
+            onChange={setReceipt}
+            label=""
+            hint="Drop the bill / check here"
+          />
+          {receipt && (
+            <>
+              <input type="hidden" name="receiptUrl" value={receipt.publicUrl} />
+              <input
+                type="hidden"
+                name="receiptFileName"
+                value={receipt.fileName}
+              />
+              <input
+                type="hidden"
+                name="receiptFileSize"
+                value={receipt.fileSize}
+              />
+              <input
+                type="hidden"
+                name="receiptMimeType"
+                value={receipt.mimeType}
+              />
+            </>
+          )}
+        </Field>
         {/* Pay-from-company-invest toggle. When on:
             • the bill is paid out of invested capital (Investment
               SPEND row is auto-created),

@@ -21,6 +21,14 @@ const ExpenseSchema = z
       .optional()
       .or(z.literal("")),
     paidFromCompanyInvest: z.boolean().optional().default(false),
+    // Receipt — already uploaded to S3 via the presigned PUT. The form
+    // ships {url, fileName, fileSize, mimeType}; we mint a
+    // PropertyMedia row inside the same transaction so the owner can
+    // see + verify the spend.
+    receiptUrl: z.string().url().optional().or(z.literal("")),
+    receiptFileName: z.string().max(255).optional().or(z.literal("")),
+    receiptFileSize: z.coerce.number().int().nonnegative().optional(),
+    receiptMimeType: z.string().max(120).optional().or(z.literal("")),
   })
   // Description is mandatory only for OTHERS — typed expenses (DEWA, GAS …)
   // are self-explanatory.
@@ -41,7 +49,7 @@ export async function upsertExpenseAction(
   _prev: ExpenseState | undefined,
   formData: FormData,
 ): Promise<ExpenseState> {
-  await requireRole("ADMIN");
+  const session = await requireRole("ADMIN");
   // Checkbox-style boolean: hidden mirror input from the form sends
   // "true" / "false" so the action gets an explicit value. Missing
   // field defaults to false (default behavior — owner pays the bill).
@@ -61,6 +69,10 @@ export async function upsertExpenseAction(
     amount: formData.get("amount") || 0,
     monthKey: (formData.get("monthKey") as string | null) ?? "",
     paidFromCompanyInvest,
+    receiptUrl: (formData.get("receiptUrl") as string | null) ?? "",
+    receiptFileName: (formData.get("receiptFileName") as string | null) ?? "",
+    receiptFileSize: formData.get("receiptFileSize") || undefined,
+    receiptMimeType: (formData.get("receiptMimeType") as string | null) ?? "",
   });
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -68,6 +80,27 @@ export async function upsertExpenseAction(
   const v = parsed.data;
   const date = new Date(v.date);
   const monthKey = v.monthKey || monthKeyFor(date);
+
+  // If the form shipped a receipt URL, mint a PropertyMedia row up
+  // front. The Expense row will reference it via receiptMediaId so
+  // the file is one click away from the owner's expense list.
+  let receiptMediaId: string | null = null;
+  if (v.receiptUrl) {
+    const created = await prisma.propertyMedia.create({
+      data: {
+        propertyId: v.propertyId,
+        kind: "RECEIPT",
+        url: v.receiptUrl,
+        fileName: v.receiptFileName || null,
+        fileSize: v.receiptFileSize ?? null,
+        mimeType: v.receiptMimeType || null,
+        uploadedById: session.userId,
+      },
+      select: { id: true },
+    });
+    receiptMediaId = created.id;
+  }
+
   const data = {
     propertyId: v.propertyId,
     date,
@@ -76,6 +109,7 @@ export async function upsertExpenseAction(
     amount: v.amount,
     monthKey,
     paidFromCompanyInvest: v.paidFromCompanyInvest,
+    ...(receiptMediaId ? { receiptMediaId } : {}),
   };
 
   // We need the property's owner to mint the OwnerDebt when this is

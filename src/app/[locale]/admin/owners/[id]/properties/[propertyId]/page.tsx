@@ -39,6 +39,48 @@ export default async function PropertyDetailPage({
   });
   if (!property) notFound();
 
+  // Photos + documents + history bundle. Each is its own simple
+  // query so the page can render even if one bucket is empty.
+  const [adminPhotos, documents, events] = await Promise.all([
+    prisma.propertyMedia.findMany({
+      where: { propertyId, kind: { in: ["PHOTO", "COVER"] } },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        url: true,
+        kind: true,
+        title: true,
+        caption: true,
+        createdAt: true,
+      },
+    }),
+    prisma.propertyMedia.findMany({
+      where: { propertyId, kind: "DOCUMENT" },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        url: true,
+        fileName: true,
+        fileSize: true,
+        mimeType: true,
+        title: true,
+        caption: true,
+        createdAt: true,
+      },
+    }),
+    prisma.propertyEvent.findMany({
+      where: { propertyId },
+      orderBy: { happenedAt: "desc" },
+      take: 50,
+      include: {
+        media: {
+          select: { id: true, url: true, mimeType: true },
+        },
+        createdBy: { select: { id: true, name: true, email: true } },
+      },
+    }),
+  ]);
+
   const tCommon = await getTranslations({ locale, namespace: "common" });
   const tAdmin = await getTranslations({ locale, namespace: "admin" });
 
@@ -74,7 +116,41 @@ export default async function PropertyDetailPage({
             ? property.crawledAt.toISOString()
             : null,
           reservationCount: property._count.reservations,
+          managementOnly: property.managementOnly,
+          coverPhotoUrl: property.coverPhotoUrl,
         }}
+        adminPhotos={adminPhotos.map((p) => ({
+          id: p.id,
+          url: p.url,
+          kind: p.kind,
+          title: p.title,
+          caption: p.caption,
+          createdAt: p.createdAt.toISOString(),
+        }))}
+        documents={documents.map((d) => ({
+          id: d.id,
+          url: d.url,
+          fileName: d.fileName,
+          fileSize: d.fileSize,
+          mimeType: d.mimeType,
+          title: d.title,
+          caption: d.caption,
+          createdAt: d.createdAt.toISOString(),
+        }))}
+        events={events.map((e) => ({
+          id: e.id,
+          kind: e.kind,
+          title: e.title,
+          description: e.description,
+          happenedAt: e.happenedAt.toISOString(),
+          createdAt: e.createdAt.toISOString(),
+          createdByName: e.createdBy?.name ?? e.createdBy?.email ?? null,
+          media: e.media.map((m) => ({
+            id: m.id,
+            url: m.url,
+            mimeType: m.mimeType,
+          })),
+        }))}
         reservations={property.reservations.map((r) => ({
           id: r.id,
           guestName: r.guestName,
