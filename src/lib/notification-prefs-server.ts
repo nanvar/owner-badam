@@ -22,3 +22,14 @@ export async function readMyNotificationPrefs() {
     : null;
   return resolveNotificationPrefs(raw);
 }
+
+// Easy-mode flag — drives the owner dashboard's single-card layout.
+export async function readMyEasyMode(): Promise<boolean> {
+  const session = await readSession();
+  if (!session) return false;
+  const row = await prisma.userPreference.findUnique({
+    where: { userId: session.userId },
+    select: { easyMode: true },
+  });
+  return row?.easyMode ?? false;
+}

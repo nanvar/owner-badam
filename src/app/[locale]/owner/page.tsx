@@ -9,6 +9,7 @@ import {
   type ReservationLite,
 } from "@/lib/metrics";
 import { monthLabel } from "@/lib/utils";
+import { readMyEasyMode } from "@/lib/notification-prefs-server";
 import { OwnerDashboardView } from "./dashboard-view";
 
 export default async function OwnerDashboardPage({
@@ -156,6 +157,7 @@ export default async function OwnerDashboardPage({
 
   const t = await getTranslations({ locale, namespace: "owner" });
   const tCommon = await getTranslations({ locale, namespace: "common" });
+  const easyMode = session.role === "OWNER" ? await readMyEasyMode() : false;
 
   return (
     <OwnerDashboardView
@@ -164,6 +166,7 @@ export default async function OwnerDashboardPage({
       selectedMonth={selectedMonth}
       basePath={`/${locale}/owner`}
       periodLabel={selectedMonth ? monthLabel(selectedMonth, locale) : "All months"}
+      easyMode={easyMode}
       kpis={{
         revenue: kpis.revenue,
         bookings: kpis.bookings,
