@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { monthKeyFor } from "@/lib/utils";
+import { notify, NotificationType } from "@/lib/notify";
 
 const ReservationSchema = z.object({
   id: z.string().min(1),
@@ -64,12 +65,18 @@ export async function updateReservationAction(
   const data = parsed.data;
   // Form sends the explicit billing month; if omitted (older clients),
   // fall back to the reservation's checkIn month.
+  // Pull the existing row so we can detect the unpaid→paid transition
+  // and send a one-shot RESERVATION_PAID notification.
+  const existing = await prisma.reservation.findUnique({
+    where: { id: data.id },
+    select: {
+      checkIn: true,
+      paid: true,
+      property: { select: { ownerId: true, name: true } },
+    },
+  });
   let monthKey: string | null = data.monthKey || null;
   if (!monthKey) {
-    const existing = await prisma.reservation.findUnique({
-      where: { id: data.id },
-      select: { checkIn: true },
-    });
     monthKey = existing ? monthKeyFor(existing.checkIn) : null;
   }
   await prisma.reservation.update({
@@ -95,6 +102,17 @@ export async function updateReservationAction(
       detailsFilled: true,
     },
   });
+  // Notify when the reservation just became paid (false → true).
+  if (existing && !existing.paid && data.paid) {
+    notify({
+      userId: existing.property.ownerId,
+      type: NotificationType.RESERVATION_PAID,
+      title: `Booking paid · ${existing.property.name}`,
+      body: `Payout AED ${data.payout.toLocaleString("en-GB", { maximumFractionDigits: 0 })}`,
+      url: "/owner/calendar",
+      data: { reservationId: data.id, payout: data.payout },
+    }).catch(() => {});
+  }
   return { status: "ok" };
 }
 
@@ -176,7 +194,7 @@ export async function createCompanyReservationAction(
     data.totalPrice - data.agencyCommission - data.portalCommission,
   );
 
-  await prisma.reservation.create({
+  const created = await prisma.reservation.create({
     data: {
       propertyId: data.propertyId,
       // Unique on (propertyId, externalId) — generate a stable id so manual
@@ -206,6 +224,22 @@ export async function createCompanyReservationAction(
       monthKey: data.monthKey || monthKeyFor(checkIn),
       detailsFilled: true,
     },
+    include: { property: { select: { ownerId: true, name: true } } },
   });
+  notify({
+    userId: created.property.ownerId,
+    type: NotificationType.NEW_RESERVATION,
+    title: `New booking · ${created.property.name}`,
+    body: `${data.guestName || "Guest"} · ${checkIn.toISOString().slice(0, 10)} → ${checkOut.toISOString().slice(0, 10)} (${nights} night${nights === 1 ? "" : "s"})`,
+    url: "/owner/calendar",
+    data: {
+      reservationId: created.id,
+      propertyId: data.propertyId,
+      checkIn: checkIn.toISOString(),
+      checkOut: checkOut.toISOString(),
+      nights,
+      totalPrice: data.totalPrice,
+    },
+  }).catch(() => {});
   return { status: "ok" };
 }

@@ -2,16 +2,26 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
+import { notify, NotificationType } from "@/lib/notify";
 
 // Flip a debt to PAID — admin used this when the owner reimburses
 // the company for an expense the company fronted via invested
 // capital. Idempotent: re-marking a PAID row is a no-op.
 export async function markOwnerDebtPaidAction(id: string) {
   await requireRole("ADMIN");
-  await prisma.ownerDebt.update({
+  const updated = await prisma.ownerDebt.update({
     where: { id },
     data: { status: "PAID", paidAt: new Date() },
+    include: { property: { select: { name: true } } },
   });
+  notify({
+    userId: updated.ownerId,
+    type: NotificationType.OWNER_DEBT_SETTLED,
+    title: `Debt settled`,
+    body: `AED ${updated.amount.toLocaleString("en-GB", { maximumFractionDigits: 0 })}${updated.property ? ` · ${updated.property.name}` : ""}`,
+    url: "/owner",
+    data: { debtId: updated.id, amount: updated.amount },
+  }).catch(() => {});
 }
 
 // Undo a paid mark — fixing a mistake. Restores PENDING + clears the

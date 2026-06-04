@@ -4,6 +4,7 @@
 // in node-ical + temporal-polyfill + their native bindings on prod.
 import { prisma } from "./prisma";
 import { monthKeyFor } from "./utils";
+import { notify, NotificationType } from "./notify";
 
 export type SyncOutcome = {
   propertyId: string;
@@ -268,7 +269,7 @@ export async function syncProperty(propertyId: string): Promise<SyncOutcome> {
         outcome.updated++;
       } else {
         const fallbackTotal = property.basePrice * nights + property.cleaningFee;
-        await prisma.reservation.create({
+        const created = await prisma.reservation.create({
           data: {
             propertyId,
             externalId,
@@ -290,6 +291,24 @@ export async function syncProperty(propertyId: string): Promise<SyncOutcome> {
           },
         });
         outcome.created++;
+        // Fire-and-forget owner notification. Synced reservations
+        // arrive in batches so we don't await — the loop continues
+        // and notify() handles its own errors internally.
+        notify({
+          userId: property.ownerId,
+          type: NotificationType.NEW_RESERVATION,
+          title: `New booking · ${property.name}`,
+          body: `${guest || "Guest"} · ${ev.start.toISOString().slice(0, 10)} → ${ev.end.toISOString().slice(0, 10)} (${nights} night${nights === 1 ? "" : "s"})`,
+          url: "/owner/calendar",
+          data: {
+            reservationId: created.id,
+            propertyId,
+            propertyName: property.name,
+            checkIn: ev.start.toISOString(),
+            checkOut: ev.end.toISOString(),
+            nights,
+          },
+        }).catch(() => {});
       }
     }
     await prisma.property.update({
