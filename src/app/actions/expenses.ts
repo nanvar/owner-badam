@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { EXPENSE_TYPES } from "@/lib/expense-types";
 import { monthKeyFor } from "@/lib/utils";
+import { notify, NotificationType } from "@/lib/notify";
 
 const ExpenseSchema = z
   .object({
@@ -179,8 +180,48 @@ export async function upsertExpenseAction(
           },
         });
       });
+      // Two events fire for an "from company invest" expense — both
+      // are noteworthy to the owner.
+      notify({
+        userId: propertyForOwner!.ownerId,
+        type: NotificationType.NEW_EXPENSE,
+        title: `New expense · ${propertyForOwner!.name}`,
+        body: `${v.type} · AED ${v.amount.toLocaleString("en-GB", { maximumFractionDigits: 0 })} (paid by management)`,
+        url: "/owner",
+        data: {
+          propertyId: v.propertyId,
+          amount: v.amount,
+          type: v.type,
+          paidFromCompanyInvest: true,
+        },
+      }).catch(() => {});
+      notify({
+        userId: propertyForOwner!.ownerId,
+        type: NotificationType.OWNER_DEBT_CREATED,
+        title: `New debt logged`,
+        body: `${v.type} on ${propertyForOwner!.name} · AED ${v.amount.toLocaleString("en-GB", { maximumFractionDigits: 0 })} owed to management`,
+        url: "/owner",
+        data: { propertyId: v.propertyId, amount: v.amount, type: v.type },
+      }).catch(() => {});
     } else {
-      await prisma.expense.create({ data });
+      // Regular owner-paid expense — fetch owner for the activity feed.
+      const created = await prisma.expense.create({
+        data,
+        include: { property: { select: { ownerId: true, name: true } } },
+      });
+      notify({
+        userId: created.property.ownerId,
+        type: NotificationType.NEW_EXPENSE,
+        title: `New expense · ${created.property.name}`,
+        body: `${v.type} · AED ${v.amount.toLocaleString("en-GB", { maximumFractionDigits: 0 })}`,
+        url: "/owner",
+        data: {
+          propertyId: v.propertyId,
+          expenseId: created.id,
+          amount: v.amount,
+          type: v.type,
+        },
+      }).catch(() => {});
     }
   }
   return { status: "ok" };

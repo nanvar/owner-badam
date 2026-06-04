@@ -1,7 +1,8 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { LayoutDashboard, Calendar, FileText, Wallet } from "lucide-react";
+import { LayoutDashboard, Calendar, FileText, Wallet, Bell } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PwaBoot } from "@/components/pwa-boot";
+import { ActivityBell } from "@/components/activity-bell";
 import { requireRole } from "@/lib/auth";
 import { isLocale } from "@/i18n/config";
 import { notFound } from "next/navigation";
@@ -41,6 +42,11 @@ export default async function OwnerLayout({
       label: t("reports"),
       icon: <FileText className="h-4 w-4" />,
     },
+    {
+      href: `/${locale}/owner/activity`,
+      label: "Activity",
+      icon: <Bell className="h-4 w-4" />,
+    },
   ];
 
   return (
@@ -49,6 +55,7 @@ export default async function OwnerLayout({
       user={{ name: session.name, email: session.email, role: session.role }}
       nav={nav}
       variant="owner"
+      topRight={<ActivityBell locale={locale} />}
       brand={{
         name: settings.brandName,
         logoUrl: settings.logoUrl,
