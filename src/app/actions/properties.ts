@@ -13,6 +13,9 @@ const PropertySchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#4f8a6f"),
   ownerId: z.string().min(1),
   notes: z.string().max(1000).optional().or(z.literal("")),
+  // Toggles "management-only" mode — no rentals expected, dashboards
+  // hide revenue KPIs, and stay-quota / service-charge features unlock.
+  managementOnly: z.boolean().optional().default(false),
   // Manual override of the property's "added on" date — drives the months
   // that show up in the owner's reports.
   createdAt: z.string().optional().or(z.literal("")),
@@ -28,6 +31,11 @@ export async function upsertPropertyAction(
   formData: FormData,
 ): Promise<PropertyState> {
   await requireRole("ADMIN");
+  const managementOnlyRaw = formData.get("managementOnly") as string | null;
+  const managementOnly =
+    managementOnlyRaw === "true" ||
+    managementOnlyRaw === "on" ||
+    managementOnlyRaw === "1";
   const parsed = PropertySchema.safeParse({
     id: formData.get("id") || undefined,
     name: formData.get("name"),
@@ -37,6 +45,7 @@ export async function upsertPropertyAction(
     color: formData.get("color") || "#4f8a6f",
     ownerId: formData.get("ownerId"),
     notes: formData.get("notes") || "",
+    managementOnly,
     createdAt: formData.get("createdAt") || "",
   });
   if (!parsed.success) {
@@ -57,32 +66,20 @@ export async function upsertPropertyAction(
       if (!Number.isNaN(d.getTime())) manualCreatedAt = d;
     }
   }
+  const writeData = {
+    name: data.name,
+    address: data.address || null,
+    airbnbIcalUrl: data.airbnbIcalUrl || null,
+    airbnbUrl: data.airbnbUrl || null,
+    color: data.color,
+    notes: data.notes || null,
+    ownerId: data.ownerId,
+    managementOnly: data.managementOnly,
+    ...(manualCreatedAt ? { createdAt: manualCreatedAt } : {}),
+  };
   const upserted = data.id
-    ? await prisma.property.update({
-        where: { id: data.id },
-        data: {
-          name: data.name,
-          address: data.address || null,
-          airbnbIcalUrl: data.airbnbIcalUrl || null,
-          airbnbUrl: data.airbnbUrl || null,
-          color: data.color,
-          notes: data.notes || null,
-          ownerId: data.ownerId,
-          ...(manualCreatedAt ? { createdAt: manualCreatedAt } : {}),
-        },
-      })
-    : await prisma.property.create({
-        data: {
-          name: data.name,
-          address: data.address || null,
-          airbnbIcalUrl: data.airbnbIcalUrl || null,
-          airbnbUrl: data.airbnbUrl || null,
-          color: data.color,
-          notes: data.notes || null,
-          ownerId: data.ownerId,
-          ...(manualCreatedAt ? { createdAt: manualCreatedAt } : {}),
-        },
-      });
+    ? await prisma.property.update({ where: { id: data.id }, data: writeData })
+    : await prisma.property.create({ data: writeData });
   return { status: "ok", id: upserted.id };
 }
 

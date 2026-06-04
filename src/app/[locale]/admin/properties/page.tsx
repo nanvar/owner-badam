@@ -63,6 +63,7 @@ export default async function AdminPropertiesPage({
           cleaningFee: p.cleaningFee,
           color: p.color,
           notes: p.notes,
+          managementOnly: p.managementOnly,
           ownerId: p.owner.id,
           ownerName: p.owner.name ?? p.owner.email,
           reservationCount: p._count.reservations,
