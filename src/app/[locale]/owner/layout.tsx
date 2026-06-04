@@ -1,6 +1,7 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { LayoutDashboard, Calendar, FileText, Wallet } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { PwaBoot } from "@/components/pwa-boot";
 import { requireRole } from "@/lib/auth";
 import { isLocale } from "@/i18n/config";
 import { notFound } from "next/navigation";
@@ -59,6 +60,7 @@ export default async function OwnerLayout({
         address: settings.address,
       }}
     >
+      <PwaBoot />
       {children}
     </AppShell>
   );
