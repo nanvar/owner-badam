@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PwaBoot } from "@/components/pwa-boot";
+import { fireAdminDailyJobsInBackground } from "@/lib/cron-jobs";
 import { requireRole } from "@/lib/auth";
 import { isLocale } from "@/i18n/config";
 import { notFound } from "next/navigation";
@@ -31,6 +32,11 @@ export default async function AdminLayout({
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
   const session = await requireRole("ADMIN");
+  // Self-healing daily-jobs trigger. Fires on the first admin request
+  // of each UTC day; the unique constraint inside runDailyJobs() keeps
+  // it from racing with cron. Non-blocking — page render does not
+  // wait on jobs.
+  fireAdminDailyJobsInBackground();
   const t = await getTranslations({ locale, namespace: "admin" });
   const tCommon = await getTranslations({ locale, namespace: "common" });
   const settings = await getSettings();

@@ -39,9 +39,10 @@ export default async function PropertyDetailPage({
   });
   if (!property) notFound();
 
-  // Photos + documents + history bundle. Each is its own simple
-  // query so the page can render even if one bucket is empty.
-  const [adminPhotos, documents, events] = await Promise.all([
+  // Photos + documents + history + service-charge bundle. Each is
+  // its own simple query so the page can render even if one bucket
+  // is empty.
+  const [adminPhotos, documents, events, scSchedule, scInstances] = await Promise.all([
     prisma.propertyMedia.findMany({
       where: { propertyId, kind: { in: ["PHOTO", "COVER"] } },
       orderBy: { createdAt: "desc" },
@@ -77,6 +78,18 @@ export default async function PropertyDetailPage({
           select: { id: true, url: true, mimeType: true },
         },
         createdBy: { select: { id: true, name: true, email: true } },
+      },
+    }),
+    prisma.serviceChargeSchedule.findUnique({
+      where: { propertyId },
+    }),
+    prisma.serviceChargeInstance.findMany({
+      where: { propertyId },
+      orderBy: { dueDate: "desc" },
+      include: {
+        proofs: {
+          select: { id: true, url: true, fileName: true, mimeType: true },
+        },
       },
     }),
   ]);
@@ -149,6 +162,31 @@ export default async function PropertyDetailPage({
             id: m.id,
             url: m.url,
             mimeType: m.mimeType,
+          })),
+        }))}
+        serviceSchedule={
+          scSchedule
+            ? {
+                propertyId: scSchedule.propertyId,
+                frequencyMonths: scSchedule.frequencyMonths,
+                reminderDaysBefore: scSchedule.reminderDaysBefore,
+                firstDueDate: scSchedule.firstDueDate.toISOString(),
+                active: scSchedule.active,
+              }
+            : null
+        }
+        serviceInstances={scInstances.map((i) => ({
+          id: i.id,
+          dueDate: i.dueDate.toISOString(),
+          status: i.status,
+          paidAt: i.paidAt ? i.paidAt.toISOString() : null,
+          amount: i.amount,
+          notes: i.notes,
+          proofs: i.proofs.map((p) => ({
+            id: p.id,
+            url: p.url,
+            fileName: p.fileName,
+            mimeType: p.mimeType,
           })),
         }))}
         reservations={property.reservations.map((r) => ({

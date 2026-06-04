@@ -780,6 +780,24 @@ model UserPreference {
   updatedAt         DateTime @updatedAt
 }
 
+// Cron / on-demand daily-job execution log. The unique (jobKey,
+// runDate) constraint guarantees a job runs at most once per day no
+// matter how many triggers fire — cron + first admin login + manual
+// retry can all call runDailyJobs() and only the first wins.
+model DailyJobRun {
+  id         String    @id @default(cuid())
+  jobKey     String    @db.VarChar(60)
+  runDate    String    @db.VarChar(10) // "YYYY-MM-DD" — admin-local day key
+  trigger    String    @db.VarChar(20) // "cron" / "admin-login" / "manual"
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  result     Json?
+  error      String?   @db.Text
+
+  @@unique([jobKey, runDate])
+  @@index([runDate])
+}
+
 // VAPID-based Web Push subscription. Mirrors PushManager.subscribe
 // output. One row per device/browser per user.
 model WebPushSubscription {
