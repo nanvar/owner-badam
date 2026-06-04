@@ -1,6 +1,8 @@
 "use client";
 
-import { Percent, TrendingUp, ArrowUpRight } from "lucide-react";
+import { useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Percent, TrendingUp, ArrowUpRight, Eye, EyeOff } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -15,6 +17,7 @@ import { AnimatedNumber } from "@/components/ui/animated-number";
 import { FadeIn } from "@/components/ui/motion";
 import { formatCurrency } from "@/lib/utils";
 import { MonthSelector } from "../admin/company/month-selector";
+import { setEasyModeAction } from "@/app/actions/user-prefs";
 import type { Locale } from "@/i18n/config";
 
 type Kpis = {
@@ -42,6 +45,7 @@ export function OwnerDashboardView({
   selectedMonth,
   basePath,
   periodLabel,
+  easyMode = false,
   kpis,
   monthly,
   labels,
@@ -51,16 +55,41 @@ export function OwnerDashboardView({
   selectedMonth: string;
   basePath: string;
   periodLabel: string;
+  easyMode?: boolean;
   kpis: Kpis;
   monthly: Monthly[];
   labels: Record<string, string>;
 }) {
+  const router = useRouter();
+  const [pending, startTx] = useTransition();
+  const toggleEasy = () => {
+    startTx(async () => {
+      await setEasyModeAction(!easyMode);
+      router.refresh();
+    });
+  };
+
   return (
     <div className="space-y-3">
-      {/* Month filter — defaults to All months; admin-style selector
-          shared from the company section so behavior matches. */}
+      {/* Month filter + easy-mode toggle. The toggle lives next to
+          the month picker so the simple-vs-detailed switch reads as a
+          peer to the period filter — easy to find but unobtrusive. */}
       <FadeIn delay={0.05}>
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={toggleEasy}
+            disabled={pending}
+            title={easyMode ? "Switch to detailed view" : "Switch to easy view"}
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-medium text-[var(--color-muted)] hover:border-[var(--color-brand)] hover:bg-[var(--color-brand-soft)] hover:text-[var(--color-brand)] disabled:opacity-50"
+          >
+            {easyMode ? (
+              <EyeOff className="h-3.5 w-3.5" />
+            ) : (
+              <Eye className="h-3.5 w-3.5" />
+            )}
+            {easyMode ? "Detailed" : "Easy mode"}
+          </button>
           <MonthSelector
             options={monthOptions}
             selected={selectedMonth}
@@ -70,6 +99,46 @@ export function OwnerDashboardView({
         </div>
       </FadeIn>
 
+      {/* In Easy mode the page strips down to the hero revenue card +
+          a one-line "you've earned X this period" headline. Everything
+          else — bookings KPI grid, occupancy, ADR, chart — hides. */}
+      {easyMode ? (
+        <FadeIn delay={0.1}>
+          <div
+            className="relative overflow-hidden rounded-3xl border border-[var(--color-border)] p-6 text-white sm:p-10"
+            style={{
+              background:
+                "linear-gradient(135deg, #4f8a6f 0%, #3d6f57 55%, #2f5a47 100%)",
+              boxShadow:
+                "0 20px 48px -16px rgba(47,90,71,0.5), 0 10px 24px -14px rgba(79,138,111,0.4)",
+            }}
+          >
+            <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-24 -left-12 h-52 w-52 rounded-full bg-emerald-200/20 blur-3xl" />
+            <div className="relative">
+              <div className="text-[11px] font-medium uppercase tracking-[0.2em] text-white/80">
+                {labels.kpiRevenue} · {periodLabel}
+              </div>
+              <div className="mt-3 text-5xl font-bold tabular-nums sm:text-7xl">
+                <AnimatedNumber
+                  value={kpis.revenue}
+                  format={(n) => formatCurrency(n, "AED", locale)}
+                />
+              </div>
+              <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white">
+                <TrendingUp className="h-3.5 w-3.5" />
+                {kpis.bookings} {labels.kpiBookings.toLowerCase()} · {kpis.nights}{" "}
+                {labels.kpiNights.toLowerCase()}
+              </div>
+            </div>
+          </div>
+        </FadeIn>
+      ) : null}
+
+      {/* The classic detailed dashboard renders only when easy mode is
+          off. Below this point is the full grid + chart. */}
+      {!easyMode && (
+        <>
       {/* HERO REVENUE CARD — compact */}
       <FadeIn delay={0.1}>
         <div
@@ -183,6 +252,8 @@ export function OwnerDashboardView({
           </CardBody>
         </Card>
       </FadeIn>
+        </>
+      )}
     </div>
   );
 }

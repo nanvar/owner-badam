@@ -52,3 +52,16 @@ export async function updateNotificationPrefsAction(input: Record<string, boolea
   });
   return { status: "ok" as const };
 }
+
+// Easy mode — strips the owner dashboard down to a single hero card.
+// Stored on UserPreference.easyMode so it persists across devices.
+export async function setEasyModeAction(enabled: boolean) {
+  const session = await readSession();
+  if (!session) throw new Error("unauthorized");
+  await prisma.userPreference.upsert({
+    where: { userId: session.userId },
+    create: { userId: session.userId, easyMode: enabled },
+    update: { easyMode: enabled },
+  });
+  return { status: "ok" as const };
+}
