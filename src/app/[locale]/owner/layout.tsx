@@ -1,5 +1,12 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { LayoutDashboard, Calendar, FileText, Wallet, Bell } from "lucide-react";
+import {
+  LayoutDashboard,
+  Calendar,
+  FileText,
+  Wallet,
+  Bell,
+  BedDouble,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PwaBoot } from "@/components/pwa-boot";
 import { ActivityBell } from "@/components/activity-bell";
@@ -41,6 +48,11 @@ export default async function OwnerLayout({
       href: `/${locale}/owner/reports`,
       label: t("reports"),
       icon: <FileText className="h-4 w-4" />,
+    },
+    {
+      href: `/${locale}/owner/stay-requests`,
+      label: "Stay requests",
+      icon: <BedDouble className="h-4 w-4" />,
     },
     {
       href: `/${locale}/owner/activity`,

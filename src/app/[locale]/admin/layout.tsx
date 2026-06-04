@@ -12,6 +12,7 @@ import {
   Presentation,
   Banknote,
   HandCoins,
+  BedDouble,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PwaBoot } from "@/components/pwa-boot";
@@ -108,6 +109,11 @@ export default async function AdminLayout({
       href: `/${locale}/admin/projection`,
       label: "Projection",
       icon: <Presentation className="h-4 w-4" />,
+    },
+    {
+      href: `/${locale}/admin/stay-requests`,
+      label: "Stay requests",
+      icon: <BedDouble className="h-4 w-4" />,
     },
     {
       // Parent dropdown — landing page is the owner list, but the

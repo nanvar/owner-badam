@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { isLocale, type Locale } from "@/i18n/config";
 import { prisma } from "@/lib/prisma";
+import { computeQuotaStatus } from "@/lib/stay-quota";
 import { PropertyDetailView } from "./property-detail-view";
 
 export default async function PropertyDetailPage({
@@ -42,7 +43,15 @@ export default async function PropertyDetailPage({
   // Photos + documents + history + service-charge bundle. Each is
   // its own simple query so the page can render even if one bucket
   // is empty.
-  const [adminPhotos, documents, events, scSchedule, scInstances] = await Promise.all([
+  const [
+    adminPhotos,
+    documents,
+    events,
+    scSchedule,
+    scInstances,
+    stayQuota,
+    stayRequests,
+  ] = await Promise.all([
     prisma.propertyMedia.findMany({
       where: { propertyId, kind: { in: ["PHOTO", "COVER"] } },
       orderBy: { createdAt: "desc" },
@@ -92,7 +101,14 @@ export default async function PropertyDetailPage({
         },
       },
     }),
+    prisma.ownerStayQuota.findUnique({ where: { propertyId } }),
+    prisma.ownerReservationRequest.findMany({
+      where: { propertyId },
+      orderBy: { createdAt: "desc" },
+      include: { owner: { select: { name: true, email: true } } },
+    }),
   ]);
+  const quotaStatus = await computeQuotaStatus(propertyId);
 
   const tCommon = await getTranslations({ locale, namespace: "common" });
   const tAdmin = await getTranslations({ locale, namespace: "admin" });
@@ -188,6 +204,32 @@ export default async function PropertyDetailPage({
             fileName: p.fileName,
             mimeType: p.mimeType,
           })),
+        }))}
+        stayQuota={
+          stayQuota && quotaStatus
+            ? {
+                daysPerYear: stayQuota.daysPerYear,
+                yearStartMonth: stayQuota.yearStartMonth,
+                yearStartDay: stayQuota.yearStartDay,
+                usedNights: quotaStatus.usedNights,
+                pendingNights: quotaStatus.pendingNights,
+                remainingNights: quotaStatus.remainingNights,
+                cycleStart: quotaStatus.cycleStart.toISOString(),
+                cycleEnd: quotaStatus.cycleEnd.toISOString(),
+              }
+            : null
+        }
+        stayRequests={stayRequests.map((r) => ({
+          id: r.id,
+          checkIn: r.checkIn.toISOString(),
+          checkOut: r.checkOut.toISOString(),
+          nights: r.nights,
+          notes: r.notes,
+          status: r.status,
+          decidedAt: r.decidedAt?.toISOString() ?? null,
+          decisionNote: r.decisionNote,
+          createdAt: r.createdAt.toISOString(),
+          ownerName: r.owner.name ?? r.owner.email,
         }))}
         reservations={property.reservations.map((r) => ({
           id: r.id,
