@@ -20,9 +20,7 @@ export async function POST(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (session.role !== "OWNER") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // OWNER + ADMIN/SUPERADMIN all read their own feed.
 
   let body: unknown = {};
   try {

@@ -33,7 +33,14 @@ function relTime(iso: string): string {
   return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
 }
 
-export function ActivityBell({ locale }: { locale: string }) {
+export function ActivityBell({
+  locale,
+  viewAllHref,
+}: {
+  locale: string;
+  /** Where "View all activity" navigates. Defaults to /owner/activity. */
+  viewAllHref?: string;
+}) {
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
@@ -199,7 +206,7 @@ export function ActivityBell({ locale }: { locale: string }) {
 
           <div className="border-t border-[var(--color-border)] px-3 py-2">
             <Link
-              href={`/${locale}/owner/activity`}
+              href={viewAllHref ?? `/${locale}/owner/activity`}
               onClick={() => setOpen(false)}
               className="block text-center text-sm font-medium text-[var(--color-brand)] hover:underline"
             >

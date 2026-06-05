@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PwaBoot } from "@/components/pwa-boot";
+import { ActivityBell } from "@/components/activity-bell";
 import { fireAdminDailyJobsInBackground } from "@/lib/cron-jobs";
 import { requireRole } from "@/lib/auth";
 import { isLocale } from "@/i18n/config";
@@ -155,6 +156,12 @@ export default async function AdminLayout({
       nav={nav}
       variant="admin"
       mobileNav="drawer"
+      topRight={
+        <ActivityBell
+          locale={locale}
+          viewAllHref={`/${locale}/admin/activity`}
+        />
+      }
       brand={{
         name: settings.brandName,
         logoUrl: settings.logoUrl,

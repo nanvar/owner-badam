@@ -20,9 +20,8 @@ export async function GET(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (session.role !== "OWNER") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // Both OWNER and ADMIN/SUPERADMIN can read their own feed — admins
+  // now have a bell in the admin top header too.
 
   const url = new URL(req.url);
   const cursor = url.searchParams.get("cursor") || null;
