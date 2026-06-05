@@ -2,8 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
-import { motion } from "motion/react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
+import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "motion/react";
 import {
   LogOut,
   Globe,
@@ -15,6 +22,7 @@ import {
   KeyRound,
   Menu,
   ChevronDown,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet } from "@/components/ui/sheet";
@@ -183,57 +191,14 @@ export function AppShell({
           )}
           <div className="flex items-center gap-2 justify-self-end">
             {topRight}
-            <button
-              type="button"
-              onClick={() => setPasswordOpen(true)}
-              className="hidden flex-col text-right text-xs leading-tight transition-colors hover:text-[var(--color-brand)] sm:flex"
-              aria-label="Change password"
-              title="Change password"
-            >
-              <span className="font-semibold">{user.name ?? user.email}</span>
-              <span className="text-[var(--color-muted)]">{user.email}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPasswordOpen(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-muted)] transition-colors hover:border-[var(--color-brand)] hover:bg-[var(--color-brand-soft)] hover:text-[var(--color-brand)]"
-              aria-label="Change password"
-              title="Change password"
-            >
-              <KeyRound className="h-4 w-4" />
-            </button>
-            <div className="relative">
-              <details className="group">
-                <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]">
-                  <Globe className="h-4 w-4" />
-                </summary>
-                <div className="absolute right-0 top-11 z-10 w-32 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg">
-                  {(["en", "ru"] as const).map((l) => (
-                    <button
-                      key={l}
-                      onClick={() => switchLocale(l)}
-                      className={cn(
-                        "flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-[var(--color-surface-2)]",
-                        locale === l && "text-[var(--color-brand)] font-semibold",
-                      )}
-                    >
-                      <span>{l === "en" ? "English" : "Русский"}</span>
-                      {locale === l && <span>•</span>}
-                    </button>
-                  ))}
-                </div>
-              </details>
-            </div>
-            <form action={() => start(() => logoutAction())}>
-              <button
-                type="submit"
-                disabled={pending}
-                className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-muted)] transition-colors hover:border-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 hover:text-[var(--color-danger)]"
-                aria-label="Log out"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
-            </form>
+            <UserMenu
+              user={user}
+              locale={locale}
+              onChangePassword={() => setPasswordOpen(true)}
+              onSwitchLocale={switchLocale}
+              onLogout={() => start(() => logoutAction())}
+              logoutPending={pending}
+            />
           </div>
         </div>
       </header>
@@ -504,15 +469,41 @@ function NavDropdown({
   isGroupActive: (item: NavItem) => boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 0,
+  });
   const active = isGroupActive(item);
+
+  // Position the portal'd menu directly under the trigger. Recalculate
+  // on open + on scroll/resize so it stays anchored as the sticky bar
+  // moves with the page. The menu lives outside the overflow-x-auto
+  // nav container so it never gets clipped by the scroll viewport.
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) return;
+    const update = () => {
+      const r = buttonRef.current!.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left + r.width / 2, width: r.width });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (buttonRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -526,12 +517,13 @@ function NavDropdown({
   }, [open]);
 
   return (
-    <div ref={ref} className="relative">
+    <>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+          "flex shrink-0 items-center gap-1 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors",
           active
             ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
             : "text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]",
@@ -545,30 +537,241 @@ function NavDropdown({
           )}
         />
       </button>
-      {open && (
-        <div className="absolute left-1/2 top-full z-50 mt-1 w-56 -translate-x-1/2 origin-top overflow-hidden rounded-xl border border-[var(--color-border)] bg-white py-1 shadow-lg shadow-black/10 ring-1 ring-black/5 animate-fade-in">
-          {item.children!.map((child) => {
-            const childActive = isActive(child.href);
-            return (
-              <Link
-                key={child.href}
-                href={child.href}
-                onClick={() => setOpen(false)}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 text-sm font-medium transition-colors",
-                  childActive
-                    ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
-                    : "text-[var(--color-foreground)] hover:bg-[var(--color-surface-2)]",
-                )}
-              >
-                <span className="text-[var(--color-muted)]">{child.icon}</span>
-                {child.label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
+      <AnimatePresence>
+        {open && typeof document !== "undefined" &&
+          createPortal(
+            <motion.div
+              ref={menuRef}
+              initial={{ opacity: 0, y: -4, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.98 }}
+              transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+              style={{
+                position: "fixed",
+                top: pos.top,
+                left: pos.left,
+                transform: "translateX(-50%)",
+                zIndex: 80,
+              }}
+              className="w-56 origin-top overflow-hidden rounded-xl border border-[var(--color-border)] bg-white py-1 shadow-xl shadow-black/10 ring-1 ring-black/5"
+            >
+              {item.children!.map((child) => {
+                const childActive = isActive(child.href);
+                return (
+                  <Link
+                    key={child.href}
+                    href={child.href}
+                    onClick={() => setOpen(false)}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 text-sm font-medium transition-colors",
+                      childActive
+                        ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
+                        : "text-[var(--color-foreground)] hover:bg-[var(--color-surface-2)]",
+                    )}
+                  >
+                    <span className="text-[var(--color-muted)]">
+                      {child.icon}
+                    </span>
+                    {child.label}
+                  </Link>
+                );
+              })}
+            </motion.div>,
+            document.body,
+          )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+/**
+ * Avatar-led user menu — consolidates the formerly-stacked key/globe/
+ * logout icon row into a single dropdown that opens via portal so it
+ * always sits above page content. Shows name + role + email at the top
+ * then the actions list (locale switch, change password, logout).
+ */
+function UserMenu({
+  user,
+  locale,
+  onChangePassword,
+  onSwitchLocale,
+  onLogout,
+  logoutPending,
+}: {
+  user: { name: string | null; email: string; role: "ADMIN" | "OWNER" | "SUPERADMIN" };
+  locale: Locale;
+  onChangePassword: () => void;
+  onSwitchLocale: (l: Locale) => void;
+  onLogout: () => void;
+  logoutPending: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; right: number }>({
+    top: 0,
+    right: 0,
+  });
+
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) return;
+    const update = () => {
+      const r = buttonRef.current!.getBoundingClientRect();
+      setPos({ top: r.bottom + 6, right: window.innerWidth - r.right });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (buttonRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  // Initials from name (first chars of up to two words) or email.
+  const displayName = user.name ?? user.email;
+  const initials = (user.name
+    ? user.name
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((p) => p[0])
+        .join("")
+    : user.email[0]
+  ).toUpperCase();
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-white py-1 pl-1 pr-2.5 text-left transition-colors hover:border-[var(--color-brand)] hover:bg-[var(--color-brand-soft)]/40"
+        aria-label="Account menu"
+      >
+        <span className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--color-brand)] text-[11px] font-bold text-white">
+          {initials}
+        </span>
+        <span className="hidden flex-col leading-tight sm:flex">
+          <span className="text-[11px] font-semibold tracking-tight">
+            {displayName}
+          </span>
+          <span className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+            {user.role}
+          </span>
+        </span>
+        <ChevronDown
+          className={cn(
+            "ml-0.5 h-3.5 w-3.5 text-[var(--color-muted)] transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+
+      <AnimatePresence>
+        {open && typeof document !== "undefined" &&
+          createPortal(
+            <motion.div
+              ref={menuRef}
+              initial={{ opacity: 0, y: -6, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -6, scale: 0.98 }}
+              transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+              style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 80 }}
+              className="w-64 origin-top-right overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white shadow-xl shadow-black/10 ring-1 ring-black/5"
+            >
+              <div className="border-b border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--color-brand)] text-sm font-bold text-white">
+                    {initials}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold">
+                      {displayName}
+                    </div>
+                    <div className="truncate text-[11px] text-[var(--color-muted)]">
+                      {user.email}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-2 inline-flex items-center rounded-full bg-[var(--color-brand-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-brand)]">
+                  {user.role}
+                </div>
+              </div>
+
+              <div className="px-1 py-1">
+                <div className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+                  Language
+                </div>
+                {(["en", "ru"] as const).map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => {
+                      setOpen(false);
+                      onSwitchLocale(l);
+                    }}
+                    className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-sm hover:bg-[var(--color-surface-2)]"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Globe className="h-3.5 w-3.5 text-[var(--color-muted)]" />
+                      {l === "en" ? "English" : "Русский"}
+                    </span>
+                    {locale === l && (
+                      <Check className="h-3.5 w-3.5 text-[var(--color-brand)]" />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <div className="border-t border-[var(--color-border)] px-1 py-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    onChangePassword();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm hover:bg-[var(--color-surface-2)]"
+                >
+                  <KeyRound className="h-3.5 w-3.5 text-[var(--color-muted)]" />
+                  Change password
+                </button>
+                <button
+                  type="button"
+                  disabled={logoutPending}
+                  onClick={() => {
+                    setOpen(false);
+                    onLogout();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-rose-600 hover:bg-rose-500/10 disabled:opacity-60"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Log out
+                </button>
+              </div>
+            </motion.div>,
+            document.body,
+          )}
+      </AnimatePresence>
+    </>
   );
 }
 
