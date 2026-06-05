@@ -101,16 +101,16 @@ export default async function OwnerPropertyDetailPage({
     <div className="space-y-3">
       <Link
         href={`/${locale}/owner/properties`}
-        className="inline-flex items-center gap-1 text-sm text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+        className="inline-flex h-9 items-center gap-1 self-start rounded-full border border-[var(--color-border)] bg-white px-3 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
       >
-        <ArrowLeft className="h-4 w-4" />
-        Back to properties
+        <ArrowLeft className="h-3.5 w-3.5" />
+        All properties
       </Link>
 
-      {/* Hero header — cover photo background with overlay copy. */}
+      {/* Hero header — cover photo background, compact overlay copy. */}
       <div
-        className="relative overflow-hidden rounded-3xl"
-        style={{ background: property.color }}
+        className="relative overflow-hidden rounded-[24px]"
+        style={{ background: property.color, minHeight: 200 }}
       >
         {cover && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -121,17 +121,19 @@ export default async function OwnerPropertyDetailPage({
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-        <div className="relative px-5 py-8 text-white sm:px-7 sm:py-12">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80">
-            {property.address ?? "Your property"}
-          </div>
-          <h1 className="mt-1 text-2xl font-bold sm:text-4xl">
-            {property.name}
-          </h1>
+        <div className="relative flex h-full flex-col justify-end px-4 py-5 text-white sm:px-5 sm:py-6">
           {property.managementOnly && (
-            <span className="mt-2 inline-flex rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider backdrop-blur">
+            <span className="mb-2 inline-flex self-start rounded-full bg-orange-500/90 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
               Management only
             </span>
+          )}
+          <h1 className="text-xl font-bold leading-tight sm:text-2xl">
+            {property.name}
+          </h1>
+          {property.address && (
+            <div className="mt-0.5 truncate text-xs text-white/85">
+              {property.address}
+            </div>
           )}
         </div>
       </div>

@@ -10,7 +10,6 @@ import {
 } from "@/lib/metrics";
 import { monthLabel } from "@/lib/utils";
 import { readMyEasyMode } from "@/lib/notification-prefs-server";
-import { OwnerHero } from "@/components/owner/owner-hero";
 import { OwnerDashboardView } from "./dashboard-view";
 
 export default async function OwnerDashboardPage({
@@ -161,16 +160,6 @@ export default async function OwnerDashboardPage({
   const easyMode = session.role === "OWNER" ? await readMyEasyMode() : false;
 
   return (
-    <div className="space-y-3">
-      <OwnerHero
-        name={session.name ?? null}
-        subtitle={
-          easyMode
-            ? "Here's your income at a glance."
-            : "Here's how your properties are performing."
-        }
-        illustration="/illustrations/owner-hero.svg"
-      />
     <OwnerDashboardView
       locale={loc}
       monthOptions={monthOpts}
@@ -178,6 +167,7 @@ export default async function OwnerDashboardPage({
       basePath={`/${locale}/owner`}
       periodLabel={selectedMonth ? monthLabel(selectedMonth, locale) : "All months"}
       easyMode={easyMode}
+      userName={session.name ?? session.email ?? null}
       kpis={{
         revenue: kpis.revenue,
         bookings: kpis.bookings,
@@ -199,6 +189,5 @@ export default async function OwnerDashboardPage({
         noData: tCommon("noData"),
       }}
     />
-    </div>
   );
 }
