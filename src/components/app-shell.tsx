@@ -537,49 +537,52 @@ function NavDropdown({
           )}
         />
       </button>
-      <AnimatePresence>
-        {open && typeof document !== "undefined" &&
-          createPortal(
-            <motion.div
-              ref={menuRef}
-              initial={{ opacity: 0, y: -4, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -4, scale: 0.98 }}
-              transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
-              style={{
-                position: "fixed",
-                top: pos.top,
-                left: pos.left,
-                transform: "translateX(-50%)",
-                zIndex: 80,
-              }}
-              className="w-56 origin-top overflow-hidden rounded-xl border border-[var(--color-border)] bg-white py-1 shadow-xl shadow-black/10 ring-1 ring-black/5"
-            >
-              {item.children!.map((child) => {
-                const childActive = isActive(child.href);
-                return (
-                  <Link
-                    key={child.href}
-                    href={child.href}
-                    onClick={() => setOpen(false)}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-2 text-sm font-medium transition-colors",
-                      childActive
-                        ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
-                        : "text-[var(--color-foreground)] hover:bg-[var(--color-surface-2)]",
-                    )}
-                  >
-                    <span className="text-[var(--color-muted)]">
-                      {child.icon}
-                    </span>
-                    {child.label}
-                  </Link>
-                );
-              })}
-            </motion.div>,
-            document.body,
-          )}
-      </AnimatePresence>
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {open && (
+              <motion.div
+                key="nav-dropdown"
+                ref={menuRef}
+                initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+                style={{
+                  position: "fixed",
+                  top: pos.top,
+                  left: pos.left,
+                  transform: "translateX(-50%)",
+                  zIndex: 80,
+                }}
+                className="w-56 origin-top overflow-hidden rounded-xl border border-[var(--color-border)] bg-white py-1 shadow-xl shadow-black/10 ring-1 ring-black/5"
+              >
+                {item.children!.map((child) => {
+                  const childActive = isActive(child.href);
+                  return (
+                    <Link
+                      key={child.href}
+                      href={child.href}
+                      onClick={() => setOpen(false)}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 text-sm font-medium transition-colors",
+                        childActive
+                          ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
+                          : "text-[var(--color-foreground)] hover:bg-[var(--color-surface-2)]",
+                      )}
+                    >
+                      <span className="text-[var(--color-muted)]">
+                        {child.icon}
+                      </span>
+                      {child.label}
+                    </Link>
+                  );
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
     </>
   );
 }
@@ -686,18 +689,20 @@ function UserMenu({
         />
       </button>
 
-      <AnimatePresence>
-        {open && typeof document !== "undefined" &&
-          createPortal(
-            <motion.div
-              ref={menuRef}
-              initial={{ opacity: 0, y: -6, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -6, scale: 0.98 }}
-              transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-              style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 80 }}
-              className="w-64 origin-top-right overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white shadow-xl shadow-black/10 ring-1 ring-black/5"
-            >
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {open && (
+              <motion.div
+                key="user-menu"
+                ref={menuRef}
+                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 80 }}
+                className="w-64 origin-top-right overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white shadow-xl shadow-black/10 ring-1 ring-black/5"
+              >
               <div className="border-b border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-3">
                 <div className="flex items-center gap-2.5">
                   <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--color-brand)] text-sm font-bold text-white">
@@ -767,10 +772,11 @@ function UserMenu({
                   Log out
                 </button>
               </div>
-            </motion.div>,
-            document.body,
-          )}
-      </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
     </>
   );
 }
