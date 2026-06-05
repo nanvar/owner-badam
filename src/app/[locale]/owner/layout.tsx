@@ -6,6 +6,7 @@ import {
   Wallet,
   Bell,
   BedDouble,
+  Home as HomeIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PwaBoot } from "@/components/pwa-boot";
@@ -34,6 +35,11 @@ export default async function OwnerLayout({
       href: `/${locale}/owner`,
       label: t("dashboard"),
       icon: <LayoutDashboard className="h-4 w-4" />,
+    },
+    {
+      href: `/${locale}/owner/properties`,
+      label: "Properties",
+      icon: <HomeIcon className="h-4 w-4" />,
     },
     {
       href: `/${locale}/owner/calendar`,

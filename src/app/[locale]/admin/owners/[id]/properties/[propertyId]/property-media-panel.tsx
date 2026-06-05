@@ -107,7 +107,7 @@ export function PropertyMediaPanel({
           icon={<History className="h-3.5 w-3.5" />}
           count={events.length}
         >
-          History
+          Visit log
         </TabButton>
       </div>
 
@@ -430,7 +430,7 @@ function EventEditor({
 }) {
   const router = useRouter();
   const [pending, startTx] = useTransition();
-  const [kind, setKind] = useState(event?.kind ?? "RENOVATION");
+  const [kind, setKind] = useState(event?.kind ?? "VISIT");
   const [title, setTitle] = useState(event?.title ?? "");
   const [description, setDescription] = useState(event?.description ?? "");
   const [happenedAt, setHappenedAt] = useState(
@@ -439,18 +439,21 @@ function EventEditor({
       : new Date().toISOString().slice(0, 10),
   );
   const [photos, setPhotos] = useState<UploadedFile[]>([]);
+  const [docs, setDocs] = useState<UploadedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const handleSave = () => {
     setError(null);
     if (!title.trim()) {
-      setError("Title is required");
+      setError("Headline is required");
       return;
     }
     startTx(async () => {
       try {
-        // Step 1: persist each uploaded photo as PropertyMedia +
-        // collect their ids. The event upsert below links them.
+        // Persist every uploaded file as PropertyMedia and collect
+        // their ids so the event upsert can link them. Photos use the
+        // EVENT_PHOTO kind so they render inline in the timeline; doc
+        // attachments keep DOCUMENT so the owner can download them.
         const photoIds: string[] = [];
         for (const p of photos) {
           const m = await recordPropertyMediaAction({
@@ -460,6 +463,17 @@ function EventEditor({
             fileName: p.fileName,
             fileSize: p.fileSize,
             mimeType: p.mimeType,
+          });
+          photoIds.push(m.id);
+        }
+        for (const d of docs) {
+          const m = await recordPropertyMediaAction({
+            propertyId,
+            kind: "DOCUMENT",
+            url: d.publicUrl,
+            fileName: d.fileName,
+            fileSize: d.fileSize,
+            mimeType: d.mimeType,
           });
           photoIds.push(m.id);
         }
@@ -481,10 +495,14 @@ function EventEditor({
   };
 
   return (
-    <Sheet open={open} onClose={onClose} title={event ? "Edit event" : "New event"}>
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={event ? "Edit log entry" : "New visit / log entry"}
+    >
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Date" htmlFor="event-date">
+          <Field label="Date of visit" htmlFor="event-date">
             <Input
               id="event-date"
               type="date"
@@ -492,7 +510,7 @@ function EventEditor({
               onChange={(e) => setHappenedAt(e.target.value)}
             />
           </Field>
-          <Field label="Type" htmlFor="event-kind">
+          <Field label="Type" htmlFor="event-kind" hint="What kind of update is this?">
             <select
               id="event-kind"
               value={kind}
@@ -500,42 +518,50 @@ function EventEditor({
               className="h-11 w-full rounded-xl border-2 border-[var(--color-border)] bg-white px-3 text-sm font-medium"
             >
               {[
-                "RENOVATION",
-                "INSPECTION",
-                "FURNISHING",
-                "MAINTENANCE",
-                "DAMAGE",
-                "PHOTOGRAPHY",
-                "NOTE",
-                "OTHER",
-              ].map((k) => (
-                <option key={k} value={k}>
-                  {k}
+                ["VISIT", "Site visit"],
+                ["INSPECTION", "Inspection"],
+                ["MAINTENANCE", "Maintenance"],
+                ["RENOVATION", "Renovation"],
+                ["FURNISHING", "Furnishing"],
+                ["DAMAGE", "Damage / issue"],
+                ["PHOTOGRAPHY", "Photography"],
+                ["NOTE", "Note"],
+                ["OTHER", "Other"],
+              ].map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
                 </option>
               ))}
             </select>
           </Field>
         </div>
-        <Field label="Title" htmlFor="event-title">
+        <Field label="Headline" htmlFor="event-title" hint="What happened?">
           <Input
             id="event-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Repainted living room"
+            placeholder="e.g. Supervisor visit · checked water leak"
             required
             maxLength={255}
           />
         </Field>
-        <Field label="Description" htmlFor="event-desc" hint="Optional">
+        <Field
+          label="Notes"
+          htmlFor="event-desc"
+          hint="Detailed notes for the owner — what was observed, who did what, follow-ups."
+        >
           <Textarea
             id="event-desc"
-            rows={4}
+            rows={5}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="What happened, who did it, costs incurred, etc."
+            placeholder="Describe the visit, observations, work done, costs incurred, follow-up actions…"
           />
         </Field>
-        <Field label="Photos" hint="Optional — uploaded with the event">
+        <Field
+          label="Photos"
+          hint="Snapshots from the visit — owner sees these inline in the timeline."
+        >
           <S3Uploader
             scope="property-event-photo"
             scopeId={propertyId}
@@ -543,6 +569,20 @@ function EventEditor({
             multiple
             values={photos}
             onValuesChange={setPhotos}
+            label=""
+          />
+        </Field>
+        <Field
+          label="Documents / files"
+          hint="Inspection reports, invoices, receipts — anything you'd like the owner to download."
+        >
+          <S3Uploader
+            scope="property-document"
+            scopeId={propertyId}
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,image/*,application/pdf"
+            multiple
+            values={docs}
+            onValuesChange={setDocs}
             label=""
           />
         </Field>
