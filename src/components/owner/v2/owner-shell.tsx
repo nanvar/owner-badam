@@ -14,12 +14,11 @@
 import { useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   Home,
   Building2,
   Bell,
-  User,
   MoreHorizontal,
   Settings,
   BedDouble,
@@ -28,6 +27,7 @@ import {
   FileText,
   LogOut,
   X,
+  Menu,
 } from "lucide-react";
 import { AvatarChip } from "./primitives";
 import { ActivityBell } from "@/components/activity-bell";
@@ -62,6 +62,7 @@ export function OwnerShellV2({
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [, startLogout] = useTransition();
 
   const primary: NavItem[] = [
@@ -127,24 +128,36 @@ export function OwnerShellV2({
       {/* ===== Top bar — minimal glass header ===== */}
       <header className="sticky top-0 z-40 border-b border-[var(--color-border)]/60 bg-white/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-3">
-          <Link
-            href={`/${locale}/owner`}
-            className="flex items-center gap-2 font-semibold tracking-tight"
-            aria-label={brandName}
-          >
-            {brandLogoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={brandLogoUrl}
-                alt={brandName}
-                className="h-7 w-auto object-contain"
-              />
-            ) : (
-              <span className="grid h-8 w-8 place-items-center rounded-xl bg-[var(--color-brand)] text-sm font-bold text-white">
-                {(brandName || "B")[0]}
-              </span>
-            )}
-          </Link>
+          <div className="flex items-center gap-2">
+            {/* Hamburger — drawer with the full nav list. Mobile-only;
+                desktop has enough space for the bottom-nav alone. */}
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              aria-label="Menu"
+              className="grid h-9 w-9 place-items-center rounded-xl border border-[var(--color-border)] bg-white text-[var(--color-muted)] transition-colors hover:border-[var(--color-brand)] hover:text-[var(--color-brand)] md:hidden"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+            <Link
+              href={`/${locale}/owner`}
+              className="flex items-center gap-2 font-semibold tracking-tight"
+              aria-label={brandName}
+            >
+              {brandLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={brandLogoUrl}
+                  alt={brandName}
+                  className="h-7 w-auto object-contain"
+                />
+              ) : (
+                <span className="grid h-8 w-8 place-items-center rounded-xl bg-[var(--color-brand)] text-sm font-bold text-white">
+                  {(brandName || "B")[0]}
+                </span>
+              )}
+            </Link>
+          </div>
 
           <div className="flex items-center gap-2">
             <ActivityBell
@@ -244,96 +257,192 @@ export function OwnerShellV2({
         </div>
       </nav>
 
+      {/* ===== Full nav drawer — opened from the hamburger ===== */}
+      <AnimatePresence>
+        {menuOpen && (
+          <SheetOverlay
+            onClose={() => setMenuOpen(false)}
+            title="Menu"
+            side="left"
+          >
+            <ul className="space-y-1.5">
+              {[...primary, ...more].map((item) => {
+                const active = isActive(item.href);
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      onClick={() => setMenuOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 rounded-2xl border px-3 py-3 text-sm font-medium transition-colors",
+                        active
+                          ? "border-[var(--color-brand)] bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
+                          : "border-[var(--color-border)] bg-white hover:border-[var(--color-brand)]",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "grid h-9 w-9 place-items-center rounded-xl",
+                          active
+                            ? "bg-white text-[var(--color-brand)]"
+                            : "bg-[var(--color-surface-2)] text-[var(--color-muted)]",
+                        )}
+                      >
+                        {item.icon}
+                      </span>
+                      {item.label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </SheetOverlay>
+        )}
+      </AnimatePresence>
+
       {/* ===== More sheet ===== */}
-      {moreOpen && (
-        <SheetOverlay onClose={() => setMoreOpen(false)} title="More">
-          <ul className="space-y-1.5">
-            {more.map((item) => (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  onClick={() => setMoreOpen(false)}
-                  className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-white px-3 py-3 text-sm font-medium hover:border-[var(--color-brand)]"
-                >
-                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--color-surface-2)] text-[var(--color-muted)]">
-                    {item.icon}
-                  </span>
-                  {item.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </SheetOverlay>
-      )}
+      <AnimatePresence>
+        {moreOpen && (
+          <SheetOverlay onClose={() => setMoreOpen(false)} title="More">
+            <ul className="space-y-1.5">
+              {more.map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={() => setMoreOpen(false)}
+                    className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-white px-3 py-3 text-sm font-medium hover:border-[var(--color-brand)]"
+                  >
+                    <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--color-surface-2)] text-[var(--color-muted)]">
+                      {item.icon}
+                    </span>
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </SheetOverlay>
+        )}
+      </AnimatePresence>
 
       {/* ===== Profile sheet ===== */}
-      {profileOpen && (
-        <SheetOverlay onClose={() => setProfileOpen(false)} title="Account">
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 rounded-2xl bg-[var(--color-surface-2)]/60 p-3">
-              <AvatarChip name={user.name ?? user.email} size={48} tone="warm" />
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold">
-                  {user.name ?? user.email}
-                </div>
-                <div className="truncate text-xs text-[var(--color-muted)]">
-                  {user.email}
+      <AnimatePresence>
+        {profileOpen && (
+          <SheetOverlay onClose={() => setProfileOpen(false)} title="Account">
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 rounded-2xl bg-[var(--color-surface-2)]/60 p-3">
+                <AvatarChip name={user.name ?? user.email} size={48} tone="warm" />
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold">
+                    {user.name ?? user.email}
+                  </div>
+                  <div className="truncate text-xs text-[var(--color-muted)]">
+                    {user.email}
+                  </div>
                 </div>
               </div>
+              <Link
+                href={`/${locale}/owner/notifications`}
+                onClick={() => setProfileOpen(false)}
+                className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-white px-3 py-3 text-sm font-medium hover:border-[var(--color-brand)]"
+              >
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--color-surface-2)] text-[var(--color-muted)]">
+                  <Settings className="h-4 w-4" />
+                </span>
+                Settings
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setProfileOpen(false);
+                  handleLogout();
+                }}
+                className="flex w-full items-center gap-3 rounded-2xl border border-rose-500/30 bg-white px-3 py-3 text-sm font-medium text-rose-600 hover:bg-rose-500/5"
+              >
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-rose-500/10 text-rose-600">
+                  <LogOut className="h-4 w-4" />
+                </span>
+                Log out
+              </button>
             </div>
-            <Link
-              href={`/${locale}/owner/notifications`}
-              onClick={() => setProfileOpen(false)}
-              className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-white px-3 py-3 text-sm font-medium hover:border-[var(--color-brand)]"
-            >
-              <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--color-surface-2)] text-[var(--color-muted)]">
-                <Settings className="h-4 w-4" />
-              </span>
-              Settings
-            </Link>
-            <button
-              type="button"
-              onClick={() => {
-                setProfileOpen(false);
-                handleLogout();
-              }}
-              className="flex w-full items-center gap-3 rounded-2xl border border-rose-500/30 bg-white px-3 py-3 text-sm font-medium text-rose-600 hover:bg-rose-500/5"
-            >
-              <span className="grid h-9 w-9 place-items-center rounded-xl bg-rose-500/10 text-rose-600">
-                <LogOut className="h-4 w-4" />
-              </span>
-              Log out
-            </button>
-          </div>
-        </SheetOverlay>
-      )}
+          </SheetOverlay>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
+/**
+ * Animated drawer/sheet. Side controls which edge it slides from:
+ *  - "bottom" (default): bottom-sheet on mobile, centered modal on desktop
+ *  - "left": full-height slide-in from the left edge (hamburger nav)
+ *  - "right": full-height slide-in from the right edge (notifications)
+ */
 function SheetOverlay({
   title,
   children,
   onClose,
+  side = "bottom",
 }: {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
+  side?: "bottom" | "left" | "right";
 }) {
+  const isLeft = side === "left";
+  const isRight = side === "right";
+  const isSide = isLeft || isRight;
+
+  const initial = isLeft
+    ? { x: "-100%", opacity: 1 }
+    : isRight
+      ? { x: "100%", opacity: 1 }
+      : { y: 32, opacity: 0 };
+  const animate = isSide ? { x: 0, opacity: 1 } : { y: 0, opacity: 1 };
+  const exit = isLeft
+    ? { x: "-100%", opacity: 1 }
+    : isRight
+      ? { x: "100%", opacity: 1 }
+      : { y: 32, opacity: 0 };
+
+  const containerClass = isSide
+    ? `fixed inset-0 z-[60] flex ${isLeft ? "justify-start" : "justify-end"}`
+    : "fixed inset-0 z-[60] flex items-end sm:items-center sm:justify-center";
+
+  const panelClass = isSide
+    ? `relative flex h-full w-[86vw] max-w-sm flex-col overflow-y-auto bg-white p-4 shadow-2xl ${
+        isLeft ? "rounded-r-[28px]" : "rounded-l-[28px]"
+      }`
+    : "relative w-full max-w-md rounded-t-[28px] bg-white p-4 shadow-2xl sm:rounded-[28px]";
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center sm:justify-center">
-      <div
+    <div className={containerClass}>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
         className="absolute inset-0 bg-slate-900/45 backdrop-blur-sm"
         onClick={onClose}
       />
       <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-md rounded-t-[28px] bg-white p-4 shadow-2xl sm:rounded-[28px]"
-        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 1rem)" }}
+        initial={initial}
+        animate={animate}
+        exit={exit}
+        transition={
+          isSide
+            ? { type: "spring", stiffness: 360, damping: 36 }
+            : { duration: 0.24, ease: [0.16, 1, 0.3, 1] }
+        }
+        className={panelClass}
+        style={
+          isSide
+            ? { paddingTop: "max(env(safe-area-inset-top), 1rem)" }
+            : { paddingBottom: "max(env(safe-area-inset-bottom), 1rem)" }
+        }
       >
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--color-border)] sm:hidden" />
+        {!isSide && (
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--color-border)] sm:hidden" />
+        )}
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-bold">{title}</h2>
           <button
