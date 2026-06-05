@@ -815,3 +815,27 @@ model WebPushSubscription {
 
   @@index([userId])
 }
+
+// Single-row table holding the active SMTP configuration. Stored in
+// DB (not env) so admins can update it from settings without redeploy.
+// Password is plain-text — protect this row at the application layer.
+model MailConfig {
+  id          String   @id @default(cuid())
+  // Singleton: every row has `key="default"` and the action upserts on
+  // that key so we always have at most one config row.
+  key         String   @unique @db.VarChar(40)
+  host        String   @db.VarChar(255)
+  port        Int      @default(587)
+  secure      Boolean  @default(false)
+  username    String?  @db.VarChar(255)
+  password    String?  @db.VarChar(255)
+  fromEmail   String   @db.VarChar(255)
+  fromName    String?  @db.VarChar(120)
+  replyTo     String?  @db.VarChar(255)
+  enabled     Boolean  @default(true)
+  lastTestAt  DateTime?
+  lastTestOk  Boolean?
+  lastTestErr String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

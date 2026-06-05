@@ -148,7 +148,7 @@ export function ActivityBell({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-11 z-30 w-80 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white shadow-xl">
+        <div className="absolute right-0 top-11 z-50 w-80 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white shadow-xl">
           <div className="flex items-center justify-between border-b border-[var(--color-border)] px-3 py-2">
             <div className="text-sm font-semibold">Activity</div>
             <button
