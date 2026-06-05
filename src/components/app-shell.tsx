@@ -546,7 +546,7 @@ function NavDropdown({
         />
       </button>
       {open && (
-        <div className="absolute left-1/2 top-full z-30 mt-1 w-56 -translate-x-1/2 origin-top overflow-hidden rounded-xl border border-[var(--color-border)] bg-white py-1 shadow-lg shadow-black/10 ring-1 ring-black/5 animate-fade-in">
+        <div className="absolute left-1/2 top-full z-50 mt-1 w-56 -translate-x-1/2 origin-top overflow-hidden rounded-xl border border-[var(--color-border)] bg-white py-1 shadow-lg shadow-black/10 ring-1 ring-black/5 animate-fade-in">
           {item.children!.map((child) => {
             const childActive = isActive(child.href);
             return (

@@ -1,5 +1,7 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import { Bell, Mail, ChevronRight } from "lucide-react";
 import { isLocale } from "@/i18n/config";
 import { getSettings } from "@/lib/settings";
 import { SettingsForm } from "./settings-form";
@@ -18,7 +20,43 @@ export default async function AdminSettingsPage({
   const tCommon = await getTranslations({ locale, namespace: "common" });
   const t = await getTranslations({ locale, namespace: "settings" });
 
+  const subSettings = [
+    {
+      href: `/${locale}/admin/settings/notifications`,
+      icon: <Bell className="h-4 w-4" />,
+      title: "Notification settings",
+      desc: "Pick which event categories ping this admin account.",
+    },
+    {
+      href: `/${locale}/admin/settings/mail`,
+      icon: <Mail className="h-4 w-4" />,
+      title: "Mail (SMTP)",
+      desc: "Configure outbound mail and send a test message.",
+    },
+  ];
+
   return (
+    <>
+      <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {subSettings.map((s) => (
+          <Link
+            key={s.href}
+            href={s.href}
+            className="flex items-center justify-between rounded-2xl border border-[var(--color-border)] bg-white p-3 hover:border-[var(--color-brand)]"
+          >
+            <div className="flex items-center gap-3">
+              <div className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
+                {s.icon}
+              </div>
+              <div>
+                <div className="text-sm font-semibold">{s.title}</div>
+                <div className="text-xs text-[var(--color-muted)]">{s.desc}</div>
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-[var(--color-muted)]" />
+          </Link>
+        ))}
+      </div>
     <SettingsForm
       settings={{
         brandName: settings.brandName,
@@ -78,5 +116,6 @@ export default async function AdminSettingsPage({
         preview: t("preview"),
       }}
     />
+    </>
   );
 }

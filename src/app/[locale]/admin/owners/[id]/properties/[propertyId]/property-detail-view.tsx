@@ -17,6 +17,10 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  LayoutGrid,
+  Folder,
+  CalendarClock,
+  BedSingle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -154,6 +158,17 @@ export function PropertyDetailView({
   const [crawlState, setCrawlState] = useState<CrawlState | null>(null);
   const [crawling, startCrawl] = useTransition();
   const [lightbox, setLightbox] = useState<number | null>(null);
+  // Section tabs — overview keeps the dense listing details, the rest
+  // tuck heavy sub-panels behind their own tab so the page stays
+  // compact instead of an endless vertical scroll.
+  type Tab = "overview" | "files" | "service" | "stay";
+  const [tab, setTab] = useState<Tab>("overview");
+  const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: "overview", label: "Overview", icon: <LayoutGrid className="h-3.5 w-3.5" /> },
+    { id: "files", label: "Photos & visit log", icon: <Folder className="h-3.5 w-3.5" /> },
+    { id: "service", label: "Service charge", icon: <CalendarClock className="h-3.5 w-3.5" /> },
+    { id: "stay", label: "Stay quota", icon: <BedSingle className="h-3.5 w-3.5" /> },
+  ];
 
   const photos = property.photos ?? [];
   const stats = [
@@ -253,6 +268,28 @@ export function PropertyDetailView({
         </div>
       )}
 
+      {/* === Section tabs === */}
+      <div className="mb-3 flex gap-1 overflow-x-auto rounded-2xl border border-[var(--color-border)] bg-white p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-colors",
+              tab === t.id
+                ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
+                : "text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]",
+            )}
+          >
+            {t.icon}
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "overview" && (
+      <>
       {/* === Hero gallery — Airbnb-style 1+4 mosaic === */}
       {photos.length > 0 ? (
         <PhotoMosaic
@@ -464,39 +501,43 @@ export function PropertyDetailView({
         </aside>
       </div>
 
-      {/* Photos / Documents / History tabbed panel */}
-      <div className="mt-6">
-        <PropertyMediaPanel
-          propertyId={property.id}
-          coverPhotoUrl={property.coverPhotoUrl}
-          adminPhotos={adminPhotos}
-          documents={documents}
-          events={events}
-          locale={locale}
-        />
-      </div>
+      </>
+      )}
 
-      {/* Service charge — quarterly bill tracker. Surfaced as its own
-          card so admins always see the next due date and current
-          payment state at a glance. */}
-      <div className="mt-4">
-        <ServiceChargeCard
-          propertyId={property.id}
-          locale={locale}
-          schedule={serviceSchedule}
-          instances={serviceInstances}
-        />
-      </div>
+      {tab === "files" && (
+        <div>
+          <PropertyMediaPanel
+            propertyId={property.id}
+            coverPhotoUrl={property.coverPhotoUrl}
+            adminPhotos={adminPhotos}
+            documents={documents}
+            events={events}
+            locale={locale}
+          />
+        </div>
+      )}
 
-      {/* Owner stay quota + reservation requests. */}
-      <div className="mt-4">
-        <StayQuotaCard
-          propertyId={property.id}
-          locale={locale}
-          quota={stayQuota}
-          requests={stayRequests}
-        />
-      </div>
+      {tab === "service" && (
+        <div>
+          <ServiceChargeCard
+            propertyId={property.id}
+            locale={locale}
+            schedule={serviceSchedule}
+            instances={serviceInstances}
+          />
+        </div>
+      )}
+
+      {tab === "stay" && (
+        <div>
+          <StayQuotaCard
+            propertyId={property.id}
+            locale={locale}
+            quota={stayQuota}
+            requests={stayRequests}
+          />
+        </div>
+      )}
 
       {/* Lightbox */}
       {lightbox !== null && (
@@ -526,7 +567,10 @@ function PhotoMosaic({
   if (!main) return null;
 
   return (
-    <div className="mb-6 grid gap-2 overflow-hidden rounded-3xl sm:grid-cols-4 sm:[grid-template-rows:repeat(2,1fr)]">
+    <div
+      className="mb-4 grid gap-1.5 overflow-hidden rounded-2xl sm:grid-cols-4 sm:[grid-template-rows:repeat(2,1fr)]"
+      style={{ maxHeight: 320 }}
+    >
       <button
         onClick={() => onOpen(0)}
         className="group relative aspect-[16/10] sm:col-span-2 sm:row-span-2 sm:aspect-auto"
