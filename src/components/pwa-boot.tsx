@@ -124,33 +124,75 @@ export function PwaBoot() {
   }, []);
 
   if (!bannerOpen) return null;
+  // Centered SweetAlert-style modal. Dimmed backdrop captures focus
+  // so the prompt feels intentional rather than a corner banner the
+  // user can ignore.
   return (
-    <div className="fixed left-2 right-2 top-2 z-[9999] flex items-center gap-3 rounded-2xl border border-emerald-500/40 bg-white px-3 py-2.5 shadow-lg">
-      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-emerald-700">
-        <Bell className="h-4 w-4" />
-      </div>
-      <div className="min-w-0 flex-1 text-sm">
-        Turn on notifications to get instant alerts for new bookings, reports
-        and updates.
-      </div>
-      <button
-        type="button"
-        onClick={async () => {
-          if (reg) await trySubscribe(reg);
-          setBannerOpen(false);
-        }}
-        className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
-      >
-        Enable
-      </button>
-      <button
-        type="button"
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-slate-900/55 backdrop-blur-sm"
         onClick={() => setBannerOpen(false)}
-        aria-label="Dismiss"
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[var(--color-muted)] hover:bg-[var(--color-surface-2)]"
+      />
+      <div
+        className="relative w-full max-w-sm overflow-hidden rounded-3xl bg-white text-center shadow-2xl"
+        style={{
+          animation: "swalPop 0.22s cubic-bezier(0.16, 1, 0.3, 1) both",
+        }}
       >
-        <X className="h-4 w-4" />
-      </button>
+        <button
+          type="button"
+          onClick={() => setBannerOpen(false)}
+          aria-label="Dismiss"
+          className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-lg text-[var(--color-muted)] hover:bg-[var(--color-surface-2)]"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="px-6 pb-6 pt-8">
+          <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-emerald-500/15 text-emerald-700">
+            <Bell className="h-7 w-7" />
+          </div>
+          <h2 className="mt-4 text-lg font-bold text-[var(--color-foreground)]">
+            Enable notifications
+          </h2>
+          <p className="mt-1 text-sm text-[var(--color-muted)]">
+            Get instant alerts for new bookings, reports and important
+            updates — even when the app is closed.
+          </p>
+
+          <div className="mt-6 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                if (reg) await trySubscribe(reg);
+                setBannerOpen(false);
+              }}
+              className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
+            >
+              Enable
+            </button>
+            <button
+              type="button"
+              onClick={() => setBannerOpen(false)}
+              className="w-full rounded-xl px-4 py-2 text-sm font-medium text-[var(--color-muted)] hover:bg-[var(--color-surface-2)]"
+            >
+              Maybe later
+            </button>
+          </div>
+        </div>
+      </div>
+      <style jsx global>{`
+        @keyframes swalPop {
+          from {
+            opacity: 0;
+            transform: scale(0.92);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+      `}</style>
     </div>
   );
 }

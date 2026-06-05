@@ -118,16 +118,17 @@ export function AppShell({
         }}
       >
         <div className="mx-auto grid max-w-6xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3">
-          {mobileNav === "drawer" && (
-            <button
-              type="button"
-              onClick={() => setDrawerOpen(true)}
-              className="mr-1 flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)] md:hidden"
-              aria-label="Open menu"
-            >
-              <Menu className="h-4 w-4" />
-            </button>
-          )}
+          {/* Hamburger lives in the top header on mobile for BOTH
+              modes — bottom-nav surfaces only the first 5 items, so
+              the drawer remains the only path to the rest. */}
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            className="mr-1 flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)] md:hidden"
+            aria-label="Open menu"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
           <Link
             href={`/${locale}/${variant}`}
             className={cn(
@@ -148,31 +149,38 @@ export function AppShell({
               </span>
             )}
           </Link>
-          <nav className="hidden items-center justify-center gap-1 md:flex">
-            {nav.map((item) =>
-              item.children?.length ? (
-                <NavDropdown
-                  key={item.href}
-                  item={item}
-                  isActive={isActive}
-                  isGroupActive={isGroupActive}
-                />
-              ) : (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "rounded-xl px-3 py-2 text-sm font-medium transition-colors",
-                    isActive(item.href)
-                      ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
-                      : "text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]",
-                  )}
-                >
-                  {item.label}
-                </Link>
-              ),
-            )}
-          </nav>
+          {/* Inline nav inside the top header — owner variant only.
+              Admin variant has too many items to fit, so it gets its
+              own horizontal nav row below the header (see below). */}
+          {variant === "admin" ? (
+            <span />
+          ) : (
+            <nav className="hidden items-center justify-center gap-1 md:flex">
+              {nav.map((item) =>
+                item.children?.length ? (
+                  <NavDropdown
+                    key={item.href}
+                    item={item}
+                    isActive={isActive}
+                    isGroupActive={isGroupActive}
+                  />
+                ) : (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+                      isActive(item.href)
+                        ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
+                        : "text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]",
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                ),
+              )}
+            </nav>
+          )}
           <div className="flex items-center gap-2 justify-self-end">
             {topRight}
             <button
@@ -230,6 +238,41 @@ export function AppShell({
         </div>
       </header>
 
+      {/* Secondary nav row for the admin variant — full-width strip
+          beneath the top bar with the menu items spread horizontally.
+          Scrolls horizontally on narrow viewports so every section
+          stays one tap away. Hidden on mobile where the bottom nav
+          drawer covers it. */}
+      {variant === "admin" && (
+        <div className="sticky top-0 z-30 hidden border-b border-[var(--color-border)] bg-white md:block">
+          <nav className="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {nav.map((item) =>
+              item.children?.length ? (
+                <NavDropdown
+                  key={item.href}
+                  item={item}
+                  isActive={isActive}
+                  isGroupActive={isGroupActive}
+                />
+              ) : (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "shrink-0 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors",
+                    isActive(item.href)
+                      ? "bg-[var(--color-brand-soft)] text-[var(--color-brand)]"
+                      : "text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]",
+                  )}
+                >
+                  {item.label}
+                </Link>
+              ),
+            )}
+          </nav>
+        </div>
+      )}
+
       <main
         className={cn(
           "mx-auto w-full max-w-6xl flex-1 px-4 pt-4 md:pb-10",
@@ -251,7 +294,13 @@ export function AppShell({
         }}
       >
         <div className="mx-auto flex max-w-md items-stretch">
-          {nav.map((item) => {
+          {/* Bottom nav shows the first 5 leaf nav items. Anything
+              past that — plus dropdown parents — only appears in the
+              drawer, opened from the top-bar hamburger. */}
+          {nav
+            .filter((item) => !item.children?.length)
+            .slice(0, 5)
+            .map((item) => {
             const active = isActive(item.href);
             return (
               <Link
@@ -336,13 +385,16 @@ export function AppShell({
       </nav>
       )}
 
-      {mobileNav === "drawer" && (
-        <Sheet
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          side="right"
-          title="Menu"
-        >
+      {/* Drawer is always available on mobile — both nav modes feed it
+          from the hamburger in the top bar. In bottom-nav mode it
+          carries everything that didn't fit in the bottom rail; in
+          drawer-only mode it's the primary nav. */}
+      <Sheet
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        side="right"
+        title="Menu"
+      >
           <ul className="-mx-1 space-y-1">
             {nav.map((item) => {
               const active = isActive(item.href);
@@ -416,7 +468,6 @@ export function AppShell({
             )}
           </ul>
         </Sheet>
-      )}
 
       {brand && hasContacts && (
         <Sheet
