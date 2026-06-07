@@ -99,7 +99,10 @@ export function ActivityBell({
     if (!open && items.length === 0) {
       setLoading(true);
       try {
-        const r = await fetch("/api/v1/owner/activity?limit=6", {
+        // Pull a generous slice so the drawer never feels empty — even
+        // if there are no unread events, the user still sees their
+        // recent history (last ~25 entries).
+        const r = await fetch("/api/v1/owner/activity?limit=25", {
           credentials: "include",
           headers: { Accept: "application/json" },
         });
@@ -158,51 +161,93 @@ export function ActivityBell({
   );
 
   // Item list — tapping a row jumps to the full activity feed and closes
-  // the panel. Previously rows were inert <li> elements, so on mobile it
-  // looked broken when nothing happened on tap.
+  // the panel. Unread rows get a distinct emerald-tinted background +
+  // colored left strip + bold title + "NEW" pill so they stand out from
+  // the history below; read rows render plainly so they fade into the
+  // background — the user clearly sees what's actionable.
   const itemList = (
     <>
       {loading ? (
-        <div className="px-3 py-8 text-center text-xs text-[var(--color-muted)]">
+        <div className="px-3 py-10 text-center text-xs text-[var(--color-muted)]">
           Loading…
         </div>
       ) : items.length === 0 ? (
-        <div className="px-3 py-8 text-center text-xs text-[var(--color-muted)]">
-          No activity yet.
+        <div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
+          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--color-surface-2)] text-[var(--color-muted)]">
+            <Bell className="h-5 w-5" />
+          </span>
+          <div className="text-sm font-medium">No activity yet</div>
+          <div className="text-xs text-[var(--color-muted)]">
+            New events from your properties will land here.
+          </div>
         </div>
       ) : (
         <ul className="divide-y divide-[var(--color-border)]">
-          {items.map((it) => (
-            <li key={it.id}>
-              <Link
-                href={viewAll}
-                onClick={closePanel}
-                className={cn(
-                  "flex flex-col gap-0.5 px-3 py-3 transition-colors active:bg-[var(--color-surface-2)] sm:hover:bg-[var(--color-surface-2)]/60",
-                  !it.readAt && "bg-[var(--color-brand-soft)]/40",
+          {items.map((it) => {
+            const isNew = !it.readAt;
+            return (
+              <li key={it.id} className="relative">
+                {isNew && (
+                  <span
+                    aria-hidden
+                    className="absolute inset-y-0 left-0 w-1 bg-[var(--color-brand)]"
+                  />
                 )}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex min-w-0 items-start gap-2">
-                    {!it.readAt && (
-                      <span className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--color-brand)]" />
-                    )}
-                    <div className="min-w-0 text-sm font-medium leading-snug">
+                <Link
+                  href={viewAll}
+                  onClick={closePanel}
+                  className={cn(
+                    "flex flex-col gap-1 py-3 pr-3 transition-colors active:bg-[var(--color-surface-2)] sm:hover:bg-[var(--color-surface-2)]/60",
+                    isNew
+                      ? "bg-[var(--color-brand-soft)]/70 pl-4"
+                      : "bg-white pl-3",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div
+                      className={cn(
+                        "min-w-0 text-sm leading-snug",
+                        isNew
+                          ? "font-bold text-[var(--color-foreground)]"
+                          : "font-medium text-[var(--color-muted)]",
+                      )}
+                    >
                       {it.title}
                     </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {isNew && (
+                        <span className="rounded-full bg-[var(--color-brand)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+                          New
+                        </span>
+                      )}
+                      <span
+                        className={cn(
+                          "text-[10px]",
+                          isNew
+                            ? "font-semibold text-[var(--color-brand)]"
+                            : "text-[var(--color-muted)]",
+                        )}
+                      >
+                        {relTime(it.createdAt)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="shrink-0 text-[10px] text-[var(--color-muted)]">
-                    {relTime(it.createdAt)}
-                  </div>
-                </div>
-                {it.body && (
-                  <div className="line-clamp-2 pl-4 text-xs text-[var(--color-muted)]">
-                    {it.body}
-                  </div>
-                )}
-              </Link>
-            </li>
-          ))}
+                  {it.body && (
+                    <div
+                      className={cn(
+                        "line-clamp-2 text-xs",
+                        isNew
+                          ? "text-[var(--color-foreground)]/80"
+                          : "text-[var(--color-muted)]",
+                      )}
+                    >
+                      {it.body}
+                    </div>
+                  )}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
     </>
