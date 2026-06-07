@@ -95,7 +95,10 @@ export async function GET(req: Request) {
     },
     propertyCount,
     kpis: {
-      revenue: kpis.revenue,
+      // Mobile owner KPI "revenue" = net owner payout, matching the
+      // admin "Owner payout" definition (totalPrice minus portal +
+      // company commissions).
+      revenue: kpis.payout,
       bookings: kpis.bookings,
       nights: kpis.nights,
       availableNights: kpis.availableNights,

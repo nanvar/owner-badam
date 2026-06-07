@@ -112,6 +112,9 @@ export function computeKpis(
 export type MonthlyBucket = {
   key: string;
   label: string;
+  // Owner net earnings for the month — totalPrice minus portal + agency
+  // commissions, mirroring the admin "Owner payout" definition. Field
+  // name stays `revenue` for backwards compatibility with chart code.
   revenue: number;
   nights: number;
   bookings: number;
@@ -149,7 +152,10 @@ export function buildMonthlySeries(
       bookings++;
       nights += overlap;
       const ratio = r.nights > 0 ? overlap / r.nights : 1;
-      revenue += r.totalPrice * ratio;
+      // Owner-facing chart: show net owner payout per month, NOT the
+      // gross totalPrice. Falls back to totalPrice for legacy rows that
+      // were imported before the payout field was populated.
+      revenue += (r.payout || r.totalPrice) * ratio;
     }
     const available = days * Math.max(1, numProperties);
     buckets.push({
