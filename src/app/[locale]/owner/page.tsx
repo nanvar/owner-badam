@@ -169,7 +169,10 @@ export default async function OwnerDashboardPage({
       easyMode={easyMode}
       userName={session.name ?? session.email ?? null}
       kpis={{
-        revenue: kpis.revenue,
+        // Owner-facing earnings = net owner payout (post portal +
+        // company commission), not the gross totalPrice. Mirrors the
+        // admin "Owner payout" KPI.
+        revenue: kpis.payout,
         bookings: kpis.bookings,
         nights: kpis.nights,
         availableNights: kpis.availableNights,
