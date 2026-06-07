@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell, X } from "lucide-react";
+import { Bell, ArrowLeft } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 
@@ -259,51 +259,53 @@ export function ActivityBell({
         </AnimatePresence>
       </div>
 
-      {/* Mobile bottom-sheet — slides up from the bottom edge with a
-          single, unified header (drag handle + title + actions + close).
-          Sheet height is bounded to 85vh so it never reaches the top of
-          the screen; the item list scrolls inside. */}
+      {/* Mobile drawer — slides in from the right covering the full
+          viewport so it reads as its own page. No backdrop / partial
+          overlay → no phantom-tap dismissal possible (previously the
+          sheet would open then close on the same tap on some devices
+          because the synthesized click fell through to the backdrop). */}
       <AnimatePresence>
         {open && (
-          <div className="fixed inset-0 z-[70] flex items-end sm:hidden">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.18 }}
-              className="absolute inset-0 bg-slate-900/45 backdrop-blur-sm"
-              onClick={closePanel}
-            />
-            <motion.div
-              ref={sheetRef}
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", stiffness: 360, damping: 36 }}
-              className="relative flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-[28px] bg-white shadow-2xl"
-              style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.5rem)" }}
-            >
-              <div className="shrink-0">
-                <div className="mx-auto mb-2 mt-2 h-1 w-10 rounded-full bg-[var(--color-border)]" />
-                <div className="flex items-center justify-between gap-2 border-b border-[var(--color-border)] px-3 pb-2.5">
-                  <div className="text-base font-bold">Activity</div>
-                  <div className="flex items-center gap-2">
-                    {markAllReadButton}
-                    <button
-                      type="button"
-                      onClick={closePanel}
-                      aria-label="Close"
-                      className="grid h-8 w-8 place-items-center rounded-lg text-[var(--color-muted)] hover:bg-[var(--color-surface-2)]"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+          <motion.div
+            ref={sheetRef}
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", stiffness: 380, damping: 38 }}
+            className="fixed inset-0 z-[70] flex flex-col bg-[var(--color-surface)] sm:hidden"
+            style={{
+              paddingTop: "max(env(safe-area-inset-top), 0px)",
+              paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
+            }}
+          >
+            <div className="shrink-0 border-b border-[var(--color-border)] bg-white">
+              <div className="flex items-center gap-2 px-2 py-2.5">
+                <button
+                  type="button"
+                  onClick={closePanel}
+                  aria-label="Back"
+                  className="grid h-10 w-10 place-items-center rounded-xl text-[var(--color-foreground)] hover:bg-[var(--color-surface-2)] active:bg-[var(--color-surface-2)]"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-base font-bold tracking-tight">
+                    Activity
+                  </div>
+                  <div className="truncate text-[11px] text-[var(--color-muted)]">
+                    {unread > 0 ? `${unread} unread` : "All caught up"}
                   </div>
                 </div>
+                {markAllReadButton}
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto">{itemList}</div>
-              <div className="shrink-0">{viewAllFooter}</div>
-            </motion.div>
-          </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--color-surface)]">
+              {itemList}
+            </div>
+            <div className="shrink-0 border-t border-[var(--color-border)] bg-white">
+              {viewAllFooter}
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </>
