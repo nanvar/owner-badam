@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/app-shell";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { ReportsPropertyFilter } from "./property-filter";
 import { ReportPayButton } from "./report-pay-button";
+import { ReportUnpayButton } from "./report-unpay-button";
 
 type StatusTab = "unpaid" | "paid";
 
@@ -206,10 +207,16 @@ export default async function AdminReportsPage({
                     </td>
                     <td className="px-4 py-3 text-right">
                       {r.paidAt ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-700">
-                          <CheckCircle2 className="h-3 w-3" />
-                          {paidMethodLabel(r.paidMethod)}
-                        </span>
+                        <div className="inline-flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                            <CheckCircle2 className="h-3 w-3" />
+                            {paidMethodLabel(r.paidMethod)}
+                          </span>
+                          <ReportUnpayButton
+                            reportId={r.id}
+                            reportName={r.name}
+                          />
+                        </div>
                       ) : (
                         <ReportPayButton
                           reportId={r.id}
@@ -266,10 +273,28 @@ function StatusTabLink({
   );
 }
 
+// Curated labels for the known preset methods; anything else (custom)
+// falls back to a title-cased version of the slug so the badge never
+// shows the raw "western_union" or "in_kind" form.
+const METHOD_LABELS: Record<string, string> = {
+  cash: "Cash",
+  bank_transfer: "Bank transfer",
+  wire: "Wire",
+  card: "Card",
+  cheque: "Cheque",
+  paypal: "PayPal",
+  stripe: "Stripe",
+  western_union: "Western Union",
+  crypto: "Crypto",
+};
+
 function paidMethodLabel(m: string | null): string {
   if (!m) return "Paid";
-  if (m === "bank_transfer") return "Bank transfer";
-  if (m === "cash") return "Cash";
-  if (m === "card") return "Card";
-  return m;
+  return (
+    METHOD_LABELS[m] ??
+    m
+      .split("_")
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+      .join(" ")
+  );
 }
