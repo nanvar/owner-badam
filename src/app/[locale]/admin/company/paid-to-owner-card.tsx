@@ -23,6 +23,7 @@ import {
   Globe2,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { Card, CardBody } from "@/components/ui/card";
 import type { Locale } from "@/i18n/config";
 
 type Payment = {
@@ -108,33 +109,32 @@ export function PaidToOwnerCard({
 
   return (
     <>
+      {/* Trigger — mirrors the static KpiTile in company/page.tsx so the
+          dashboard row stays visually uniform. Wrapped in a plain button
+          for the click handler; the Card primitive keeps the same
+          border, radius, gradient and typography as its neighbours. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="group h-full w-full text-left"
+        className="h-full w-full text-left"
       >
-        <div className="relative h-full overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white p-4 transition-shadow hover:shadow-md">
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/15 to-emerald-500/0" />
-          <div className="relative">
+        <Card className="h-full overflow-hidden transition-shadow hover:shadow-md">
+          <CardBody className="flex h-full flex-col gap-2 bg-gradient-to-br from-emerald-500/15 to-emerald-500/0 !p-3.5 text-emerald-700">
             <div className="flex items-center justify-between">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">
+              <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80">
                 Paid to owner
-                {paymentCount > 0 && ` · ${paymentCount} payment${paymentCount === 1 ? "" : "s"}`}
+                {paymentCount > 0 &&
+                  ` · ${paymentCount} payment${paymentCount === 1 ? "" : "s"}`}
               </div>
-              <span className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/15 text-emerald-700">
+              <div className="opacity-80">
                 <HandCoins className="h-4 w-4" />
-              </span>
+              </div>
             </div>
-            <div className="mt-2 text-2xl font-bold tabular-nums text-emerald-700">
+            <div className="text-lg font-bold tabular-nums text-[var(--color-foreground)]">
               {formatCurrency(total, "AED", locale)}
             </div>
-            <div className="mt-1 text-[11px] text-[var(--color-muted)]">
-              {ownerCount > 0
-                ? `${ownerCount} owner${ownerCount === 1 ? "" : "s"} · tap for breakdown`
-                : "No payouts in this period"}
-            </div>
-          </div>
-        </div>
+          </CardBody>
+        </Card>
       </button>
 
       <AnimatePresence>
