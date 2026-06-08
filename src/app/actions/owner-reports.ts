@@ -179,16 +179,16 @@ export async function createOwnerReportAction(
   return { status: "ok", reportId: report.id };
 }
 
-// Allowed methods for the "Pay" modal. Free-form string at the DB level
-// but constrained on input so the dashboard breakdown can group cleanly.
-const PAY_METHODS = ["cash", "bank_transfer", "card"] as const;
-export type PayMethod = (typeof PAY_METHODS)[number];
-
+// Free-form payment method — UI offers a curated preset list (Cash,
+// Bank transfer, Card, Cheque, Wire, PayPal, Stripe, Western Union,
+// Crypto) plus a "Custom" text input, all stored as a short lowercase
+// slug so the dashboard breakdown can group identical methods cleanly.
 const PayReportSchema = z.object({
   reportId: z.string().min(1),
   date: z.string().min(1),
-  method: z.enum(PAY_METHODS),
+  method: z.string().min(1).max(32),
   reference: z.string().max(120).optional().or(z.literal("")),
+  notes: z.string().max(500).optional().or(z.literal("")),
 });
 
 export type PayReportState =
@@ -210,6 +210,7 @@ export async function payReportAction(
     date: formData.get("date"),
     method: formData.get("method"),
     reference: formData.get("reference") || "",
+    notes: formData.get("notes") || "",
   });
   if (!parsed.success) {
     return {
@@ -256,7 +257,11 @@ export async function payReportAction(
           amount: report.netPayout,
           method: v.method,
           reference: v.reference || null,
-          notes: `Settlement: ${report.name}`,
+          // Compose the OwnerPayment notes: always link back to the
+          // report name, append admin-supplied notes when present.
+          notes: v.notes
+            ? `Settlement: ${report.name} — ${v.notes}`
+            : `Settlement: ${report.name}`,
           monthKey: monthKeyFor(date),
           reportId: report.id,
           recordedById: session.userId,

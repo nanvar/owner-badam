@@ -7,7 +7,21 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { HandCoins, X, Wallet, Banknote, CreditCard, ArrowRightLeft, Calendar, ExternalLink } from "lucide-react";
+import {
+  HandCoins,
+  X,
+  Wallet,
+  Banknote,
+  CreditCard,
+  ArrowRightLeft,
+  Calendar,
+  ExternalLink,
+  ScrollText,
+  Send,
+  Smartphone,
+  Bitcoin,
+  Globe2,
+} from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { Locale } from "@/i18n/config";
 
@@ -29,21 +43,52 @@ type Breakdown = {
   payments: Payment[];
 };
 
+// Curated labels for the known preset methods; anything else (custom)
+// falls back to a title-cased slug so the drawer never shows raw values
+// like "western_union" or "in_kind".
+const METHOD_LABELS: Record<string, string> = {
+  cash: "Cash",
+  bank_transfer: "Bank transfer",
+  wire: "Wire",
+  card: "Card",
+  cheque: "Cheque",
+  paypal: "PayPal",
+  stripe: "Stripe",
+  western_union: "Western Union",
+  crypto: "Crypto",
+};
+
 function methodLabel(m: string | null): string {
   if (!m) return "—";
-  if (m === "bank_transfer") return "Bank transfer";
-  if (m === "cash") return "Cash";
-  if (m === "card") return "Card";
-  // Manual / legacy method strings — title-case the raw value so the
-  // dashboard doesn't render "wire_transfer" or similar verbatim.
-  return m.charAt(0).toUpperCase() + m.slice(1).replace(/_/g, " ");
+  if (METHOD_LABELS[m]) return METHOD_LABELS[m];
+  return m
+    .split("_")
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(" ");
 }
 
 function methodIcon(m: string | null): React.ReactNode {
-  if (m === "cash") return <Banknote className="h-3.5 w-3.5" />;
-  if (m === "bank_transfer") return <ArrowRightLeft className="h-3.5 w-3.5" />;
-  if (m === "card") return <CreditCard className="h-3.5 w-3.5" />;
-  return <Wallet className="h-3.5 w-3.5" />;
+  switch (m) {
+    case "cash":
+      return <Banknote className="h-3.5 w-3.5" />;
+    case "bank_transfer":
+      return <ArrowRightLeft className="h-3.5 w-3.5" />;
+    case "wire":
+      return <Send className="h-3.5 w-3.5" />;
+    case "card":
+    case "stripe":
+      return <CreditCard className="h-3.5 w-3.5" />;
+    case "cheque":
+      return <ScrollText className="h-3.5 w-3.5" />;
+    case "paypal":
+      return <Smartphone className="h-3.5 w-3.5" />;
+    case "western_union":
+      return <Globe2 className="h-3.5 w-3.5" />;
+    case "crypto":
+      return <Bitcoin className="h-3.5 w-3.5" />;
+    default:
+      return <Wallet className="h-3.5 w-3.5" />;
+  }
 }
 
 export function PaidToOwnerCard({
