@@ -20,6 +20,7 @@ import { formatCurrency, monthLabel } from "@/lib/utils";
 import { MonthSelector } from "./month-selector";
 import { UnpaidCard } from "./unpaid-card";
 import { PendingExtensionsCard } from "./pending-extensions-card";
+import { PaidToOwnerCard } from "./paid-to-owner-card";
 
 type PropertyAgg = {
   id: string;
@@ -362,6 +363,68 @@ export default async function SuperAdminDashboard({
     0,
   );
 
+  // "Paid to owner" KPI — running total of every OwnerPayment in the
+  // selected period, plus a per-owner breakdown shown in a drawer when
+  // the tile is clicked. Includes both report-settled payments and
+  // free-standing manual payouts (no reportId).
+  const paidPayments = await prisma.ownerPayment.findMany({
+    where: monthWhere,
+    select: {
+      id: true,
+      amount: true,
+      date: true,
+      method: true,
+      reference: true,
+      reportId: true,
+      owner: { select: { id: true, name: true, email: true } },
+      property: { select: { name: true, color: true } },
+    },
+    orderBy: { date: "desc" },
+  });
+  const totalPaidToOwners = paidPayments.reduce((s, p) => s + p.amount, 0);
+  type OwnerPaymentBreakdown = {
+    ownerId: string;
+    ownerName: string;
+    total: number;
+    payments: {
+      id: string;
+      amount: number;
+      date: string;
+      method: string | null;
+      reference: string | null;
+      propertyName: string | null;
+      propertyColor: string | null;
+      reportId: string | null;
+    }[];
+  };
+  const paidByOwnerMap = new Map<string, OwnerPaymentBreakdown>();
+  for (const p of paidPayments) {
+    const ownerId = p.owner.id;
+    const ownerName = p.owner.name ?? p.owner.email;
+    const bucket =
+      paidByOwnerMap.get(ownerId) ?? {
+        ownerId,
+        ownerName,
+        total: 0,
+        payments: [],
+      };
+    bucket.total += p.amount;
+    bucket.payments.push({
+      id: p.id,
+      amount: p.amount,
+      date: p.date.toISOString(),
+      method: p.method,
+      reference: p.reference,
+      propertyName: p.property?.name ?? null,
+      propertyColor: p.property?.color ?? null,
+      reportId: p.reportId,
+    });
+    paidByOwnerMap.set(ownerId, bucket);
+  }
+  const paidByOwner = Array.from(paidByOwnerMap.values()).sort(
+    (a, b) => b.total - a.total,
+  );
+
   // Bookings (reservations + extensions) drive the period counts.
   // Extensions live in their own window since iCal no longer pushes
   // the reservation's checkOut forward, so each side is counted by
@@ -576,6 +639,13 @@ export default async function SuperAdminDashboard({
             icon={<HandCoins className="h-4 w-4" />}
           />
         </Link>
+        <PaidToOwnerCard
+          locale={loc}
+          total={totalPaidToOwners}
+          paymentCount={paidPayments.length}
+          ownerCount={paidByOwner.length}
+          breakdown={paidByOwner}
+        />
       </div>
     </div>
   );

@@ -38,8 +38,10 @@ export default async function OwnerDashboardPage({
   // Reservations + extensions pulled in full (no month filter) — the
   // monthly chart needs the rolling 12-month context regardless of the
   // selected slice, and we filter for KPIs in JS to avoid duplicate
-  // queries.
-  const [reservations, extensions, propertyCount] = await Promise.all([
+  // queries. OwnerPayments (only for OWNER role) are subtracted from the
+  // displayed earnings so the dashboard reflects what's still
+  // OUTSTANDING — paid-out money no longer inflates the figure.
+  const [reservations, extensions, propertyCount, payments] = await Promise.all([
     prisma.reservation.findMany({
       where: ownerFilter ?? {},
       select: {
@@ -66,6 +68,12 @@ export default async function OwnerDashboardPage({
       orderBy: { checkIn: "asc" },
     }),
     prisma.property.count({ where: propertyWhere }),
+    session.role === "OWNER"
+      ? prisma.ownerPayment.findMany({
+          where: { ownerId: session.userId },
+          select: { amount: true, monthKey: true, date: true },
+        })
+      : Promise.resolve([] as { amount: number; monthKey: string | null; date: Date }[]),
   ]);
 
   // Distinct months for the picker — union across both tables.
@@ -155,6 +163,17 @@ export default async function OwnerDashboardPage({
   // so trend remains readable when a single month is picked.
   const monthly = buildMonthlySeries(allBookings, propertyCount, 12);
 
+  // Subtract already-paid amounts from the dashboard "Earnings". Filter
+  // payments by the selected period (monthKey if set, else by date
+  // within the all-time period window) so the figure stays consistent
+  // with the rest of the panel.
+  const paidInPeriod = selectedMonth
+    ? payments
+        .filter((p) => p.monthKey === selectedMonth)
+        .reduce((s, p) => s + p.amount, 0)
+    : payments.reduce((s, p) => s + p.amount, 0);
+  const outstandingPayout = Math.max(0, kpis.payout - paidInPeriod);
+
   const t = await getTranslations({ locale, namespace: "owner" });
   const tCommon = await getTranslations({ locale, namespace: "common" });
   const easyMode = session.role === "OWNER" ? await readMyEasyMode() : false;
@@ -170,9 +189,9 @@ export default async function OwnerDashboardPage({
       userName={session.name ?? session.email ?? null}
       kpis={{
         // Owner-facing earnings = net owner payout (post portal +
-        // company commission), not the gross totalPrice. Mirrors the
-        // admin "Owner payout" KPI.
-        revenue: kpis.payout,
+        // company commission) MINUS what's already been paid out. Mirrors
+        // the admin "Owner payout" KPI (outstanding owed, not gross).
+        revenue: outstandingPayout,
         bookings: kpis.bookings,
         nights: kpis.nights,
         availableNights: kpis.availableNights,
