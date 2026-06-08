@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { notify, NotificationType } from "@/lib/notify";
+import { monthKeyFor } from "@/lib/utils";
 
 const CreateReportSchema = z.object({
   propertyId: z.string().min(1),
@@ -176,6 +177,124 @@ export async function createOwnerReportAction(
   }).catch(() => {});
 
   return { status: "ok", reportId: report.id };
+}
+
+// Allowed methods for the "Pay" modal. Free-form string at the DB level
+// but constrained on input so the dashboard breakdown can group cleanly.
+const PAY_METHODS = ["cash", "bank_transfer", "card"] as const;
+export type PayMethod = (typeof PAY_METHODS)[number];
+
+const PayReportSchema = z.object({
+  reportId: z.string().min(1),
+  date: z.string().min(1),
+  method: z.enum(PAY_METHODS),
+  reference: z.string().max(120).optional().or(z.literal("")),
+});
+
+export type PayReportState =
+  | { status: "idle" }
+  | { status: "ok" }
+  | { status: "error"; message: string };
+
+// Settle a report: stamp the report with paid metadata AND create the
+// matching OwnerPayment row so the cash-out trail and the owner-side
+// "Payments received" feed both stay in sync. Re-running on an already
+// paid report is rejected — undo via `unpayReportAction` first.
+export async function payReportAction(
+  _prev: PayReportState | undefined,
+  formData: FormData,
+): Promise<PayReportState> {
+  const session = await requireRole("ADMIN");
+  const parsed = PayReportSchema.safeParse({
+    reportId: formData.get("reportId"),
+    date: formData.get("date"),
+    method: formData.get("method"),
+    reference: formData.get("reference") || "",
+  });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: parsed.error.issues[0]?.message ?? "Invalid input",
+    };
+  }
+  const v = parsed.data;
+  const date = new Date(v.date);
+  if (Number.isNaN(date.getTime())) {
+    return { status: "error", message: "Invalid date" };
+  }
+  const report = await prisma.ownerReport.findUnique({
+    where: { id: v.reportId },
+    select: {
+      id: true,
+      ownerId: true,
+      propertyId: true,
+      name: true,
+      netPayout: true,
+      paidAt: true,
+    },
+  });
+  if (!report) return { status: "error", message: "Report not found" };
+  if (report.paidAt) {
+    return { status: "error", message: "Report already paid" };
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.ownerReport.update({
+        where: { id: report.id },
+        data: {
+          paidAt: date,
+          paidMethod: v.method,
+          paidReference: v.reference || null,
+        },
+      });
+      await tx.ownerPayment.create({
+        data: {
+          ownerId: report.ownerId,
+          propertyId: report.propertyId,
+          date,
+          amount: report.netPayout,
+          method: v.method,
+          reference: v.reference || null,
+          notes: `Settlement: ${report.name}`,
+          monthKey: monthKeyFor(date),
+          reportId: report.id,
+          recordedById: session.userId,
+        },
+      });
+    });
+  } catch (err) {
+    console.error("[report-pay] failed:", err);
+    return {
+      status: "error",
+      message: (err as Error).message ?? "Failed to record payment",
+    };
+  }
+
+  notify({
+    userId: report.ownerId,
+    type: NotificationType.OWNER_PAYMENT_RECORDED,
+    title: "Payout received",
+    body: `${report.netPayout.toLocaleString("en-GB", { style: "currency", currency: "AED", maximumFractionDigits: 2 })} · ${report.name}`,
+    url: `/owner/reports/${report.id}`,
+    data: { reportId: report.id, amount: report.netPayout, method: v.method },
+  }).catch(() => {});
+
+  return { status: "ok" };
+}
+
+// Reverse `payReportAction`: clear the paid stamps on the report and
+// remove the linked OwnerPayment row. Used when a settlement is recorded
+// by mistake — the report goes back into the Unpaid tab.
+export async function unpayReportAction(reportId: string) {
+  await requireRole("ADMIN");
+  await prisma.$transaction([
+    prisma.ownerPayment.deleteMany({ where: { reportId } }),
+    prisma.ownerReport.update({
+      where: { id: reportId },
+      data: { paidAt: null, paidMethod: null, paidReference: null },
+    }),
+  ]);
 }
 
 // Delete a report, releasing its items (reservations / extensions /
