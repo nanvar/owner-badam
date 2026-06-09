@@ -21,6 +21,7 @@ import { MonthSelector } from "./month-selector";
 import { UnpaidCard } from "./unpaid-card";
 import { PendingExtensionsCard } from "./pending-extensions-card";
 import { PaidToOwnerCard } from "./paid-to-owner-card";
+import { OwnerPayoutCard } from "./owner-payout-card";
 
 type PropertyAgg = {
   id: string;
@@ -106,9 +107,19 @@ export default async function SuperAdminDashboard({
     // Realized revenue / profit / payout only count paid reservations.
     // Unpaid rows still surface via the dedicated Unpaid card so admins
     // can chase them, but they don't inflate the KPIs.
+    //
+    // Owner-payout settlement filter: anything bundled into an already
+    // PAID report is treated as closed for the owner-payout KPI — its
+    // income / expense no longer contributes to "what we owe". The
+    // unpaid-or-unreported set is what the dashboard surfaces as
+    // currently outstanding.
     prisma.reservation.groupBy({
       by: ["propertyId"],
-      where: { ...monthWhere, paid: true },
+      where: {
+        ...monthWhere,
+        paid: true,
+        OR: [{ reportId: null }, { report: { paidAt: null } }],
+      },
       _count: { _all: true },
       _sum: {
         totalPrice: true,
@@ -121,14 +132,22 @@ export default async function SuperAdminDashboard({
     // bucket reduces owner payout (default behavior) and the
     // company-funded bucket is excluded from owner net — those rows
     // already have a matching Investment SPEND + OwnerDebt elsewhere.
+    // Same settlement filter: expenses inside a paid report are closed.
     prisma.expense.groupBy({
       by: ["propertyId", "paidFromCompanyInvest"],
-      where: monthWhere,
+      where: {
+        ...monthWhere,
+        OR: [{ reportId: null }, { report: { paidAt: null } }],
+      },
       _sum: { amount: true },
     }),
+    // Manual / cross-bundle payments only — payments generated from
+    // settling a report (reportId set) are already netted out by
+    // excluding their items above; subtracting them again would double
+    // count.
     prisma.ownerPayment.groupBy({
       by: ["propertyId"],
-      where: monthWhere,
+      where: { ...monthWhere, reportId: null },
       _sum: { amount: true },
     }),
     prisma.companyExpense.groupBy({
@@ -139,9 +158,17 @@ export default async function SuperAdminDashboard({
     // Extensions live on a side table — no `groupBy` because we need the
     // owning property via the relation. Aggregating in JS is fine since
     // monthly volumes are tiny.
+    //
+    // Don't apply the paid-report exclusion in the WHERE clause here —
+    // the pending/unpaid drawer + the extension list need the full set;
+    // we apply the settlement filter when bucketing into the
+    // owner-payout math below.
     prisma.reservationExtension.findMany({
       where: monthWhere,
       include: {
+        // report relation needed so the owner-payout bucket can drop
+        // extensions that already sit inside a paid (settled) report.
+        report: { select: { paidAt: true } },
         reservation: {
           select: {
             propertyId: true,
@@ -209,8 +236,11 @@ export default async function SuperAdminDashboard({
       unpaid: 0,
     };
     // Same paid-only rule as reservations: KPIs reflect realized money,
-    // unpaid extensions still appear in their dedicated drawers.
-    if (e.paid) {
+    // unpaid extensions still appear in their dedicated drawers. Items
+    // already inside a PAID report are excluded from the rolling totals
+    // — they're settled and no longer count toward owner payout.
+    const settled = !!e.report?.paidAt;
+    if (e.paid && !settled) {
       cur.total += e.totalPrice;
       cur.agency += e.agencyCommission;
       cur.portal += e.portalCommission;
@@ -228,7 +258,10 @@ export default async function SuperAdminDashboard({
   );
   const crossOwnerPayments = await prisma.ownerPayment.groupBy({
     by: ["ownerId"],
-    where: { propertyId: null, ...monthWhere },
+    // Manual cross-property settlements only; report-linked payments
+    // are already accounted for by excluding their items from the
+    // income / expense aggregation.
+    where: { propertyId: null, reportId: null, ...monthWhere },
     _sum: { amount: true },
   });
   const crossPaymentsByOwner = new Map(
@@ -362,6 +395,47 @@ export default async function SuperAdminDashboard({
     (s, p) => s + (p.ownerNet - p.paymentsToOwner),
     0,
   );
+
+  // Per-owner breakdown for the Owner-payout drawer. Aggregates each
+  // property's outstanding (ownerNet − paymentsToOwner) under its owner
+  // and sorts by amount desc so the largest debts are top of the list.
+  type OwnerOutstanding = {
+    ownerId: string;
+    ownerName: string;
+    total: number;
+    properties: {
+      id: string;
+      name: string;
+      color: string;
+      outstanding: number;
+    }[];
+  };
+  const ownerOutstandingMap = new Map<string, OwnerOutstanding>();
+  for (const p of propertyTable) {
+    const outstanding = p.ownerNet - p.paymentsToOwner;
+    if (Math.abs(outstanding) < 0.005) continue; // skip noise
+    const bucket =
+      ownerOutstandingMap.get(p.ownerId) ?? {
+        ownerId: p.ownerId,
+        ownerName: p.ownerName,
+        total: 0,
+        properties: [],
+      };
+    bucket.total += outstanding;
+    bucket.properties.push({
+      id: p.id,
+      name: p.name,
+      color: p.color,
+      outstanding,
+    });
+    ownerOutstandingMap.set(p.ownerId, bucket);
+  }
+  const ownerOutstanding = Array.from(ownerOutstandingMap.values())
+    .map((o) => ({
+      ...o,
+      properties: o.properties.sort((a, b) => b.outstanding - a.outstanding),
+    }))
+    .sort((a, b) => b.total - a.total);
 
   // "Paid to owner" KPI — running total of every OwnerPayment in the
   // selected period, plus a per-owner breakdown shown in a drawer when
@@ -589,11 +663,11 @@ export default async function SuperAdminDashboard({
           count={pendingExtensionsCount}
           extensions={pendingExtensions}
         />
-        <KpiTile
-          label="Owner payout"
-          value={formatCurrency(totalOwnerOutstanding, "AED", loc)}
-          accent="indigo"
-          icon={<Users className="h-4 w-4" />}
+        <OwnerPayoutCard
+          locale={loc}
+          total={totalOwnerOutstanding}
+          ownerCount={ownerOutstanding.length}
+          breakdown={ownerOutstanding}
         />
         <DualValueTile
           label="Reservations"
