@@ -437,12 +437,13 @@ export default async function SuperAdminDashboard({
     }))
     .sort((a, b) => b.total - a.total);
 
-  // "Paid to owner" KPI — running total of every OwnerPayment in the
-  // selected period, plus a per-owner breakdown shown in a drawer when
-  // the tile is clicked. Includes both report-settled payments and
-  // free-standing manual payouts (no reportId).
+  // "Paid to owner" KPI — money the company actually disbursed to
+  // owners. Only POSITIVE OwnerPayments count: negative payments come
+  // from settling expense-only reports and represent owner-owes-company
+  // (those flow into Owner debts instead), not cash flowing to the
+  // owner. Counting them here would deflate the headline incorrectly.
   const paidPayments = await prisma.ownerPayment.findMany({
-    where: monthWhere,
+    where: { ...monthWhere, amount: { gt: 0 } },
     select: {
       id: true,
       amount: true,
