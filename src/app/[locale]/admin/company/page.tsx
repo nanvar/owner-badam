@@ -29,6 +29,9 @@ type PropertyAgg = {
   color: string;
   ownerId: string;
   ownerName: string;
+  // Management-only units skip the Owner-payout KPI / drawer — the
+  // company runs them end-to-end with no owner revenue share.
+  managementOnly: boolean;
   bookings: number;
   totalRevenue: number;
   agencyEarnings: number;
@@ -171,7 +174,11 @@ export default async function SuperAdminDashboard({
           select: {
             propertyId: true,
             guestName: true,
-            property: { select: { name: true, color: true } },
+            // managementOnly is needed by the owner-payout split-out
+            // so management units skip the openPayout bucket.
+            property: {
+              select: { name: true, color: true, managementOnly: true },
+            },
           },
         },
       },
@@ -240,13 +247,19 @@ export default async function SuperAdminDashboard({
     // Same paid-only rule as reservations: KPIs reflect realized money,
     // unpaid extensions still appear in their dedicated drawers. Full
     // realised numbers (including settled extensions) — the owner-payout
-    // split-out is tracked separately on `settledPayout`.
+    // split-out is tracked separately on `openPayout`, and management-
+    // only properties are excluded from that side entirely.
     if (e.paid) {
       cur.total += e.totalPrice;
       cur.agency += e.agencyCommission;
       cur.portal += e.portalCommission;
       cur.payout += e.payout;
-      if (!e.report?.paidAt) cur.openPayout += e.payout;
+      if (
+        !e.report?.paidAt &&
+        !e.reservation.property.managementOnly
+      ) {
+        cur.openPayout += e.payout;
+      }
     }
     cur.count += 1;
     if (!e.detailsFilled || e.totalPrice <= 0) cur.pending += 1;
@@ -275,24 +288,35 @@ export default async function SuperAdminDashboard({
     { reportId: null },
     { report: { paidAt: null } },
   ];
+  // Management-only properties don't share revenue with their owner —
+  // the company runs the unit end-to-end, so they should never appear
+  // in the Owner-payout outstanding KPI. Filter them out at the source
+  // of every settle-aware aggregation.
+  const ownerSideProperty = { property: { managementOnly: false } } as const;
   const [reservationOpenAggs, expenseOpenAggs, manualPaymentAggs] =
     await Promise.all([
       prisma.reservation.groupBy({
         by: ["propertyId"],
-        where: { ...monthWhere, paid: true, OR: settledOr },
+        where: {
+          ...monthWhere,
+          paid: true,
+          OR: settledOr,
+          ...ownerSideProperty,
+        },
         _sum: { payout: true },
       }),
       prisma.expense.groupBy({
         by: ["propertyId", "paidFromCompanyInvest"],
-        where: { ...monthWhere, OR: settledOr },
+        where: { ...monthWhere, OR: settledOr, ...ownerSideProperty },
         _sum: { amount: true },
       }),
       // Only manual / non-report payments net against the open owner
       // balance — report-linked payments are accounted for by the
-      // settled-item exclusion above.
+      // settled-item exclusion above. Skip management-only props here
+      // too so the netting stays symmetrical.
       prisma.ownerPayment.groupBy({
         by: ["propertyId"],
-        where: { ...monthWhere, reportId: null },
+        where: { ...monthWhere, reportId: null, ...ownerSideProperty },
         _sum: { amount: true },
       }),
     ]);
@@ -343,6 +367,7 @@ export default async function SuperAdminDashboard({
       color: p.color,
       ownerId: p.owner.id,
       ownerName: p.owner.name ?? p.owner.email,
+      managementOnly: p.managementOnly,
       bookings: a?._count._all ?? 0,
       totalRevenue: (a?._sum.totalPrice ?? 0) + (ext?.total ?? 0),
       agencyEarnings: (a?._sum.agencyCommission ?? 0) + (ext?.agency ?? 0),
@@ -470,9 +495,13 @@ export default async function SuperAdminDashboard({
   // items (openOwnerNet drops everything inside paid reports) and
   // netted only against manual / non-report payments (manual ones
   // because report-linked OwnerPayments are already implicit in the
-  // openOwnerNet exclusion).
+  // openOwnerNet exclusion). Management-only properties are excluded
+  // outright — the company runs them, the owner has no payout share.
   const totalOwnerOutstanding = propertyTable.reduce(
-    (s, p) => s + (p.openOwnerNet - p.manualPaymentsToOwner),
+    (s, p) =>
+      p.managementOnly
+        ? s
+        : s + (p.openOwnerNet - p.manualPaymentsToOwner),
     0,
   );
 
@@ -492,6 +521,7 @@ export default async function SuperAdminDashboard({
   };
   const ownerOutstandingMap = new Map<string, OwnerOutstanding>();
   for (const p of propertyTable) {
+    if (p.managementOnly) continue; // skip company-run units
     const outstanding = p.openOwnerNet - p.manualPaymentsToOwner;
     if (Math.abs(outstanding) < 0.005) continue; // skip noise
     const bucket =
