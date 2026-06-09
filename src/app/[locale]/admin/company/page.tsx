@@ -36,7 +36,13 @@ type PropertyAgg = {
   ownerPayout: number;
   propertyExpenses: number;
   ownerNet: number;
+  // Owner net restricted to items NOT inside a paid report — drives the
+  // Outstanding owner-payout KPI without leaking into company KPIs.
+  openOwnerNet: number;
   paymentsToOwner: number;
+  // Manual / non-report payments only; used to net against openOwnerNet
+  // so report-linked OwnerPayments don't double-count.
+  manualPaymentsToOwner: number;
   companyExtraProfit: number;
 };
 
@@ -108,18 +114,14 @@ export default async function SuperAdminDashboard({
     // Unpaid rows still surface via the dedicated Unpaid card so admins
     // can chase them, but they don't inflate the KPIs.
     //
-    // Owner-payout settlement filter: anything bundled into an already
-    // PAID report is treated as closed for the owner-payout KPI — its
-    // income / expense no longer contributes to "what we owe". The
-    // unpaid-or-unreported set is what the dashboard surfaces as
-    // currently outstanding.
+    // No settlement filter here — Company revenue / profit MUST keep
+    // agency commission from items already inside paid reports (those
+    // are still company income; only the owner side closes when paid).
+    // The owner-payout / ownerNet column is recomputed from a separate
+    // "settle-aware" aggregation below.
     prisma.reservation.groupBy({
       by: ["propertyId"],
-      where: {
-        ...monthWhere,
-        paid: true,
-        OR: [{ reportId: null }, { report: { paidAt: null } }],
-      },
+      where: { ...monthWhere, paid: true },
       _count: { _all: true },
       _sum: {
         totalPrice: true,
@@ -132,22 +134,18 @@ export default async function SuperAdminDashboard({
     // bucket reduces owner payout (default behavior) and the
     // company-funded bucket is excluded from owner net — those rows
     // already have a matching Investment SPEND + OwnerDebt elsewhere.
-    // Same settlement filter: expenses inside a paid report are closed.
     prisma.expense.groupBy({
       by: ["propertyId", "paidFromCompanyInvest"],
-      where: {
-        ...monthWhere,
-        OR: [{ reportId: null }, { report: { paidAt: null } }],
-      },
+      where: monthWhere,
       _sum: { amount: true },
     }),
-    // Manual / cross-bundle payments only — payments generated from
-    // settling a report (reportId set) are already netted out by
-    // excluding their items above; subtracting them again would double
-    // count.
+    // All OwnerPayments in the period — used downstream by the
+    // realised "Payments to owner" column. The owner-payout outstanding
+    // calculation only nets non-report payments to avoid double-counting
+    // alongside the settlement filter; we apply that scope where needed.
     prisma.ownerPayment.groupBy({
       by: ["propertyId"],
-      where: { ...monthWhere, reportId: null },
+      where: monthWhere,
       _sum: { amount: true },
     }),
     prisma.companyExpense.groupBy({
@@ -219,6 +217,9 @@ export default async function SuperAdminDashboard({
     agency: number;
     portal: number;
     payout: number;
+    // Payout from extensions NOT inside a paid report — feeds the
+    // owner-payout settlement view without touching company KPIs.
+    openPayout: number;
     count: number;
     pending: number;
     unpaid: number;
@@ -231,20 +232,21 @@ export default async function SuperAdminDashboard({
       agency: 0,
       portal: 0,
       payout: 0,
+      openPayout: 0,
       count: 0,
       pending: 0,
       unpaid: 0,
     };
     // Same paid-only rule as reservations: KPIs reflect realized money,
-    // unpaid extensions still appear in their dedicated drawers. Items
-    // already inside a PAID report are excluded from the rolling totals
-    // — they're settled and no longer count toward owner payout.
-    const settled = !!e.report?.paidAt;
-    if (e.paid && !settled) {
+    // unpaid extensions still appear in their dedicated drawers. Full
+    // realised numbers (including settled extensions) — the owner-payout
+    // split-out is tracked separately on `settledPayout`.
+    if (e.paid) {
       cur.total += e.totalPrice;
       cur.agency += e.agencyCommission;
       cur.portal += e.portalCommission;
       cur.payout += e.payout;
+      if (!e.report?.paidAt) cur.openPayout += e.payout;
     }
     cur.count += 1;
     if (!e.detailsFilled || e.totalPrice <= 0) cur.pending += 1;
@@ -258,14 +260,57 @@ export default async function SuperAdminDashboard({
   );
   const crossOwnerPayments = await prisma.ownerPayment.groupBy({
     by: ["ownerId"],
-    // Manual cross-property settlements only; report-linked payments
-    // are already accounted for by excluding their items from the
-    // income / expense aggregation.
-    where: { propertyId: null, reportId: null, ...monthWhere },
+    where: { propertyId: null, ...monthWhere },
     _sum: { amount: true },
   });
   const crossPaymentsByOwner = new Map(
     crossOwnerPayments.map((r) => [r.ownerId, r._sum.amount ?? 0]),
+  );
+
+  // ---- Settle-aware aggregations (owner-payout only) ----
+  // Items inside a PAID report are dropped here so the Owner-payout KPI
+  // reflects what's still owed; the company-side KPIs above keep the
+  // full realised numbers.
+  const settledOr = [
+    { reportId: null },
+    { report: { paidAt: null } },
+  ];
+  const [reservationOpenAggs, expenseOpenAggs, manualPaymentAggs] =
+    await Promise.all([
+      prisma.reservation.groupBy({
+        by: ["propertyId"],
+        where: { ...monthWhere, paid: true, OR: settledOr },
+        _sum: { payout: true },
+      }),
+      prisma.expense.groupBy({
+        by: ["propertyId", "paidFromCompanyInvest"],
+        where: { ...monthWhere, OR: settledOr },
+        _sum: { amount: true },
+      }),
+      // Only manual / non-report payments net against the open owner
+      // balance — report-linked payments are accounted for by the
+      // settled-item exclusion above.
+      prisma.ownerPayment.groupBy({
+        by: ["propertyId"],
+        where: { ...monthWhere, reportId: null },
+        _sum: { amount: true },
+      }),
+    ]);
+  const openReservationPayoutByProp = new Map(
+    reservationOpenAggs.map((a) => [a.propertyId, a._sum?.payout ?? 0]),
+  );
+  const openOwnerExpenseByProp = new Map<string, number>();
+  for (const a of expenseOpenAggs) {
+    if (a.paidFromCompanyInvest) continue;
+    openOwnerExpenseByProp.set(
+      a.propertyId,
+      (openOwnerExpenseByProp.get(a.propertyId) ?? 0) + (a._sum?.amount ?? 0),
+    );
+  }
+  const manualPaymentsByProp = new Map(
+    manualPaymentAggs
+      .filter((a) => !!a.propertyId)
+      .map((a) => [a.propertyId as string, a._sum.amount ?? 0]),
   );
 
   // Build the per-property base table (all of the owner's properties show
@@ -277,11 +322,21 @@ export default async function SuperAdminDashboard({
     const ext = extByProp.get(p.id);
     // Owner net only subtracts the owner-paid bucket; company-paid
     // expenses are tracked separately and never reduce the owner's
-    // share.
+    // share. Full realised numbers (including settled items) feed the
+    // visible payout / revenue columns; the settled-aware variants below
+    // power ONLY the outstanding owner-payout KPI.
     const ownerExpenses = expenseByPropOwner.get(p.id) ?? 0;
     const companyExpenses = expenseByPropCompany.get(p.id) ?? 0;
     const payout = (a?._sum.payout ?? 0) + (ext?.payout ?? 0);
     const ownerNet = payout - ownerExpenses;
+
+    // Settle-aware shadow: drops items already inside a paid report so
+    // the dashboard's Outstanding tile reflects what's still owed.
+    const openReservationPayout = openReservationPayoutByProp.get(p.id) ?? 0;
+    const openExtensionPayout = ext?.openPayout ?? 0;
+    const openOwnerExpenses = openOwnerExpenseByProp.get(p.id) ?? 0;
+    const openOwnerNet =
+      openReservationPayout + openExtensionPayout - openOwnerExpenses;
     return {
       id: p.id,
       name: p.name,
@@ -299,13 +354,19 @@ export default async function SuperAdminDashboard({
       // company-paid slice no longer hits the owner.
       propertyExpenses: ownerExpenses + companyExpenses,
       ownerNet,
+      // Separate field used by the outstanding/owner-payout KPI only.
+      openOwnerNet,
       paymentsToOwner: directPaymentsByProp.get(p.id) ?? 0,
+      manualPaymentsToOwner: manualPaymentsByProp.get(p.id) ?? 0,
       companyExtraProfit: profitByProp.get(p.id) ?? 0,
     } satisfies PropertyAgg;
   });
 
   // Allocate cross-property payments pro-rata against ownerNet so an
   // umbrella settlement still reduces each property's debt fairly.
+  // Two cross totals run side-by-side: ALL cross payments feed the
+  // visible paymentsToOwner column (full audit picture); only MANUAL
+  // cross payments feed manualPaymentsToOwner (drives outstanding).
   const ownerNetTotalsForCross = new Map<string, number>();
   for (const p of baseTable) {
     ownerNetTotalsForCross.set(
@@ -313,14 +374,31 @@ export default async function SuperAdminDashboard({
       (ownerNetTotalsForCross.get(p.ownerId) ?? 0) + p.ownerNet,
     );
   }
+  const manualCrossOwnerPayments = await prisma.ownerPayment.groupBy({
+    by: ["ownerId"],
+    where: { propertyId: null, reportId: null, ...monthWhere },
+    _sum: { amount: true },
+  });
+  const manualCrossByOwner = new Map(
+    manualCrossOwnerPayments.map((r) => [r.ownerId, r._sum.amount ?? 0]),
+  );
   const propertyTable: PropertyAgg[] = baseTable.map((p) => {
     const ownerNetTotal = ownerNetTotalsForCross.get(p.ownerId) ?? 0;
     const cross = crossPaymentsByOwner.get(p.ownerId) ?? 0;
+    const manualCross = manualCrossByOwner.get(p.ownerId) ?? 0;
     const share =
       ownerNetTotal > 0 && cross > 0
         ? (p.ownerNet / ownerNetTotal) * cross
         : 0;
-    return { ...p, paymentsToOwner: p.paymentsToOwner + share };
+    const manualShare =
+      ownerNetTotal > 0 && manualCross > 0
+        ? (p.ownerNet / ownerNetTotal) * manualCross
+        : 0;
+    return {
+      ...p,
+      paymentsToOwner: p.paymentsToOwner + share,
+      manualPaymentsToOwner: p.manualPaymentsToOwner + manualShare,
+    };
   });
 
   // Company expense + profit totals (filtered). Stored together in
@@ -388,11 +466,13 @@ export default async function SuperAdminDashboard({
   const totalOwnerDebts = ownerDebtsAgg._sum.amount ?? 0;
   const totalOwnerDebtsCount = ownerDebtsAgg._count._all;
 
-  // Outstanding to owners (sum across every property where the company
-  // still owes the owner money). Drops the table that used to render this
-  // breakdown — we keep the running KPI total only.
+  // Outstanding to owners — currently owed, restricted to unsettled
+  // items (openOwnerNet drops everything inside paid reports) and
+  // netted only against manual / non-report payments (manual ones
+  // because report-linked OwnerPayments are already implicit in the
+  // openOwnerNet exclusion).
   const totalOwnerOutstanding = propertyTable.reduce(
-    (s, p) => s + (p.ownerNet - p.paymentsToOwner),
+    (s, p) => s + (p.openOwnerNet - p.manualPaymentsToOwner),
     0,
   );
 
@@ -412,7 +492,7 @@ export default async function SuperAdminDashboard({
   };
   const ownerOutstandingMap = new Map<string, OwnerOutstanding>();
   for (const p of propertyTable) {
-    const outstanding = p.ownerNet - p.paymentsToOwner;
+    const outstanding = p.openOwnerNet - p.manualPaymentsToOwner;
     if (Math.abs(outstanding) < 0.005) continue; // skip noise
     const bucket =
       ownerOutstandingMap.get(p.ownerId) ?? {
