@@ -141,7 +141,9 @@ export default async function OwnerDetailPage({
             reservation: {
               select: {
                 guestName: true,
-                property: { select: { name: true, color: true } },
+                property: {
+                  select: { name: true, color: true, managementOnly: true },
+                },
               },
             },
           },
@@ -167,7 +169,9 @@ export default async function OwnerDetailPage({
             totalPrice: { gt: 0 },
           },
           include: {
-            property: { select: { name: true, color: true } },
+            property: {
+              select: { name: true, color: true, managementOnly: true },
+            },
           },
           orderBy: { checkIn: "desc" },
         })
@@ -199,17 +203,21 @@ export default async function OwnerDetailPage({
     }));
   const pendingExtensionsCount = pendingExtensions.length;
 
-  // Unpaid drawer = reservations + extensions still owing money.
+  // Unpaid drawer = reservations + extensions still owing money. Each
+  // row carries the would-be owner payout + a managementOnly flag so
+  // the tile can show the owner / company split next to the headline.
   const unpaidReservations = [
     ...unpaidReservationRows.map((r) => ({
       id: r.id,
       kind: "reservation" as const,
       propertyName: r.property.name,
       propertyColor: r.property.color,
+      managementOnly: r.property.managementOnly,
       guestName: r.guestName,
       checkIn: r.checkIn.toISOString(),
       checkOut: r.checkOut.toISOString(),
       totalPrice: r.totalPrice,
+      payout: r.property.managementOnly ? 0 : r.payout,
       currency: r.currency,
     })),
     ...extensionRows
@@ -219,10 +227,12 @@ export default async function OwnerDetailPage({
         kind: "extension" as const,
         propertyName: e.reservation.property.name,
         propertyColor: e.reservation.property.color,
+        managementOnly: e.reservation.property.managementOnly,
         guestName: e.reservation.guestName,
         checkIn: e.checkIn.toISOString(),
         checkOut: e.checkOut.toISOString(),
         totalPrice: e.totalPrice,
+        payout: e.reservation.property.managementOnly ? 0 : e.payout,
         currency: e.currency,
       })),
   ].sort((a, b) => (a.checkIn < b.checkIn ? 1 : -1));
@@ -230,6 +240,11 @@ export default async function OwnerDetailPage({
     (s, r) => s + r.totalPrice,
     0,
   );
+  const unpaidOwnerTotal = unpaidReservations.reduce(
+    (s, r) => s + r.payout,
+    0,
+  );
+  const unpaidCompanyTotal = unpaidTotal - unpaidOwnerTotal;
   const unpaidCount = unpaidReservations.length;
 
   const tCommon = await getTranslations({ locale, namespace: "common" });
@@ -327,6 +342,8 @@ export default async function OwnerDetailPage({
         <UnpaidCard
           locale={loc}
           total={unpaidTotal}
+          ownerTotal={unpaidOwnerTotal}
+          companyTotal={unpaidCompanyTotal}
           count={unpaidCount}
           reservations={unpaidReservations}
         />
