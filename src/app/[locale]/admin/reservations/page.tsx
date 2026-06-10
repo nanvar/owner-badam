@@ -57,16 +57,21 @@ export default async function ReservationsAdminPage({
   // Reservations + extensions are queried independently by their own
   // monthKey so an extension whose parent reservation belongs to
   // another month still surfaces in the selected period.
+  //
+  // Items already bundled into a report drop out of this list — once
+  // they've been "closed" against the owner there's nothing left to do
+  // on this screen; they live under /admin/reports now. Same rule for
+  // extensions so split tables stay in sync.
   const [reservations, extensions, propertyOptions] = await Promise.all([
     prisma.reservation.findMany({
-      where: monthWhere,
+      where: { ...monthWhere, reportId: null },
       include: {
         property: { select: { id: true, name: true, color: true } },
       },
       orderBy: { checkIn: "desc" },
     }),
     prisma.reservationExtension.findMany({
-      where: monthWhere,
+      where: { ...monthWhere, reportId: null },
       include: {
         reservation: {
           select: {
