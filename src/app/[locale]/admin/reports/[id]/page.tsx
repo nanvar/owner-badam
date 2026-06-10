@@ -72,6 +72,21 @@ export default async function AdminReportDetailPage({
   ]);
   if (!report) notFound();
 
+  // ---- Live totals (computed from current items, not the stored
+  //      snapshot) so the Income / Expenses / Net cards, the Reservations
+  //      "Totals" row, and the PDF all agree. Unpaid reservations /
+  //      extensions are excluded — guest money hasn't arrived yet, so
+  //      none of it can go to the owner. (A paid reservation with an
+  //      unpaid extension still counts the reservation; the extension
+  //      waits its turn.)
+  const paidReservations = report.reservations.filter((r) => r.paid);
+  const paidExtensions = report.extensions.filter((e) => e.paid);
+  const liveIncome =
+    paidReservations.reduce((s, r) => s + r.payout, 0) +
+    paidExtensions.reduce((s, e) => s + e.payout, 0);
+  const liveExpenses = report.expenses.reduce((s, e) => s + e.amount, 0);
+  const liveNet = liveIncome - liveExpenses;
+
   const pdfData: ReportPdfData = {
     name: report.name,
     notes: report.notes,
@@ -84,7 +99,7 @@ export default async function AdminReportDetailPage({
       taxId: report.owner.taxId,
       address: report.owner.address,
     },
-    reservations: report.reservations.map((r) => ({
+    reservations: paidReservations.map((r) => ({
       id: r.id,
       bookingRef: extractBookingRef(r.rawDescription),
       checkIn: r.checkIn.toISOString(),
@@ -97,7 +112,7 @@ export default async function AdminReportDetailPage({
       payout: r.payout,
       currency: r.currency,
     })),
-    extensions: report.extensions.map((e) => ({
+    extensions: paidExtensions.map((e) => ({
       id: e.id,
       bookingRef: extractBookingRef(e.reservation.rawDescription),
       parentGuestName: e.reservation.guestName,
@@ -118,9 +133,9 @@ export default async function AdminReportDetailPage({
       amount: e.amount,
     })),
     totals: {
-      income: report.totalIncome,
-      expenses: report.totalExpenses,
-      net: report.netPayout,
+      income: liveIncome,
+      expenses: liveExpenses,
+      net: liveNet,
     },
     brand: {
       name: settings.brandName,
@@ -184,18 +199,18 @@ export default async function AdminReportDetailPage({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <SummaryTile
           label="Income"
-          value={formatCurrency(report.totalIncome, "AED", loc)}
+          value={formatCurrency(liveIncome, "AED", loc)}
           accent="emerald"
         />
         <SummaryTile
           label="Expenses"
-          value={formatCurrency(report.totalExpenses, "AED", loc)}
+          value={formatCurrency(liveExpenses, "AED", loc)}
           accent="rose"
         />
         <SummaryTile
           label="Net payout"
-          value={formatCurrency(report.netPayout, "AED", loc)}
-          accent={report.netPayout >= 0 ? "brand" : "rose"}
+          value={formatCurrency(liveNet, "AED", loc)}
+          accent={liveNet >= 0 ? "brand" : "rose"}
         />
       </div>
 
@@ -226,7 +241,7 @@ export default async function AdminReportDetailPage({
           currency: string;
         };
         const bookings: BookingRow[] = [
-          ...report.reservations.map((r) => ({
+          ...paidReservations.map((r) => ({
             key: `r-${r.id}`,
             kind: "reservation" as const,
             guestName: r.guestName,
@@ -239,7 +254,7 @@ export default async function AdminReportDetailPage({
             payout: r.payout,
             currency: r.currency,
           })),
-          ...report.extensions.map((e) => ({
+          ...paidExtensions.map((e) => ({
             key: `e-${e.id}`,
             kind: "extension" as const,
             guestName: e.reservation.guestName,

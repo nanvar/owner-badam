@@ -248,12 +248,28 @@ export async function payReportAction(
       name: true,
       netPayout: true,
       paidAt: true,
+      // Live items so the settlement amount reflects ONLY paid
+      // reservations / extensions — unpaid items must not inflate the
+      // owner payout the company is about to disburse.
+      reservations: { select: { paid: true, payout: true } },
+      extensions: { select: { paid: true, payout: true } },
+      expenses: { select: { amount: true } },
     },
   });
   if (!report) return { status: "error", message: "Report not found" };
   if (report.paidAt) {
     return { status: "error", message: "Report already paid" };
   }
+
+  const liveIncome =
+    report.reservations
+      .filter((r) => r.paid)
+      .reduce((s, r) => s + r.payout, 0) +
+    report.extensions
+      .filter((e) => e.paid)
+      .reduce((s, e) => s + e.payout, 0);
+  const liveExpenses = report.expenses.reduce((s, e) => s + e.amount, 0);
+  const liveNet = liveIncome - liveExpenses;
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -263,6 +279,11 @@ export async function payReportAction(
           paidAt: date,
           paidMethod: v.method,
           paidReference: v.reference || null,
+          // Refresh the snapshot so subsequent reads (Owner reports
+          // list totals, audit) match what was actually disbursed.
+          netPayout: liveNet,
+          totalIncome: liveIncome,
+          totalExpenses: liveExpenses,
         },
       });
       await tx.ownerPayment.create({
@@ -270,7 +291,7 @@ export async function payReportAction(
           ownerId: report.ownerId,
           propertyId: report.propertyId,
           date,
-          amount: report.netPayout,
+          amount: liveNet,
           method: v.method,
           reference: v.reference || null,
           // Compose the OwnerPayment notes: always link back to the
@@ -296,9 +317,9 @@ export async function payReportAction(
     userId: report.ownerId,
     type: NotificationType.OWNER_PAYMENT_RECORDED,
     title: "Payout received",
-    body: `${report.netPayout.toLocaleString("en-GB", { style: "currency", currency: "AED", maximumFractionDigits: 2 })} · ${report.name}`,
+    body: `${liveNet.toLocaleString("en-GB", { style: "currency", currency: "AED", maximumFractionDigits: 2 })} · ${report.name}`,
     url: `/owner/reports/${report.id}`,
-    data: { reportId: report.id, amount: report.netPayout, method: v.method },
+    data: { reportId: report.id, amount: liveNet, method: v.method },
   }).catch(() => {});
 
   return { status: "ok" };
