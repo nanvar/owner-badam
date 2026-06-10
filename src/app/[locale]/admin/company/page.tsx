@@ -165,7 +165,12 @@ export default async function SuperAdminDashboard({
           select: {
             propertyId: true,
             guestName: true,
-            property: { select: { name: true, color: true } },
+            // managementOnly needed for the unpaid card's owner/company
+            // split — extensions on company-run units contribute fully
+            // to the company side.
+            property: {
+              select: { name: true, color: true, managementOnly: true },
+            },
           },
         },
       },
@@ -529,7 +534,12 @@ export default async function SuperAdminDashboard({
     prisma.reservation.findMany({
       where: { ...monthWhere, paid: false, totalPrice: { gt: 0 } },
       include: {
-        property: { select: { name: true, color: true } },
+        // managementOnly drives the owner/company split — company-run
+        // units have no owner share, so the full unpaid amount sits on
+        // the company side.
+        property: {
+          select: { name: true, color: true, managementOnly: true },
+        },
       },
       orderBy: { checkIn: "desc" },
     }),
@@ -550,16 +560,23 @@ export default async function SuperAdminDashboard({
   const doneReservationsCount = reservationDoneCount + extensionDoneCount;
   // Extensions are derived from the already-loaded `extensionRows` so we
   // don't issue duplicate queries.
+  // Unpaid receivables list — each row carries the would-be owner
+  // payout AND a managementOnly flag so the UnpaidCard can show the
+  // company / owner split at the top of the tile and inside each
+  // drawer row. For management-only units there is no owner share; the
+  // full totalPrice sits with the company.
   const unpaidReservations = [
     ...unpaidReservationRows.map((r) => ({
       id: r.id,
       kind: "reservation" as const,
       propertyName: r.property.name,
       propertyColor: r.property.color,
+      managementOnly: r.property.managementOnly,
       guestName: r.guestName,
       checkIn: r.checkIn.toISOString(),
       checkOut: r.checkOut.toISOString(),
       totalPrice: r.totalPrice,
+      payout: r.property.managementOnly ? 0 : r.payout,
       currency: r.currency,
     })),
     ...extensionRows
@@ -569,10 +586,12 @@ export default async function SuperAdminDashboard({
         kind: "extension" as const,
         propertyName: e.reservation.property.name,
         propertyColor: e.reservation.property.color,
+        managementOnly: e.reservation.property.managementOnly,
         guestName: e.reservation.guestName,
         checkIn: e.checkIn.toISOString(),
         checkOut: e.checkOut.toISOString(),
         totalPrice: e.totalPrice,
+        payout: e.reservation.property.managementOnly ? 0 : e.payout,
         currency: e.currency,
       })),
   ].sort((a, b) => (a.checkIn < b.checkIn ? 1 : -1));
@@ -580,6 +599,13 @@ export default async function SuperAdminDashboard({
     (s, r) => s + r.totalPrice,
     0,
   );
+  // Owner side = sum of would-be payouts (already zeroed for
+  // management-only units above). Company side = whatever's left.
+  const unpaidOwnerTotal = unpaidReservations.reduce(
+    (s, r) => s + r.payout,
+    0,
+  );
+  const unpaidCompanyTotal = unpaidTotal - unpaidOwnerTotal;
   const unpaidCount = unpaidReservations.length;
 
   // Extension stats — the count of extensions in the period and the
@@ -658,6 +684,8 @@ export default async function SuperAdminDashboard({
         <UnpaidCard
           locale={loc}
           total={unpaidTotal}
+          ownerTotal={unpaidOwnerTotal}
+          companyTotal={unpaidCompanyTotal}
           count={unpaidCount}
           reservations={unpaidReservations}
         />
