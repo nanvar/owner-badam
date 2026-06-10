@@ -343,9 +343,16 @@ export async function unpayReportAction(reportId: string) {
 // expenses) back into the picker. The DB-level ON DELETE SET NULL
 // already nulls each child's reportId, but we do it explicitly inside a
 // transaction so the behaviour is obvious at the application layer too.
+//
+// ALSO deletes any OwnerPayment that was created by paying this report
+// (reportId match): without this they'd become orphans (reportId null
+// after the FK cascade) and keep counting against Owner-payout
+// outstanding, dragging it negative once the items get rebundled into a
+// fresh report. The audit trail still lives in git / ActivityEvent.
 export async function deleteOwnerReportAction(id: string) {
   await requireRole("ADMIN");
   await prisma.$transaction([
+    prisma.ownerPayment.deleteMany({ where: { reportId: id } }),
     prisma.reservation.updateMany({
       where: { reportId: id },
       data: { reportId: null },
