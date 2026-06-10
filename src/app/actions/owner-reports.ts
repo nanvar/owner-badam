@@ -71,6 +71,7 @@ export async function createOwnerReportAction(
             id: true,
             propertyId: true,
             reportId: true,
+            paid: true,
             payout: true,
             totalPrice: true,
           },
@@ -82,6 +83,7 @@ export async function createOwnerReportAction(
           select: {
             id: true,
             reportId: true,
+            paid: true,
             payout: true,
             totalPrice: true,
             reservation: { select: { propertyId: true } },
@@ -107,6 +109,13 @@ export async function createOwnerReportAction(
     if (r.reportId) {
       return { status: "error", message: "One of the reservations is already in a report." };
     }
+    if (!r.paid) {
+      return {
+        status: "error",
+        message:
+          "Only guest-paid reservations can be settled. Mark the reservation paid first.",
+      };
+    }
   }
   for (const ext of extensions) {
     if (ext.reservation.propertyId !== v.propertyId) {
@@ -114,6 +123,13 @@ export async function createOwnerReportAction(
     }
     if (ext.reportId) {
       return { status: "error", message: "One of the extensions is already in a report." };
+    }
+    if (!ext.paid) {
+      return {
+        status: "error",
+        message:
+          "Only guest-paid extensions can be settled. Mark the extension paid first.",
+      };
     }
   }
   for (const e of expenses) {
