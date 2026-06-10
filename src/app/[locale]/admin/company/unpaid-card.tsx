@@ -61,13 +61,15 @@ export function UnpaidCard({
               </div>
               <AlertCircle className="h-4 w-4 opacity-80" />
             </div>
-            <div className="text-lg font-bold tabular-nums text-[var(--color-foreground)]">
-              {formatCurrency(total, "AED", locale)}
-            </div>
-            {/* Split sub-row — only show when there's something to
-                split so empty / zero states stay clean. */}
-            {total > 0 && (
-              <div className="mt-auto grid grid-cols-2 gap-1.5 pt-0.5">
+            {/* No total headline — the tile only surfaces the
+                Company / Owner split (the actionable breakdown).
+                Zero-state still reads cleanly via the empty rose tile. */}
+            {count === 0 ? (
+              <div className="text-lg font-bold tabular-nums text-[var(--color-muted)]">
+                AED 0
+              </div>
+            ) : (
+              <div className="mt-auto grid grid-cols-2 gap-1.5">
                 <SplitChip
                   icon={<Building2 className="h-3 w-3" />}
                   label="Company"
