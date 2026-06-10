@@ -71,21 +71,27 @@ export default async function NewReportPage({
     monthKey: string | null;
   }> = [];
   if (selectedId && properties.some((p) => p.id === selectedId)) {
-    // Only items NOT already attached to a report. Realized only — pending
-    // bookings can't be settled with the owner yet. checkIn / date asc so
-    // the picker reads chronologically the way an admin scans the month.
+    // Only items NOT already attached to a report. Realized only —
+    // pending bookings can't be settled with the owner yet. Also restrict
+    // to GUEST-PAID rows: a report bundles money the company has actually
+    // received; including unpaid items would cause the matching
+    // OwnerPayment to overshoot real income → owner-payout swings
+    // negative until the guest finally pays. checkIn / date asc so the
+    // picker reads chronologically the way an admin scans the month.
     const [r, ext, e] = await Promise.all([
       prisma.reservation.findMany({
         where: {
           propertyId: selectedId,
           reportId: null,
           upcoming: false,
+          paid: true,
         },
         orderBy: { checkIn: "asc" },
       }),
       prisma.reservationExtension.findMany({
         where: {
           reportId: null,
+          paid: true,
           reservation: { propertyId: selectedId },
         },
         include: {
