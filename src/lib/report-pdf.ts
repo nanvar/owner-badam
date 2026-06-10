@@ -306,6 +306,11 @@ export async function buildReportPdf(data: ReportPdfInput): Promise<Buffer> {
   const totalAgency = bookings.reduce((s, b) => s + b.agencyCommission, 0);
   const totalPortal = bookings.reduce((s, b) => s + b.portalCommission, 0);
   const totalRent = bookings.reduce((s, b) => s + b.totalPrice, 0);
+  // Owner-payout totals row sums the rendered rows so the column stays
+  // arithmetically consistent with itself. Previously it pulled from
+  // the report.totalIncome snapshot, which could drift from the visible
+  // rows when an item was edited / removed post-creation.
+  const totalPayout = bookings.reduce((s, b) => s + b.payout, 0);
   sectionTitle("Reservations", y);
   autoTable(doc, {
     startY: y + 8,
@@ -366,7 +371,7 @@ export async function buildReportPdf(data: ReportPdfInput): Promise<Buffer> {
           styles: { ...baseFootStyles, halign: "right" },
         },
         {
-          content: formatCurrency(data.totals.income),
+          content: formatCurrency(totalPayout),
           styles: { ...baseFootStyles, halign: "right" },
         },
       ],
