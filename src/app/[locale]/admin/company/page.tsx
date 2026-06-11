@@ -136,13 +136,14 @@ export default async function SuperAdminDashboard({
       where: monthWhere,
       _sum: { amount: true },
     }),
-    // All OwnerPayments in the period — used downstream by the
-    // realised "Payments to owner" column. The owner-payout outstanding
-    // calculation only nets non-report payments to avoid double-counting
-    // alongside the settlement filter; we apply that scope where needed.
+    // Cash-out only — POSITIVE OwnerPayments. Negative entries are
+    // legacy bookkeeping artefacts from expense-only reports (no cash
+    // actually moved). Both the visible "Payments to owner" column and
+    // the Owner-payout outstanding calc read from this same source so
+    // the two stay symmetric.
     prisma.ownerPayment.groupBy({
       by: ["propertyId"],
-      where: monthWhere,
+      where: { ...monthWhere, amount: { gt: 0 } },
       _sum: { amount: true },
     }),
     prisma.companyExpense.groupBy({
@@ -252,7 +253,10 @@ export default async function SuperAdminDashboard({
   );
   const crossOwnerPayments = await prisma.ownerPayment.groupBy({
     by: ["ownerId"],
-    where: { propertyId: null, ...monthWhere },
+    // Positive only — same rule as the per-property groupBy above so
+    // the cross-property pro-rata allocation never feeds negative
+    // bookkeeping entries into per-property paymentsToOwner.
+    where: { propertyId: null, ...monthWhere, amount: { gt: 0 } },
     _sum: { amount: true },
   });
   const crossPaymentsByOwner = new Map(
