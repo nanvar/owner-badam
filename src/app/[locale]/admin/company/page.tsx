@@ -396,9 +396,12 @@ export default async function SuperAdminDashboard({
   // earned yet. The cash-flow formula naturally surfaces that as a
   // negative outstanding ("we paid more than we owed"). Management-only
   // properties skip — the company runs them solo.
+  // Trust the expense flag exclusively: expenses with
+  // paidFromCompanyInvest=true already don't reduce ownerNet (they're
+  // routed to expenseByPropCompany above). No managementOnly skip
+  // here — the dashboard reads one signal from one column.
   const totalOwnerOutstanding = propertyTable.reduce(
-    (s, p) =>
-      p.managementOnly ? s : s + (p.ownerNet - p.paymentsToOwner),
+    (s, p) => s + (p.ownerNet - p.paymentsToOwner),
     0,
   );
 
@@ -418,7 +421,6 @@ export default async function SuperAdminDashboard({
   };
   const ownerOutstandingMap = new Map<string, OwnerOutstanding>();
   for (const p of propertyTable) {
-    if (p.managementOnly) continue; // skip company-run units
     const outstanding = p.ownerNet - p.paymentsToOwner;
     if (Math.abs(outstanding) < 0.005) continue; // skip noise
     const bucket =
@@ -445,23 +447,13 @@ export default async function SuperAdminDashboard({
     .sort((a, b) => b.total - a.total);
 
   // "Paid to owner" KPI — money the company actually disbursed to
-  // owner-side properties. Three filters:
-  // - amount > 0: negative payments are book-keeping (expense-only
-  //   reports / refunds), no cash flowed to the owner.
-  // - property NOT management-only: company-run units have no owner
-  //   share, so payments tied to them are internal accounting, not
-  //   owner cash.
-  // - property IS null treated as owner-wide cross-property settlement
-  //   and kept in the figure.
+  // owners. Only POSITIVE OwnerPayments count: negative entries from
+  // the old expense-only-report flow no longer happen (payReportAction
+  // refuses to create them) but legacy rows are filtered out here so
+  // the headline never shows clawbacks. No managementOnly gate: trust
+  // the row itself — if it has amount > 0, cash moved to the owner.
   const paidPayments = await prisma.ownerPayment.findMany({
-    where: {
-      ...monthWhere,
-      amount: { gt: 0 },
-      OR: [
-        { propertyId: null },
-        { property: { managementOnly: false } },
-      ],
-    },
+    where: { ...monthWhere, amount: { gt: 0 } },
     select: {
       id: true,
       amount: true,
