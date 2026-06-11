@@ -22,12 +22,7 @@ export default async function NewReportPage({
   const sp = await searchParams;
   const loc = locale as Locale;
 
-  // Management-only properties are hidden from the report builder
-  // entirely — the company runs them, so there's no owner-side
-  // settlement to bundle. The server action also rejects them as a
-  // belt-and-braces guard.
   const properties = await prisma.property.findMany({
-    where: { managementOnly: false },
     select: {
       id: true,
       name: true,

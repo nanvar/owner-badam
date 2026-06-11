@@ -445,12 +445,23 @@ export default async function SuperAdminDashboard({
     .sort((a, b) => b.total - a.total);
 
   // "Paid to owner" KPI — money the company actually disbursed to
-  // owners. Only POSITIVE OwnerPayments count: negative payments come
-  // from settling expense-only reports and represent owner-owes-company
-  // (those flow into Owner debts instead), not cash flowing to the
-  // owner. Counting them here would deflate the headline incorrectly.
+  // owner-side properties. Three filters:
+  // - amount > 0: negative payments are book-keeping (expense-only
+  //   reports / refunds), no cash flowed to the owner.
+  // - property NOT management-only: company-run units have no owner
+  //   share, so payments tied to them are internal accounting, not
+  //   owner cash.
+  // - property IS null treated as owner-wide cross-property settlement
+  //   and kept in the figure.
   const paidPayments = await prisma.ownerPayment.findMany({
-    where: { ...monthWhere, amount: { gt: 0 } },
+    where: {
+      ...monthWhere,
+      amount: { gt: 0 },
+      OR: [
+        { propertyId: null },
+        { property: { managementOnly: false } },
+      ],
+    },
     select: {
       id: true,
       amount: true,

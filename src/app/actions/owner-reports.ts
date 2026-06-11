@@ -56,22 +56,10 @@ export async function createOwnerReportAction(
 
   const property = await prisma.property.findUnique({
     where: { id: v.propertyId },
-    select: { ownerId: true, managementOnly: true },
+    select: { ownerId: true },
   });
   if (!property) {
     return { status: "error", message: "Property not found" };
-  }
-  // Management-only units have no owner revenue share — the company
-  // runs them end-to-end. Bundling their items into an owner report is
-  // a category error: there's no owner to settle with. The KPIs already
-  // skip these properties; building a report would create phantom
-  // (negative) OwnerPayments downstream and break the dashboard math.
-  if (property.managementOnly) {
-    return {
-      status: "error",
-      message:
-        "This property is management-only — it has no owner revenue share, so it can't be bundled into an owner settlement report.",
-    };
   }
 
   // Sanity-check the picked items: same property, not already in a report.
@@ -282,22 +270,6 @@ export async function payReportAction(
       .reduce((s, e) => s + e.payout, 0);
   const liveExpenses = report.expenses.reduce((s, e) => s + e.amount, 0);
   const liveNet = liveIncome - liveExpenses;
-
-  // Negative netPayout means expenses outweigh income — there is no
-  // cash to disburse to the owner. Creating an OwnerPayment with a
-  // negative amount silently shows up as a "phantom payout" everywhere
-  // and skews the Owner-payout dashboard math (the company never paid
-  // the owner anything; the owner conceptually owes the company).
-  // The right path forward is to either record an OwnerDebt or wait
-  // until enough income lands in the next report — but it's never a
-  // payment OUT.
-  if (liveNet < 0) {
-    return {
-      status: "error",
-      message:
-        "Net payout is negative — expenses exceed paid income in this report. Record an Owner debt for the shortfall instead, or wait until more guest income clears.",
-    };
-  }
 
   try {
     await prisma.$transaction(async (tx) => {
