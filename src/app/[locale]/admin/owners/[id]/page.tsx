@@ -152,12 +152,22 @@ export default async function OwnerDetailPage({
       : Promise.resolve([]),
     propertyFilter
       ? prisma.expense.aggregate({
-          where: { ...propertyFilter, ...monthWhere },
+          // Owner-paid expenses only — paidFromCompanyInvest=true rows
+          // never reduce ownerNet (they live on the OwnerDebt /
+          // Investment SPEND track). Mirrors the dashboard rule.
+          where: {
+            ...propertyFilter,
+            ...monthWhere,
+            paidFromCompanyInvest: false,
+          },
           _sum: { amount: true },
         })
       : Promise.resolve({ _sum: { amount: 0 } } as const),
     prisma.ownerPayment.aggregate({
-      where: { ownerId: owner.id, ...monthWhere },
+      // Positive cash-out only — negative bookkeeping rows from
+      // legacy expense-only paid reports must not deflate the
+      // settlement / outstanding numbers. Same filter as the dashboard.
+      where: { ownerId: owner.id, ...monthWhere, amount: { gt: 0 } },
       _sum: { amount: true },
     }),
     propertyFilter
