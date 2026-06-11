@@ -253,7 +253,7 @@ export async function payReportAction(
       // owner payout the company is about to disburse.
       reservations: { select: { paid: true, payout: true } },
       extensions: { select: { paid: true, payout: true } },
-      expenses: { select: { amount: true } },
+      expenses: { select: { amount: true, paidFromCompanyInvest: true } },
     },
   });
   if (!report) return { status: "error", message: "Report not found" };
@@ -268,7 +268,13 @@ export async function payReportAction(
     report.extensions
       .filter((e) => e.paid)
       .reduce((s, e) => s + e.payout, 0);
-  const liveExpenses = report.expenses.reduce((s, e) => s + e.amount, 0);
+  // Mirror the dashboard rule: company-invest expenses don't reduce the
+  // owner's settlement amount — those have an OwnerDebt lifecycle and
+  // the owner never paid for them. Including them here would create a
+  // phantom negative OwnerPayment that drags the Owner-payout KPI.
+  const liveExpenses = report.expenses
+    .filter((e) => !e.paidFromCompanyInvest)
+    .reduce((s, e) => s + e.amount, 0);
   const liveNet = liveIncome - liveExpenses;
 
   try {
@@ -286,24 +292,31 @@ export async function payReportAction(
           totalExpenses: liveExpenses,
         },
       });
-      await tx.ownerPayment.create({
-        data: {
-          ownerId: report.ownerId,
-          propertyId: report.propertyId,
-          date,
-          amount: liveNet,
-          method: v.method,
-          reference: v.reference || null,
-          // Compose the OwnerPayment notes: always link back to the
-          // report name, append admin-supplied notes when present.
-          notes: v.notes
-            ? `Settlement: ${report.name} — ${v.notes}`
-            : `Settlement: ${report.name}`,
-          monthKey: monthKeyFor(date),
-          reportId: report.id,
-          recordedById: session.userId,
-        },
-      });
+      // Skip the cash-out row when liveNet ≤ 0: no cash actually
+      // changed hands, so creating an OwnerPayment would be a phantom
+      // entry that breaks the Owner-payout math (subtracting a negative
+      // inflates outstanding). Report still marked paid for the audit
+      // trail.
+      if (liveNet > 0) {
+        await tx.ownerPayment.create({
+          data: {
+            ownerId: report.ownerId,
+            propertyId: report.propertyId,
+            date,
+            amount: liveNet,
+            method: v.method,
+            reference: v.reference || null,
+            // Compose the OwnerPayment notes: always link back to the
+            // report name, append admin-supplied notes when present.
+            notes: v.notes
+              ? `Settlement: ${report.name} — ${v.notes}`
+              : `Settlement: ${report.name}`,
+            monthKey: monthKeyFor(date),
+            reportId: report.id,
+            recordedById: session.userId,
+          },
+        });
+      }
     });
   } catch (err) {
     console.error("[report-pay] failed:", err);
