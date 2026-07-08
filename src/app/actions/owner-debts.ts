@@ -1,8 +1,63 @@
 "use server";
 
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { notify, NotificationType } from "@/lib/notify";
+
+const CreateOwnerDebtSchema = z.object({
+  ownerId: z.string().min(1),
+  propertyId: z.string().optional().or(z.literal("")),
+  amount: z.coerce.number().positive(),
+  description: z.string().max(300).optional().or(z.literal("")),
+});
+
+export type CreateOwnerDebtState =
+  | { status: "idle" }
+  | { status: "ok" }
+  | { status: "error"; message: string };
+
+// Manual OwnerDebt entry — for cases outside the expense flow: an
+// owner owes the company money that admin needs to log directly
+// (adjustments, one-off charges, historical balances). The row lands
+// as PENDING and moves through the standard mark-paid lifecycle.
+export async function createOwnerDebtManualAction(
+  _prev: CreateOwnerDebtState | undefined,
+  formData: FormData,
+): Promise<CreateOwnerDebtState> {
+  await requireRole("ADMIN");
+  const parsed = CreateOwnerDebtSchema.safeParse({
+    ownerId: formData.get("ownerId"),
+    propertyId: formData.get("propertyId") || "",
+    amount: formData.get("amount") || 0,
+    description: formData.get("description") || "",
+  });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: parsed.error.issues[0]?.message ?? "Invalid input",
+    };
+  }
+  const v = parsed.data;
+  try {
+    await prisma.ownerDebt.create({
+      data: {
+        ownerId: v.ownerId,
+        propertyId: v.propertyId || null,
+        amount: v.amount,
+        description: v.description || null,
+        status: "PENDING",
+      },
+    });
+  } catch (err) {
+    console.error("[owner-debt] create failed:", err);
+    return {
+      status: "error",
+      message: (err as Error).message ?? "Failed to create debt",
+    };
+  }
+  return { status: "ok" };
+}
 
 // Flip a debt to PAID — admin used this when the owner reimburses
 // the company for an expense the company fronted via invested

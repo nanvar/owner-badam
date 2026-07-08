@@ -23,31 +23,42 @@ export default async function OwnerDebtsPage({
   const tab = sp.tab === "PAID" ? "PAID" : "PENDING";
   const page = Math.max(1, parseInt(sp.page || "1", 10) || 1);
 
-  const [pendingCount, paidCount, entries, totals] = await Promise.all([
-    prisma.ownerDebt.count({ where: { status: "PENDING" } }),
-    prisma.ownerDebt.count({ where: { status: "PAID" } }),
-    prisma.ownerDebt.findMany({
-      where: { status: tab },
-      include: {
-        owner: { select: { id: true, name: true, email: true } },
-        property: { select: { id: true, name: true, color: true } },
-        expense: {
-          select: { id: true, type: true, description: true, date: true },
+  const [pendingCount, paidCount, entries, totals, owners, properties] =
+    await Promise.all([
+      prisma.ownerDebt.count({ where: { status: "PENDING" } }),
+      prisma.ownerDebt.count({ where: { status: "PAID" } }),
+      prisma.ownerDebt.findMany({
+        where: { status: tab },
+        include: {
+          owner: { select: { id: true, name: true, email: true } },
+          property: { select: { id: true, name: true, color: true } },
+          expense: {
+            select: { id: true, type: true, description: true, date: true },
+          },
         },
-      },
-      orderBy:
-        tab === "PENDING"
-          ? { createdAt: "asc" } // oldest unpaid first
-          : { paidAt: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-    }),
-    prisma.ownerDebt.groupBy({
-      by: ["status"],
-      _sum: { amount: true },
-      _count: { _all: true },
-    }),
-  ]);
+        orderBy:
+          tab === "PENDING"
+            ? { createdAt: "asc" } // oldest unpaid first
+            : { paidAt: "desc" },
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+      }),
+      prisma.ownerDebt.groupBy({
+        by: ["status"],
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+      // Owner + property options for the manual "New debt" modal.
+      prisma.user.findMany({
+        where: { role: "OWNER" },
+        select: { id: true, name: true, email: true },
+        orderBy: [{ name: "asc" }, { email: "asc" }],
+      }),
+      prisma.property.findMany({
+        select: { id: true, name: true, color: true, ownerId: true },
+        orderBy: { name: "asc" },
+      }),
+    ]);
   const tabCount = tab === "PENDING" ? pendingCount : paidCount;
   const totalPages = Math.max(1, Math.ceil(tabCount / PAGE_SIZE));
   const pendingTotal =
@@ -78,6 +89,16 @@ export default async function OwnerDebtsPage({
         status: e.status,
         paidAt: e.paidAt?.toISOString() ?? null,
         createdAt: e.createdAt.toISOString(),
+      }))}
+      owners={owners.map((o) => ({
+        id: o.id,
+        name: o.name ?? o.email,
+      }))}
+      properties={properties.map((p) => ({
+        id: p.id,
+        name: p.name,
+        color: p.color,
+        ownerId: p.ownerId,
       }))}
     />
   );
