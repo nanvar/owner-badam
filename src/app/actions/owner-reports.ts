@@ -292,11 +292,16 @@ export async function payReportAction(
           totalExpenses: liveExpenses,
         },
       });
-      // Skip the cash-out row when liveNet ≤ 0: no cash actually
-      // changed hands, so creating an OwnerPayment would be a phantom
-      // entry that breaks the Owner-payout math (subtracting a negative
-      // inflates outstanding). Report still marked paid for the audit
-      // trail.
+      // Two mutually exclusive cash-out paths based on liveNet sign:
+      //   liveNet > 0  → OwnerPayment (company pays owner).
+      //   liveNet < 0  → OwnerDebt (owner owes company the shortfall)
+      //     — status PENDING so the existing owner-debts admin lifecycle
+      //     (Mark paid / Mark pending) handles collection.
+      //   liveNet = 0  → nothing, report just closes.
+      //
+      // OwnerDebt.description embeds the report id in a machine-parseable
+      // `#<id>` suffix so unpay / delete report can find and remove the
+      // matching row without a schema-level foreign key.
       if (liveNet > 0) {
         await tx.ownerPayment.create({
           data: {
@@ -306,14 +311,22 @@ export async function payReportAction(
             amount: liveNet,
             method: v.method,
             reference: v.reference || null,
-            // Compose the OwnerPayment notes: always link back to the
-            // report name, append admin-supplied notes when present.
             notes: v.notes
               ? `Settlement: ${report.name} — ${v.notes}`
               : `Settlement: ${report.name}`,
             monthKey: monthKeyFor(date),
             reportId: report.id,
             recordedById: session.userId,
+          },
+        });
+      } else if (liveNet < 0) {
+        await tx.ownerDebt.create({
+          data: {
+            ownerId: report.ownerId,
+            propertyId: report.propertyId,
+            amount: Math.abs(liveNet),
+            description: `Settlement shortfall: ${report.name} #${report.id}`,
+            status: "PENDING",
           },
         });
       }
@@ -339,12 +352,30 @@ export async function payReportAction(
 }
 
 // Reverse `payReportAction`: clear the paid stamps on the report and
-// remove the linked OwnerPayment row. Used when a settlement is recorded
+// remove the linked OwnerPayment / OwnerDebt row (whichever was
+// created based on liveNet sign). Used when a settlement is recorded
 // by mistake — the report goes back into the Unpaid tab.
+//
+// OwnerDebt lookup is by description match on the `#<reportId>`
+// marker embedded by payReportAction. We also match ownerId +
+// propertyId + status=PENDING as extra safety so an already-marked-
+// paid debt isn't wiped out.
 export async function unpayReportAction(reportId: string) {
   await requireRole("ADMIN");
+  const report = await prisma.ownerReport.findUnique({
+    where: { id: reportId },
+    select: { ownerId: true, propertyId: true },
+  });
   await prisma.$transaction([
     prisma.ownerPayment.deleteMany({ where: { reportId } }),
+    prisma.ownerDebt.deleteMany({
+      where: {
+        ownerId: report?.ownerId,
+        propertyId: report?.propertyId,
+        status: "PENDING",
+        description: { contains: `#${reportId}` },
+      },
+    }),
     prisma.ownerReport.update({
       where: { id: reportId },
       data: { paidAt: null, paidMethod: null, paidReference: null },
@@ -366,6 +397,14 @@ export async function deleteOwnerReportAction(id: string) {
   await requireRole("ADMIN");
   await prisma.$transaction([
     prisma.ownerPayment.deleteMany({ where: { reportId: id } }),
+    // Same match rule as unpay: description marker + PENDING status so
+    // we never wipe out a debt an admin has already marked paid.
+    prisma.ownerDebt.deleteMany({
+      where: {
+        status: "PENDING",
+        description: { contains: `#${id}` },
+      },
+    }),
     prisma.reservation.updateMany({
       where: { reportId: id },
       data: { reportId: null },
