@@ -400,16 +400,14 @@ export default async function SuperAdminDashboard({
   // earned yet. The cash-flow formula naturally surfaces that as a
   // negative outstanding ("we paid more than we owed"). Management-only
   // properties skip — the company runs them solo.
-  // Owner payout headline sums ONLY positive per-property outstanding.
-  // Negative rows (owner conceptually owes the company) are routed to
-  // the Owner debts KPI instead — semantically they aren't a payout.
   // Trust the expense flag exclusively: expenses with
   // paidFromCompanyInvest=true already don't reduce ownerNet (they're
-  // routed to expenseByPropCompany above).
-  const totalOwnerOutstanding = propertyTable.reduce((s, p) => {
-    const raw = p.ownerNet - p.paymentsToOwner;
-    return raw > 0 ? s + raw : s;
-  }, 0);
+  // routed to expenseByPropCompany above). No managementOnly skip
+  // here — the dashboard reads one signal from one column.
+  const totalOwnerOutstanding = propertyTable.reduce(
+    (s, p) => s + (p.ownerNet - p.paymentsToOwner),
+    0,
+  );
 
   // Per-owner breakdown for the Owner-payout drawer. Aggregates each
   // property's outstanding (ownerNet − paymentsToOwner) under its owner
@@ -425,13 +423,10 @@ export default async function SuperAdminDashboard({
       outstanding: number;
     }[];
   };
-  // Drawer breakdown — positive rows only, matching the KPI headline.
-  // Negative-outstanding properties (owner owes company) are surfaced
-  // in the Owner debts KPI / page, not here.
   const ownerOutstandingMap = new Map<string, OwnerOutstanding>();
   for (const p of propertyTable) {
     const outstanding = p.ownerNet - p.paymentsToOwner;
-    if (outstanding < 0.005) continue; // skip zero + negative
+    if (Math.abs(outstanding) < 0.005) continue; // skip noise
     const bucket =
       ownerOutstandingMap.get(p.ownerId) ?? {
         ownerId: p.ownerId,
