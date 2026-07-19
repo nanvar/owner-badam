@@ -184,11 +184,13 @@ export function ReservationsView({
 
   // Grouped feed: extension-bearing reservations float to the top of
   // the table (and are surrounded by spacer rows for visual breathing
-  // room). Each parent reservation is followed by its extensions
-  // (sorted by checkIn asc). Regular reservations (no extensions)
-  // come after the grouped block in their bucket order. Orphan
-  // extensions whose parent isn't in the current view fall to the
-  // bottom in their own bucket order.
+  // room). Each parent reservation is followed by its extensions, which
+  // stay in chronological order (checkIn asc) because they read as one
+  // continuing stay. Everywhere else the list is newest-first: within a
+  // section rows go by bucket (live → future → done) and then checkIn
+  // desc. Regular reservations (no extensions) come after the grouped
+  // block; orphan extensions whose parent isn't in the current view fall
+  // to the bottom under the same rule.
   const bookings = useMemo<BookingRow[]>(() => {
     const buildResRow = (
       i: ReservationItem,
@@ -275,10 +277,17 @@ export function ReservationsView({
       else if (!i.paid) itemsUnpaid.push(i);
       else itemsPaid.push(i);
     }
+    // Bucket first (live → future → done), then newest stay on top
+    // (checkIn desc). idx only breaks ties so equal dates stay stable.
     const bucketSort = (arr: ReservationItem[]) =>
       arr
         .map((i, idx) => ({ i, idx, b: bucket(i.checkIn, i.checkOut) }))
-        .sort((a, b) => a.b - b.b || a.idx - b.idx)
+        .sort(
+          (a, b) =>
+            a.b - b.b ||
+            b.i.checkIn.localeCompare(a.i.checkIn) ||
+            a.idx - b.idx,
+        )
         .map(({ i }) => i);
 
     const rows: BookingRow[] = [];
@@ -318,10 +327,10 @@ export function ReservationsView({
       }
     });
 
-    // Live section — someone is staying right now. Internally sorted
-    // by checkIn asc so the next checkout is at the top.
+    // Live section — someone is staying right now. Newest stay on top,
+    // matching the rest of the list (checkIn desc).
     const sortedLive = [...itemsLive].sort((a, b) =>
-      a.checkIn.localeCompare(b.checkIn),
+      b.checkIn.localeCompare(a.checkIn),
     );
     if (sortedLive.length > 0) {
       for (const item of sortedLive) {
@@ -355,7 +364,12 @@ export function ReservationsView({
     const orphans = extensions
       .filter((e) => !used.has(e.id) && !visibleIds.has(e.reservationId))
       .map((e, idx) => ({ e, idx, b: bucket(e.checkIn, e.checkOut) }))
-      .sort((a, b) => a.b - b.b || a.idx - b.idx)
+      .sort(
+        (a, b) =>
+          a.b - b.b ||
+          b.e.checkIn.localeCompare(a.e.checkIn) ||
+          a.idx - b.idx,
+      )
       .map(({ e }) => buildExtRow(e, false));
     rows.push(...orphans);
     return rows;
