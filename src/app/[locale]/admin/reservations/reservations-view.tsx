@@ -45,6 +45,7 @@ import {
   type ReservationExtensionState,
 } from "@/app/actions/reservation-extensions";
 import { syncAllAction, type SyncState } from "@/app/actions/sync";
+import { ExportReservationsButton } from "./export-reservations-button";
 import { SyncSummary } from "../properties-view";
 import { MonthSelector } from "../company/month-selector";
 import type { Locale } from "@/i18n/config";
@@ -406,6 +407,7 @@ export function ReservationsView({
               <Plus className="h-4 w-4" />
               {labels.newReservation ?? "New reservation"}
             </Button>
+            <ExportReservationsButton label={labels.export} />
             <Button
               variant="secondary"
               loading={syncPending}

@@ -177,6 +177,7 @@ export default async function ReservationsAdminPage({
         all: tCommon("all"),
         syncNow: tCommon("syncNow"),
         syncing: tCommon("syncing"),
+        export: tCommon("export"),
       }}
     />
   );
