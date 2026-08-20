@@ -5,7 +5,9 @@ import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   listReservationsForExportAction,
+  listOwnerExpenseSummaryAction,
   type ReservationExportRow,
+  type OwnerExpenseSummaryRow,
 } from "@/app/actions/reservation-export";
 
 // Dates land in the sheet as MM/DD/YYYY (US format) in the property timezone,
@@ -88,7 +90,10 @@ export function ExportReservationsButton({ label }: { label?: string }) {
   const onClick = async () => {
     setBusy(true);
     try {
-      const rows = await listReservationsForExportAction();
+      const [rows, owners] = await Promise.all([
+        listReservationsForExportAction(),
+        listOwnerExpenseSummaryAction(),
+      ]);
       const XLSX = await import("xlsx");
 
       const sum = (pick: (r: ReservationExportRow) => number) =>
@@ -132,6 +137,28 @@ export function ExportReservationsButton({ label }: { label?: string }) {
       sheet["!cols"] = COLUMN_WIDTHS.map((wch) => ({ wch }));
       const book = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(book, sheet, "Reservations");
+
+      // Second sheet — owners with their expenses. Expenses are recorded per
+      // property, not per booking, so they live here as an owner roll-up:
+      // payout − expenses = net total payout (reconciles with the dashboard).
+      const ownerSum = (pick: (o: OwnerExpenseSummaryRow) => number) =>
+        owners.reduce((acc, o) => acc + pick(o), 0);
+      const ownerSheet = XLSX.utils.aoa_to_sheet([
+        ["Owner", "Properties", "Owner payout", "Owner expenses", "Net total payout"],
+        ...owners.map((o) => [o.ownerName, o.properties, o.payout, o.expenses, o.net]),
+        ...(owners.length > 0
+          ? [[
+              "TOTAL",
+              ownerSum((o) => o.properties),
+              ownerSum((o) => o.payout),
+              ownerSum((o) => o.expenses),
+              ownerSum((o) => o.net),
+            ]]
+          : []),
+      ]);
+      ownerSheet["!cols"] = [{ wch: 28 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 18 }];
+      XLSX.utils.book_append_sheet(book, ownerSheet, "Owners & expenses");
+
       const stamp = new Date().toISOString().slice(0, 10);
       XLSX.writeFile(book, `reservations-${stamp}.xlsx`);
     } finally {

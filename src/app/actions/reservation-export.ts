@@ -121,3 +121,62 @@ export async function listReservationsForExportAction(): Promise<
   }
   return rows;
 }
+
+// One owner's ledger for the export's second sheet. Expenses are recorded
+// per property (not per reservation), so they can never sit on a booking row —
+// they roll up to the owner instead, giving a clean payout − expenses = net
+// that reconciles with the owner report / dashboard.
+export type OwnerExpenseSummaryRow = {
+  ownerName: string;
+  properties: number;
+  payout: number; // reservations + extensions payout across the owner's properties
+  expenses: number; // sum of all recorded expenses on those properties
+  net: number; // payout − expenses (the true net owed to the owner)
+};
+
+// Owners with any financial activity, each with their all-time payout,
+// expenses, and net. Same all-time scope as the reservations sheet so the two
+// tie out together.
+export async function listOwnerExpenseSummaryAction(): Promise<
+  OwnerExpenseSummaryRow[]
+> {
+  await requireRole("ADMIN");
+  const owners = await prisma.user.findMany({
+    where: { properties: { some: {} } },
+    select: {
+      name: true,
+      properties: {
+        select: {
+          reservations: {
+            select: { payout: true, extensions: { select: { payout: true } } },
+          },
+          expenses: { select: { amount: true } },
+        },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const out: OwnerExpenseSummaryRow[] = [];
+  for (const o of owners) {
+    let payout = 0;
+    let expenses = 0;
+    for (const p of o.properties) {
+      for (const r of p.reservations) {
+        payout += r.payout;
+        for (const e of r.extensions) payout += e.payout;
+      }
+      for (const e of p.expenses) expenses += e.amount;
+    }
+    if (payout === 0 && expenses === 0) continue; // skip inactive owners
+    out.push({
+      ownerName: o.name ?? "—",
+      properties: o.properties.length,
+      payout: round2(payout),
+      expenses: round2(expenses),
+      net: round2(payout - expenses),
+    });
+  }
+  return out;
+}
