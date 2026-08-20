@@ -8,9 +8,9 @@ import {
   type ReservationExportRow,
 } from "@/app/actions/reservation-export";
 
-// Dates land in the sheet as plain YYYY-MM-DD in the property timezone
-// so Excel sorts them correctly regardless of the viewer's locale.
-const DATE_FMT = new Intl.DateTimeFormat("en-CA", {
+// Dates land in the sheet as MM/DD/YYYY (US format) in the property timezone,
+// per the accounting team's reporting convention.
+const DATE_FMT = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
@@ -33,7 +33,7 @@ const HEADERS = [
   "Nights",
   "Price / night",
   "Cleaning fee",
-  "Agency commission",
+  "Management fee",
   "Portal commission",
   "Service fee",
   "Taxes",
