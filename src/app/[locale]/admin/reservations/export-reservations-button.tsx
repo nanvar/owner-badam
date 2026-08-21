@@ -19,17 +19,23 @@ const DATE_FMT = new Intl.DateTimeFormat("en-US", {
   timeZone: "Asia/Dubai",
 });
 
-// Accounting standardises the cleaning fee at AED 250 for every row in the
+// Accounting standardises the cleaning fee at AED 250 per reservation in the
 // export (the stored per-booking value is left untouched — this is display-only
-// and feeds the Net formula below).
+// and feeds the Net formula below). Extensions carry no cleaning fee.
 const EXPORT_CLEANING_FEE = 250;
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
+// Cleaning fee applied in the export: AED 250 for a reservation, nothing for an
+// extension (the same stay extended is not cleaned again).
+function cleaningOf(r: ReservationExportRow): number {
+  return r.kind === "extension" ? 0 : EXPORT_CLEANING_FEE;
+}
+
 // Net owed after fees. Airbnb bookings also carry the portal (channel)
 // commission; company (direct) bookings do not.
 function netOf(r: ReservationExportRow, mode: "airbnb" | "company"): number {
-  const base = r.totalPrice - EXPORT_CLEANING_FEE - r.agencyCommission;
+  const base = r.totalPrice - cleaningOf(r) - r.agencyCommission;
   return r2(mode === "airbnb" ? base - r.portalCommission : base);
 }
 
@@ -81,9 +87,9 @@ const COLUMN_WIDTHS = [
 // the accounting team.
 const FORMULA_NOTE: Record<"airbnb" | "company", string> = {
   airbnb:
-    "Formula:  Net = Total price − Portal commission − Cleaning fee − Management fee     •     Management fee % = Management fee ÷ Total price × 100     •     Cleaning fee is fixed at AED 250 in this export.",
+    "Formula:  Net = Total price − Portal commission − Cleaning fee − Management fee     •     Management fee % = Management fee ÷ Total price × 100     •     Cleaning fee is AED 250 per reservation (extensions: 0).",
   company:
-    "Formula:  Net = Total price − Cleaning fee − Management fee     •     Management fee % = Management fee ÷ Total price × 100     •     Cleaning fee is fixed at AED 250 in this export.",
+    "Formula:  Net = Total price − Cleaning fee − Management fee     •     Management fee % = Management fee ÷ Total price × 100     •     Cleaning fee is AED 250 per reservation (extensions: 0).",
 };
 
 function toSheetRow(r: ReservationExportRow, mode: "airbnb" | "company") {
@@ -102,7 +108,7 @@ function toSheetRow(r: ReservationExportRow, mode: "airbnb" | "company") {
     DATE_FMT.format(new Date(r.checkOut)),
     r.nights,
     r2(r.pricePerNight),
-    EXPORT_CLEANING_FEE,
+    cleaningOf(r),
     r.agencyCommission,
     mgmtPctOf(r),
     r.portalCommission,
@@ -130,7 +136,7 @@ function totalsRow(tabRows: ReservationExportRow[], mode: "airbnb" | "company") 
   t[0] = "TOTAL";
   t[1] = `${tabRows.filter((r) => r.kind === "reservation").length} reservations · ${tabRows.filter((r) => r.kind === "extension").length} extensions`;
   t[12] = sum((r) => r.nights);
-  t[14] = r2(EXPORT_CLEANING_FEE * tabRows.length);
+  t[14] = sum((r) => cleaningOf(r));
   t[15] = sumMgmt;
   t[16] = sumTotal > 0 ? r2((sumMgmt / sumTotal) * 100) : "";
   t[17] = sum((r) => r.portalCommission);
