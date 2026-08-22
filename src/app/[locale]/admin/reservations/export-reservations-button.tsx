@@ -20,14 +20,12 @@ const DATE_FMT = new Intl.DateTimeFormat("en-US", {
 });
 
 // Accounting standardises the cleaning fee at AED 250 per reservation in the
-// export (the stored per-booking value is left untouched — this is display-only
-// and feeds the Net formula below). Extensions carry no cleaning fee.
+// export (the stored per-booking value is left untouched — display-only and
+// feeds the Net formula). Extensions carry no cleaning fee.
 const EXPORT_CLEANING_FEE = 250;
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-// Cleaning fee applied in the export: AED 250 for a reservation, nothing for an
-// extension (the same stay extended is not cleaned again).
 function cleaningOf(r: ReservationExportRow): number {
   return r.kind === "extension" ? 0 : EXPORT_CLEANING_FEE;
 }
@@ -47,105 +45,44 @@ function mgmtPctOf(r: ReservationExportRow): number {
     : 0;
 }
 
-const HEADERS = [
-  "Type",
-  "Property",
-  "Owner",
-  "Booking ref",
-  "Source",
-  "Status",
-  "Guest",
-  "Phone",
-  "Email",
-  "Guests",
-  "Check-in",
-  "Check-out",
-  "Nights",
-  "Price / night",
-  "Cleaning fee",
-  "Management fee",
-  "Management fee %",
-  "Portal commission",
-  "Service fee",
-  "Taxes",
-  "Total price",
-  "Net",
-  "Owner payout",
-  "Currency",
-  "Paid",
-  "Billing month",
-  "In report",
-  "Notes",
-];
-
-const COLUMN_WIDTHS = [
-  12, 24, 22, 16, 10, 12, 24, 16, 26, 8, 12, 12, 8, 13, 13, 15, 16, 18, 12, 10,
-  13, 14, 14, 10, 8, 14, 10, 40,
-];
-
-// The formula banner shown at the top of each reservations tab, in English for
-// the accounting team.
+// The formula banner shown at the top of each tab, in English for the
+// accounting team.
 const FORMULA_NOTE: Record<"airbnb" | "company", string> = {
   airbnb:
-    "Formula:  Net = Total price − Portal commission − Cleaning fee − Management fee     •     Management fee % = Management fee ÷ Total price × 100     •     Cleaning fee is AED 250 per reservation (extensions: 0).",
+    "Net = Total price − Portal commission − Cleaning fee − Management fee     •     Management fee % = Management fee ÷ Total price × 100     •     Cleaning fee: AED 250 per reservation (extensions 0).",
   company:
-    "Formula:  Net = Total price − Cleaning fee − Management fee     •     Management fee % = Management fee ÷ Total price × 100     •     Cleaning fee is AED 250 per reservation (extensions: 0).",
+    "Net = Total price − Cleaning fee − Management fee     •     Management fee % = Management fee ÷ Total price × 100     •     Cleaning fee: AED 250 per reservation (extensions 0).",
 };
 
-function toSheetRow(r: ReservationExportRow, mode: "airbnb" | "company") {
-  return [
-    r.kind === "extension" ? "Extension" : "Reservation",
-    r.propertyName,
-    r.ownerName ?? "",
-    r.bookingRef ?? "",
-    r.source,
-    r.status,
-    r.guestName ?? "",
-    r.guestPhone ?? "",
-    r.guestEmail ?? "",
-    r.numGuests ?? "",
-    DATE_FMT.format(new Date(r.checkIn)),
-    DATE_FMT.format(new Date(r.checkOut)),
-    r.nights,
-    r2(r.pricePerNight),
-    cleaningOf(r),
-    r.agencyCommission,
-    mgmtPctOf(r),
-    r.portalCommission,
-    r.serviceFee,
-    r.taxes,
-    r.totalPrice,
-    netOf(r, mode),
-    r.payout,
-    r.currency,
-    r.paid ? "Yes" : "No",
-    r.monthKey ?? "",
-    r.reported ? "Yes" : "No",
-    r.notes ?? "",
-  ];
+// A money-only column set for the accountant — identity + the figures needed to
+// compute VAT and the net. Airbnb tabs add the Portal-commission column (it is
+// deducted in the Net); company tabs omit it.
+interface Col {
+  header: string;
+  width: number;
+  value: (r: ReservationExportRow) => string | number;
+  sum?: boolean; // TOTAL row sums this column
+  blended?: boolean; // TOTAL row shows the blended management-fee rate
 }
 
-// Ledger-style TOTAL line — sums the numeric columns; Management fee % shows the
-// blended rate (total fee ÷ total price) rather than a meaningless column sum.
-function totalsRow(tabRows: ReservationExportRow[], mode: "airbnb" | "company") {
-  const sum = (pick: (r: ReservationExportRow) => number) =>
-    r2(tabRows.reduce((acc, r) => acc + pick(r), 0));
-  const sumTotal = sum((r) => r.totalPrice);
-  const sumMgmt = sum((r) => r.agencyCommission);
-  const t: (string | number)[] = new Array(HEADERS.length).fill("");
-  t[0] = "TOTAL";
-  t[1] = `${tabRows.filter((r) => r.kind === "reservation").length} reservations · ${tabRows.filter((r) => r.kind === "extension").length} extensions`;
-  t[12] = sum((r) => r.nights);
-  t[14] = sum((r) => cleaningOf(r));
-  t[15] = sumMgmt;
-  t[16] = sumTotal > 0 ? r2((sumMgmt / sumTotal) * 100) : "";
-  t[17] = sum((r) => r.portalCommission);
-  t[18] = sum((r) => r.serviceFee);
-  t[19] = sum((r) => r.taxes);
-  t[20] = sumTotal;
-  t[21] = r2(tabRows.reduce((acc, r) => acc + netOf(r, mode), 0));
-  t[22] = sum((r) => r.payout);
-  return t;
+function columnsFor(mode: "airbnb" | "company"): Col[] {
+  return [
+    { header: "Type", width: 12, value: (r) => (r.kind === "extension" ? "Extension" : "Reservation") },
+    { header: "Property", width: 24, value: (r) => r.propertyName },
+    { header: "Owner", width: 22, value: (r) => r.ownerName ?? "" },
+    { header: "Booking ref", width: 16, value: (r) => r.bookingRef ?? "" },
+    { header: "Check-in", width: 12, value: (r) => DATE_FMT.format(new Date(r.checkIn)) },
+    { header: "Check-out", width: 12, value: (r) => DATE_FMT.format(new Date(r.checkOut)) },
+    { header: "Nights", width: 8, value: (r) => r.nights, sum: true },
+    { header: "Total price", width: 13, value: (r) => r.totalPrice, sum: true },
+    ...(mode === "airbnb"
+      ? [{ header: "Portal commission", width: 16, value: (r: ReservationExportRow) => r.portalCommission, sum: true }]
+      : []),
+    { header: "Cleaning fee", width: 13, value: (r) => cleaningOf(r), sum: true },
+    { header: "Management fee", width: 15, value: (r) => r.agencyCommission, sum: true },
+    { header: "Management fee %", width: 16, value: (r) => mgmtPctOf(r), blended: true },
+    { header: "Net", width: 14, value: (r) => netOf(r, mode), sum: true },
+  ];
 }
 
 export function ExportReservationsButton({ label }: { label?: string }) {
@@ -166,35 +103,37 @@ export function ExportReservationsButton({ label }: { label?: string }) {
       const airbnbRows = rows.filter((r) => r.source.toLowerCase() === "airbnb");
       const companyRows = rows.filter((r) => r.source.toLowerCase() !== "airbnb");
 
-      const buildTab = (
-        tabRows: ReservationExportRow[],
-        mode: "airbnb" | "company",
-      ) => {
+      const buildTab = (tabRows: ReservationExportRow[], mode: "airbnb" | "company") => {
+        const cols = columnsFor(mode);
+        const sum = (fn: (r: ReservationExportRow) => number) =>
+          r2(tabRows.reduce((acc, r) => acc + fn(r), 0));
+        const sumTotal = sum((r) => r.totalPrice);
+        const sumMgmt = sum((r) => r.agencyCommission);
+        const totalRow = cols.map((c) => {
+          if (c.header === "Type") return "TOTAL";
+          if (c.header === "Property") {
+            return `${tabRows.filter((r) => r.kind === "reservation").length} res · ${tabRows.filter((r) => r.kind === "extension").length} ext`;
+          }
+          if (c.sum) return sum((r) => Number(c.value(r)) || 0);
+          if (c.blended) return sumTotal > 0 ? r2((sumMgmt / sumTotal) * 100) : "";
+          return "";
+        });
         const ws = XLSX.utils.aoa_to_sheet([
           [FORMULA_NOTE[mode]],
           [],
-          HEADERS,
-          ...tabRows.map((r) => toSheetRow(r, mode)),
-          ...(tabRows.length > 0 ? [totalsRow(tabRows, mode)] : []),
+          cols.map((c) => c.header),
+          ...tabRows.map((r) => cols.map((c) => c.value(r))),
+          ...(tabRows.length > 0 ? [totalRow] : []),
         ]);
-        ws["!cols"] = COLUMN_WIDTHS.map((wch) => ({ wch }));
+        ws["!cols"] = cols.map((c) => ({ wch: c.width }));
         return ws;
       };
 
-      XLSX.utils.book_append_sheet(
-        book,
-        buildTab(companyRows, "company"),
-        "Company reservations",
-      );
-      XLSX.utils.book_append_sheet(
-        book,
-        buildTab(airbnbRows, "airbnb"),
-        "Airbnb reservations",
-      );
+      XLSX.utils.book_append_sheet(book, buildTab(companyRows, "company"), "Company reservations");
+      XLSX.utils.book_append_sheet(book, buildTab(airbnbRows, "airbnb"), "Airbnb reservations");
 
-      // Owners with their expenses. Expenses are recorded per property, not per
-      // booking, so they live here as an owner roll-up: payout − expenses = net
-      // total payout (reconciles with the dashboard).
+      // Owners with their expenses → net total payout (reconciles with the
+      // dashboard). Expenses are per property, so they roll up to the owner.
       const ownerSum = (pick: (o: OwnerExpenseSummaryRow) => number) =>
         owners.reduce((acc, o) => acc + pick(o), 0);
       const ownerSheet = XLSX.utils.aoa_to_sheet([
