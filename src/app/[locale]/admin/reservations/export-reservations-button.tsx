@@ -69,7 +69,7 @@ function columnsFor(mode: "airbnb" | "company"): Col[] {
   return [
     { header: "Type", width: 12, value: (r) => (r.kind === "extension" ? "Extension" : "Reservation") },
     { header: "Property", width: 24, value: (r) => r.propertyName },
-    { header: "Owner", width: 22, value: (r) => r.ownerName ?? "" },
+    { header: "Guest", width: 22, value: (r) => r.guestName ?? "" },
     { header: "Booking ref", width: 16, value: (r) => r.bookingRef ?? "" },
     { header: "Check-in", width: 12, value: (r) => DATE_FMT.format(new Date(r.checkIn)) },
     { header: "Check-out", width: 12, value: (r) => DATE_FMT.format(new Date(r.checkOut)) },
