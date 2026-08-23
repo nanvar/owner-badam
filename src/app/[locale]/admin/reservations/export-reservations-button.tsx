@@ -19,39 +19,33 @@ const DATE_FMT = new Intl.DateTimeFormat("en-US", {
   timeZone: "Asia/Dubai",
 });
 
-// Accounting standardises the cleaning fee at AED 250 per reservation in the
-// export (the stored per-booking value is left untouched — display-only and
-// feeds the Net formula). Extensions carry no cleaning fee.
-const EXPORT_CLEANING_FEE = 250;
-
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-function cleaningOf(r: ReservationExportRow): number {
-  return r.kind === "extension" ? 0 : EXPORT_CLEANING_FEE;
-}
-
 // Net owed after fees. Airbnb bookings also carry the portal (channel)
-// commission; company (direct) bookings do not.
+// commission; company (direct) bookings do not. Cleaning is never deducted.
 function netOf(r: ReservationExportRow, mode: "airbnb" | "company"): number {
-  const base = r.totalPrice - cleaningOf(r) - r.agencyCommission;
+  const base = r.totalPrice - r.agencyCommission;
   return r2(mode === "airbnb" ? base - r.portalCommission : base);
 }
 
-// Management fee as a share of the total price — shown so the accountant can
-// see how the fee was derived, computed dynamically per row.
+// Management fee as a share of the base it's charged on — Total price MINUS the
+// portal commission (for Airbnb the management fee is taken after the portal cut;
+// for company bookings portal is 0, so the base is just Total price).
+function mgmtBase(r: ReservationExportRow): number {
+  return r.totalPrice - (Number(r.portalCommission) || 0);
+}
 function mgmtPctOf(r: ReservationExportRow): number {
-  return r.totalPrice > 0
-    ? Math.round((r.agencyCommission / r.totalPrice) * 1000) / 10
-    : 0;
+  const base = mgmtBase(r);
+  return base > 0 ? Math.round((r.agencyCommission / base) * 1000) / 10 : 0;
 }
 
 // The formula banner shown at the top of each tab, in English for the
 // accounting team.
 const FORMULA_NOTE: Record<"airbnb" | "company", string> = {
   airbnb:
-    "Net = Total price − Portal commission − Cleaning fee − Management fee     •     Management fee % = Management fee ÷ Total price × 100     •     Cleaning fee: AED 250 per reservation (extensions 0).",
+    "Net = Total price − Portal commission − Management fee     •     Management fee % = Management fee ÷ (Total price − Portal commission) × 100.",
   company:
-    "Net = Total price − Cleaning fee − Management fee     •     Management fee % = Management fee ÷ Total price × 100     •     Cleaning fee: AED 250 per reservation (extensions 0).",
+    "Net = Total price − Management fee     •     Management fee % = Management fee ÷ Total price × 100.",
 };
 
 // A money-only column set for the accountant — identity + the figures needed to
@@ -76,7 +70,6 @@ function columnsFor(mode: "airbnb" | "company"): Col[] {
     ...(mode === "airbnb"
       ? [{ header: "Portal commission", width: 16, value: (r: ReservationExportRow) => r.portalCommission, sum: true }]
       : []),
-    { header: "Cleaning fee", width: 13, value: (r) => cleaningOf(r), sum: true },
     { header: "Management fee", width: 15, value: (r) => r.agencyCommission, sum: true },
     { header: "Management fee %", width: 16, value: (r) => mgmtPctOf(r), blended: true },
     { header: "Net", width: 14, value: (r) => netOf(r, mode), sum: true },
@@ -109,14 +102,14 @@ export function ExportReservationsButton({ label }: { label?: string }) {
         const cols = columnsFor(mode);
         const sum = (fn: (r: ReservationExportRow) => number) =>
           r2(tabRows.reduce((acc, r) => acc + fn(r), 0));
-        const sumTotal = sum((r) => r.totalPrice);
+        const sumMgmtBase = sum((r) => mgmtBase(r));
         const sumMgmt = sum((r) => r.agencyCommission);
         const totalRow = cols.map((c) => {
           if (c.header === "Property") {
             return `TOTAL · ${tabRows.filter((r) => r.kind === "reservation").length} res · ${tabRows.filter((r) => r.kind === "extension").length} ext`;
           }
           if (c.sum) return sum((r) => Number(c.value(r)) || 0);
-          if (c.blended) return sumTotal > 0 ? r2((sumMgmt / sumTotal) * 100) : "";
+          if (c.blended) return sumMgmtBase > 0 ? r2((sumMgmt / sumMgmtBase) * 100) : "";
           return "";
         });
         const ws = XLSX.utils.aoa_to_sheet([
