@@ -67,10 +67,8 @@ interface Col {
 
 function columnsFor(mode: "airbnb" | "company"): Col[] {
   return [
-    { header: "Type", width: 12, value: (r) => (r.kind === "extension" ? "Extension" : "Reservation") },
     { header: "Property", width: 24, value: (r) => r.propertyName },
     { header: "Guest", width: 22, value: (r) => r.guestName ?? "" },
-    { header: "Booking ref", width: 16, value: (r) => r.bookingRef ?? "" },
     { header: "Check-in", width: 12, value: (r) => DATE_FMT.format(new Date(r.checkIn)) },
     { header: "Check-out", width: 12, value: (r) => DATE_FMT.format(new Date(r.checkOut)) },
     { header: "Nights", width: 8, value: (r) => r.nights, sum: true },
@@ -110,9 +108,8 @@ export function ExportReservationsButton({ label }: { label?: string }) {
         const sumTotal = sum((r) => r.totalPrice);
         const sumMgmt = sum((r) => r.agencyCommission);
         const totalRow = cols.map((c) => {
-          if (c.header === "Type") return "TOTAL";
           if (c.header === "Property") {
-            return `${tabRows.filter((r) => r.kind === "reservation").length} res · ${tabRows.filter((r) => r.kind === "extension").length} ext`;
+            return `TOTAL · ${tabRows.filter((r) => r.kind === "reservation").length} res · ${tabRows.filter((r) => r.kind === "extension").length} ext`;
           }
           if (c.sum) return sum((r) => Number(c.value(r)) || 0);
           if (c.blended) return sumTotal > 0 ? r2((sumMgmt / sumTotal) * 100) : "";
