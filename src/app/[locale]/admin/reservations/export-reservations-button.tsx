@@ -96,10 +96,14 @@ export function ExportReservationsButton({ label }: { label?: string }) {
       const XLSX = await import("xlsx");
       const book = XLSX.utils.book_new();
 
-      // Split by channel: Airbnb (portal) vs company/direct. Extensions inherit
-      // their parent's source, so they land on the same tab as the booking.
-      const airbnbRows = rows.filter((r) => r.source.toLowerCase() === "airbnb");
-      const companyRows = rows.filter((r) => r.source.toLowerCase() !== "airbnb");
+      // Split by channel: Airbnb vs company/direct. A portal commission means
+      // it's an Airbnb booking even if the source was entered manually — so it
+      // lands on the Airbnb tab and its Net deducts the portal commission.
+      // Extensions inherit their parent's source + portal so they follow suit.
+      const isAirbnb = (r: ReservationExportRow) =>
+        r.source.toLowerCase() === "airbnb" || (Number(r.portalCommission) || 0) > 0;
+      const airbnbRows = rows.filter(isAirbnb);
+      const companyRows = rows.filter((r) => !isAirbnb(r));
 
       const buildTab = (tabRows: ReservationExportRow[], mode: "airbnb" | "company") => {
         const cols = columnsFor(mode);
